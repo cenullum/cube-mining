@@ -1,5 +1,6 @@
 go.property("mesh_prefab", msg.url())
 go.property("game_atlas", resource.atlas())
+go.property("grid_size", 16)
 
 ---@class game_script
 ---@field mesh_prefab url
@@ -8,10 +9,14 @@ go.property("game_atlas", resource.atlas())
 ---@field grid_size number|nil
 ---@field buf buffer|nil
 ---@field positions bufferstream|nil
+---@field texcoord0 bufferstream|nil
 ---@field mesh_url url|nil
 ---@field buffer_resource resource|nil
 ---@field update_counter number|nil
 ---@field time number
+---@field world number[][][]|nil
+---@field v_template vector3[]|nil
+---@field indices_template integer[]|nil
 
 ---@class mesh_object
 ---@field go_id hash
@@ -120,13 +125,195 @@ local function rotated_atlas_to_mesh_uv(atlas_geometry, atlas_width, atlas_heigh
 	return uvs
 end
 
+---@param self game_script
+local function get_block(self, x, y, z)
+	if x < 0 or x >= (self.grid_size or 0) or y < 0 or y >= (self.grid_size or 0) or z < 0 or z >= (self.grid_size or 0) then
+		return 0 -- Air out of bounds
+	end
+	return self.world[x][y][z]
+end
+
+---@param self game_script
+local function update_mesh(self)
+	local grid_size = self.grid_size
+	local positions = self.positions
+	local texcoord0 = self.texcoord0
+
+	local total_faces = 0
+	local culled_faces = 0
+	local greedy_faces = 0
+
+	-- Count total faces
+	for x = 0, grid_size - 1 do
+		for y = 0, grid_size - 1 do
+			for z = 0, grid_size - 1 do
+				if self.world[x][y][z] == 1 then
+					total_faces = total_faces + 6
+				end
+			end
+		end
+	end
+
+	-- Prepare for mesh generation
+	local vertex_ptr = 0
+	local atlas = resource.get_atlas(self.game_atlas)
+	local texture_info = resource.get_texture_info(atlas.texture)
+	local top_id, side_id
+	for index, animation in ipairs(atlas.animations) do
+		if animation.id == hash("top") or animation.id == "top" then
+			top_id = index
+		elseif animation.id == hash("side") or animation.id == "side" then
+			side_id = index
+		end
+	end
+	local top_uvs_data = rotated_atlas_to_mesh_uv(atlas.geometries[top_id], texture_info.width, texture_info.height)
+	local side_uvs_data = rotated_atlas_to_mesh_uv(atlas.geometries[side_id], texture_info.width, texture_info.height)
+
+	-- Greedy meshing algorithm (6 passes: 2 directions per axis)
+	for d = 0, 2 do -- 0:x, 1:y, 2:z
+		local u = (d + 1) % 3
+		local v = (d + 2) % 3
+
+		local x = { 0, 0, 0 }
+		local q = { 0, 0, 0 }
+		q[d + 1] = 1
+
+		for i_d = -1, grid_size - 1 do
+			x[d + 1] = i_d
+			-- Generate mask for this slice
+			local mask = {}
+			local n = 0
+			for i_v = 0, grid_size - 1 do
+				x[v + 1] = i_v
+				for i_u = 0, grid_size - 1 do
+					x[u + 1] = i_u
+					local b1 = get_block(self, x[1], x[2], x[3])
+					local b2 = get_block(self, x[1] + q[1], x[2] + q[2], x[3] + q[3])
+
+					if (b1 ~= 0) == (b2 ~= 0) then
+						mask[n + 1] = 0
+					elseif b1 ~= 0 then
+						mask[n + 1] = 1 -- Visible face facing forward
+						culled_faces = culled_faces + 1
+					else
+						mask[n + 1] = -1 -- Visible face facing backward
+						culled_faces = culled_faces + 1
+					end
+					n = n + 1
+				end
+			end
+
+			-- Rectify mask
+			n = 0
+			for j = 0, grid_size - 1 do
+				for i = 0, grid_size - 1 do
+					local c = mask[n + 1]
+					if c ~= 0 then
+						-- Find width
+						local w = 1
+						while i + w < grid_size and c == mask[n + w + 1] do
+							w = w + 1
+						end
+
+						-- Find height
+						local h = 1
+						local done = false
+						while j + h < grid_size do
+							for k = 0, w - 1 do
+								if c ~= mask[n + k + h * grid_size + 1] then
+									done = true
+									break
+								end
+							end
+							if done then break end
+							h = h + 1
+						end
+
+						-- Add quad
+						greedy_faces = greedy_faces + 1
+						x[u + 1] = i
+						x[v + 1] = j
+
+						local du = { 0, 0, 0 }
+						du[u + 1] = w
+						local dv = { 0, 0, 0 }
+						dv[v + 1] = h
+
+						local quad_verts = {
+							vmath.vector3(x[1], x[2], x[3]),
+							vmath.vector3(x[1] + du[1], x[2] + du[2], x[3] + du[3]),
+							vmath.vector3(x[1] + du[1] + dv[1], x[2] + du[2] + dv[2], x[3] + du[3] + dv[3]),
+							vmath.vector3(x[1] + dv[1], x[2] + dv[2], x[3] + dv[3])
+						}
+
+						-- Adjust depth for direction
+						if c > 0 then
+							for k = 1, 4 do quad_verts[k] = quad_verts[k] + vmath.vector3(q[1], q[2], q[3]) end
+						end
+
+						-- Offset to center vertices (0.5 padding as cubes are -0.5 to 0.5)
+						local grid_offset = vmath.vector3(-0.5, -0.5, -0.5)
+						for k = 1, 4 do quad_verts[k] = quad_verts[k] + grid_offset end
+
+						-- Triangles indices: 1,2,3, 1,3,4
+						local quad_indices = { 1, 2, 3, 1, 3, 4 }
+						local current_uvs = (d == 1) and top_uvs_data or side_uvs_data
+						local uv_pt_idx = { 2, 3, 4, 2, 4, 1 }
+
+						for k = 1, 6 do
+							local v_idx = quad_indices[k]
+							local vert = quad_verts[v_idx]
+							positions[vertex_ptr * 3 + 1] = vert.x
+							positions[vertex_ptr * 3 + 2] = vert.y
+							positions[vertex_ptr * 3 + 3] = vert.z
+
+							local uv = current_uvs[uv_pt_idx[k]]
+							texcoord0[vertex_ptr * 2 + 1] = uv.u
+							texcoord0[vertex_ptr * 2 + 2] = uv.v
+							vertex_ptr = vertex_ptr + 1
+						end
+
+						-- Zero out processed area in mask
+						for l = 0, h - 1 do
+							for k = 0, w - 1 do
+								mask[n + k + l * grid_size + 1] = 0
+							end
+						end
+					end
+					n = n + 1
+				end
+			end
+		end
+	end
+
+	-- Zero out remaining buffer
+	local total_verts = grid_size * grid_size * grid_size * 36
+	for i = vertex_ptr, total_verts - 1 do
+		positions[i * 3 + 1] = 0
+		positions[i * 3 + 2] = 0
+		positions[i * 3 + 3] = 0
+	end
+
+	print(string.format("Total faces: %d | Culled faces: %d | Greedy faces: %d", total_faces, culled_faces, greedy_faces))
+
+	-- Update the existing resource correctly
+	local success = pcall(function() resource.set_buffer(self.buffer_resource, self.buf) end)
+	if not success then
+		self.update_counter = (self.update_counter or 0) + 1
+		local unique_path = string.format("/assets/models/patch_7_%d.bufferc", self.update_counter)
+		self.buffer_resource = resource.create_buffer(unique_path, { buffer = self.buf })
+	end
+
+	go.set(self.mesh_url, "vertices", self.buffer_resource)
+end
+
 --- Show a 3D cube generated at runtime
 ---@param self game_script
 local function example_7(self)
 	local mesh_go = create_mesh(self)
 
 	-- Define 8 vertices of a unit cube
-	local v = {
+	self.v_template = {
 		vmath.vector3(-0.5, -0.5, 0.5), -- 1
 		vmath.vector3(0.5, -0.5, 0.5), -- 2
 		vmath.vector3(0.5, 0.5, 0.5), -- 3
@@ -137,33 +324,34 @@ local function example_7(self)
 		vmath.vector3(-0.5, 0.5, -0.5) -- 8
 	}
 
-
 	-- Define indices for 12 triangles (6 faces)
-	local indices = {
-		-- Front
+	self.indices_template = {
+		-- Front (+Z)
 		1, 2, 3, 1, 3, 4,
-		-- Back
+		-- Back (-Z)
 		6, 5, 8, 6, 8, 7,
-		-- Top
+		-- Top (+Y)
 		4, 3, 7, 4, 7, 8,
-		-- Bottom
+		-- Bottom (-Y)
 		5, 6, 2, 5, 2, 1,
-		-- Right
+		-- Right (+X)
 		2, 6, 7, 2, 7, 3,
-		-- Left
+		-- Left (-X)
 		5, 1, 4, 5, 4, 8
 	}
 
-	-- Create a buffer for a 5x5x5 grid (125 cubes, 36 vertices per cube)
-	local grid_size = 5
+	-- Create a buffer for the grid
+	local grid_size = self.grid_size
+	_G.grid_size = grid_size
 	local num_cubes = grid_size * grid_size * grid_size
-	local buf = buffer.create(#indices * num_cubes, {
+	local buf = buffer.create(#self.indices_template * num_cubes, {
 		{ name = hash("position"),  type = buffer.VALUE_TYPE_FLOAT32, count = 3 },
 		{ name = hash("texcoord0"), type = buffer.VALUE_TYPE_FLOAT32, count = 2 }
 	})
 
-	local positions = buffer.get_stream(buf, "position")
-	local texcoord0 = buffer.get_stream(buf, "texcoord0")
+	self.buf = buf
+	self.positions = buffer.get_stream(buf, "position")
+	self.texcoord0 = buffer.get_stream(buf, "texcoord0")
 
 	local atlas = resource.get_atlas(self.game_atlas)
 	go.set(mesh_go.mesh_url, "texture0", hash(atlas.texture))
@@ -184,54 +372,53 @@ local function example_7(self)
 
 	local uv_point_indices = { 2, 3, 4, 2, 4, 1 }
 
+	-- Initialize static UVs once
 	local cube_idx = 0
 	for z = 0, grid_size - 1 do
 		for y = 0, grid_size - 1 do
 			for x = 0, grid_size - 1 do
-				local base_entry = cube_idx * #indices
-
-				for i, idx in ipairs(indices) do
-					local vert = v[idx]
-					local entry = base_entry + i
-					positions[(entry - 1) * 3 + 1] = vert.x + x
-					positions[(entry - 1) * 3 + 2] = vert.y + y
-					positions[(entry - 1) * 3 + 3] = vert.z + z
-
+				local base_entry = cube_idx * #self.indices_template
+				for i = 1, #self.indices_template do
 					local current_uvs = side_uvs
 					if i > 12 and i <= 24 then
 						current_uvs = top_uvs
 					end
-
 					local local_i = ((i - 1) % 6) + 1
 					local uv_point_idx = uv_point_indices[local_i]
-					texcoord0[(entry - 1) * 2 + 1] = current_uvs[uv_point_idx].u
-					texcoord0[(entry - 1) * 2 + 2] = current_uvs[uv_point_idx].v
+					local entry = base_entry + i
+					self.texcoord0[(entry - 1) * 2 + 1] = current_uvs[uv_point_idx].u
+					self.texcoord0[(entry - 1) * 2 + 2] = current_uvs[uv_point_idx].v
 				end
 				cube_idx = cube_idx + 1
 			end
 		end
 	end
 
-	self.num_indices = #indices
-	self.grid_size = grid_size
-	self.buf = buf
-	self.positions = positions
-	self.mesh_url = mesh_go.mesh_url
-
-	-- Initialize global cubemap
+	-- Initialize world state
+	self.world = {}
 	_G.shared_cubemap = {}
-	for i = 0, num_cubes - 1 do
-		_G.shared_cubemap[i] = true
+	for cx = 0, grid_size - 1 do
+		self.world[cx] = {}
+		for cy = 0, grid_size - 1 do
+			self.world[cx][cy] = {}
+			for cz = 0, grid_size - 1 do
+				self.world[cx][cy][cz] = 1 -- 1 for solid, 0 for air
+				local cube_idx = cx + cy * grid_size + cz * grid_size * grid_size
+				_G.shared_cubemap[cube_idx] = true
+			end
+		end
 	end
 
+	self.num_indices = #self.indices_template
+	self.mesh_url = mesh_go.mesh_url
 	self.buffer_resource = resource.create_buffer(string.format(PATCH_BUFFER, 7), { buffer = buf })
-	go.set(mesh_go.mesh_url, "vertices", self.buffer_resource)
 
-	-- Position the grid near the camera (camera is at z=500 by default)
-	-- Grid spans roughly [0, 5] in each axis if we don't offset.
-	-- Let's center it roughly in front of the camera.
-	go.set_position(vmath.vector3(-2.5, -2.5, 490), mesh_go.go_id)
-	-- Scale is now 1
+	-- Initial mesh update (culls internal faces)
+	update_mesh(self)
+
+	-- Position the grid (centered)
+	local offset = -self.grid_size / 2 + 0.5
+	go.set_position(vmath.vector3(offset, offset, 490), mesh_go.go_id)
 	go.set_scale(vmath.vector3(1, 1, 1), mesh_go.go_id)
 end
 
@@ -249,36 +436,37 @@ function on_message(self, message_id, message, sender)
 	if message_id == hash("destroy_cube") then
 		local gx, gy, gz = message.gx, message.gy, message.gz
 		if gx and gy and gz and self.grid_size then
-			local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
-			local base_entry = cube_idx * self.num_indices
+			-- Update world state
+			if self.world[gx] and self.world[gx][gy] and self.world[gx][gy][gz] then
+				self.world[gx][gy][gz] = 0 -- Air
 
-			-- Mark as destroyed in shared map
-			if _G.shared_cubemap then
-				_G.shared_cubemap[cube_idx] = false
+				-- Sync shared map for cursor
+				local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
+				if _G.shared_cubemap then
+					_G.shared_cubemap[cube_idx] = false
+				end
+
+				update_mesh(self)
 			end
+		end
+	elseif message_id == hash("place_cube") then
+		local gx, gy, gz = message.gx, message.gy, message.gz
+		if gx and gy and gz and self.grid_size then
+			-- Bounds check
+			if gx >= 0 and gx < self.grid_size and gy >= 0 and gy < self.grid_size and gz >= 0 and gz < self.grid_size then
+				-- Update world state
+				if self.world[gx] and self.world[gx][gy] and self.world[gx][gy][gz] == 0 then
+					self.world[gx][gy][gz] = 1 -- Solid
 
-			for i = 1, self.num_indices do
-				local entry = base_entry + i
-				self.positions[(entry - 1) * 3 + 1] = 0
-				self.positions[(entry - 1) * 3 + 2] = 0
-				self.positions[(entry - 1) * 3 + 3] = 0
+					-- Sync shared map for cursor
+					local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
+					if _G.shared_cubemap then
+						_G.shared_cubemap[cube_idx] = true
+					end
+
+					update_mesh(self)
+				end
 			end
-
-			-- Update the existing resource correctly
-			-- If the direct set doesn't work, we use resource.set_buffer or create a new one
-			local success = pcall(function()
-				resource.set_buffer(self.buffer_resource, self.buf)
-			end)
-
-			if not success then
-				-- Fallback for older versions or if set_resource failed: create a new one with unique path
-				self.update_counter = (self.update_counter or 0) + 1
-				local unique_path = string.format("/assets/models/patch_7_%d.bufferc", self.update_counter)
-				self.buffer_resource = resource.create_buffer(unique_path, { buffer = self.buf })
-			end
-
-			-- Re-set to be sure
-			go.set(self.mesh_url, "vertices", self.buffer_resource)
 		end
 	end
 end
