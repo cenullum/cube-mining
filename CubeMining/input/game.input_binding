@@ -1,0 +1,36 @@
+key_trigger {
+  input: KEY_W
+  action: "move_forward"
+}
+key_trigger {
+  input: KEY_S
+  action: "move_backward"
+}
+key_trigger {
+  input: KEY_A
+  action: "move_left"
+}
+key_trigger {
+  input: KEY_D
+  action: "move_right"
+}
+key_trigger {
+  input: KEY_SPACE
+  action: "move_up"
+}
+key_trigger {
+  input: KEY_LCTRL
+  action: "move_down"
+}
+key_trigger {
+  input: KEY_LSHIFT
+  action: "sprint"
+}
+key_trigger {
+  input: KEY_ESC
+  action: "key_esc"
+}
+mouse_trigger {
+  input: MOUSE_BUTTON_1
+  action: "click"
+}

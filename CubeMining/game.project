@@ -1,0 +1,25 @@
+[bootstrap]
+main_collection = /main/main.collectionc
+
+[script]
+shared_state = 1
+
+[display]
+width = 960
+height = 640
+high_dpi = 1
+
+[android]
+input_method = HiddenInputField
+
+[html5]
+scale_mode = stretch
+
+[project]
+title = Meshes In Defold
+
+[render]
+clear_color_blue = 0.33
+clear_color_green = 0.29
+clear_color_red = 0.29
+

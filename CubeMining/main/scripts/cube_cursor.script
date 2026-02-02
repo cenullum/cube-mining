@@ -1,0 +1,117 @@
+local function get_targeted_cube(ray_start, ray_dir, max_dist)
+    local step = 2 -- small step for accuracy
+    local dist = 0
+    while dist < max_dist do
+        local p = ray_start + ray_dir * dist
+        -- The cubes in example_7 are at integer coordinates x, y, z in mesh space,
+        -- and the Mesh GO is scaled by 100.
+        -- So world positions are (x*100, y*100, z*100).
+        -- We find the closest integer grid point.
+        local gx = math.floor((p.x / 100) + 0.5)
+        local gy = math.floor((p.y / 100) + 0.5)
+        local gz = math.floor((p.z / 100) + 0.5)
+
+        -- Bounds check (matching example_7's 5x5x5 grid)
+        if gx >= 0 and gx < 5 and gy >= 0 and gy < 5 and gz >= 0 and gz < 5 then
+            -- Check if the cube exists in the shared map
+            local cube_idx = gx + gy * 5 + gz * 5 * 5
+            local cube_exists = (_G.shared_cubemap == nil) or (_G.shared_cubemap[cube_idx] == true)
+
+            if cube_exists then
+                -- Check distance to ensure it's actually within a cube
+                -- A unit cube at (gx, gy, gz) scaled by 100 extends +/- 50 from center.
+                local cx, cy, cz = gx * 100, gy * 100, gz * 100
+                if math.abs(p.x - cx) <= 50 and math.abs(p.y - cy) <= 50 and math.abs(p.z - cz) <= 50 then
+                    return vmath.vector3(cx, cy, cz), gx, gy, gz
+                end
+            end
+        end
+        dist = dist + step
+    end
+    return nil
+end
+
+function init(self)
+    msg.post(".", "acquire_input_focus")
+    -- Define unit cube vertices
+    local v = {
+        vmath.vector3(-0.5, -0.5, 0.5),  -- 1
+        vmath.vector3(0.5, -0.5, 0.5),   -- 2
+        vmath.vector3(0.5, 0.5, 0.5),    -- 3
+        vmath.vector3(-0.5, 0.5, 0.5),   -- 4
+        vmath.vector3(-0.5, -0.5, -0.5), -- 5
+        vmath.vector3(0.5, -0.5, -0.5),  -- 6
+        vmath.vector3(0.5, 0.5, -0.5),   -- 7
+        vmath.vector3(-0.5, 0.5, -0.5)   -- 8
+    }
+    -- 12 triangles (6 faces)
+    local indices = {
+        1, 2, 3, 1, 3, 4,
+        6, 5, 8, 6, 8, 7,
+        4, 3, 7, 4, 7, 8,
+        5, 6, 2, 5, 2, 1,
+        2, 6, 7, 2, 7, 3,
+        5, 1, 4, 5, 4, 8
+    }
+
+    local buf = buffer.create(#indices, {
+        { name = hash("position"),  type = buffer.VALUE_TYPE_FLOAT32, count = 3 },
+        { name = hash("texcoord0"), type = buffer.VALUE_TYPE_FLOAT32, count = 2 }
+    })
+    local positions = buffer.get_stream(buf, "position")
+    local texcoords = buffer.get_stream(buf, "texcoord0")
+
+    for i, idx in ipairs(indices) do
+        local vert = v[idx]
+        positions[(i - 1) * 3 + 1] = vert.x
+        positions[(i - 1) * 3 + 2] = vert.y
+        positions[(i - 1) * 3 + 3] = vert.z
+        -- UVs not needed but adding placeholders
+        texcoords[(i - 1) * 2 + 1] = 0
+        texcoords[(i - 1) * 2 + 2] = 0
+    end
+
+    local mesh_url = msg.url("#mesh")
+    local buffer_resource = resource.create_buffer("/main/cursor.bufferc", { buffer = buf })
+    go.set(mesh_url, "vertices", buffer_resource)
+
+    -- Scale 2% larger than 100
+    self.base_scale = vmath.vector3(102, 102, 102)
+    go.set_scale(self.base_scale)
+
+    self.visible = false
+    msg.post("#mesh", "disable")
+
+    self.target_grid = nil
+end
+
+function update(self, dt)
+    -- Get camera info from the "camera" GO
+    local cam_pos = go.get_world_position("camera")
+    local cam_rot = go.get_world_rotation("camera")
+    local cam_dir = vmath.rotate(cam_rot, vmath.vector3(0, 0, -1))
+
+    local target, gx, gy, gz = get_targeted_cube(cam_pos, cam_dir, 2000)
+    if target then
+        if not self.visible then
+            msg.post("#mesh", "enable")
+            self.visible = true
+        end
+        go.set_position(target)
+        self.target_grid = { gx = gx, gy = gy, gz = gz }
+    else
+        if self.visible then
+            msg.post("#mesh", "disable")
+            self.visible = false
+        end
+        self.target_grid = nil
+    end
+end
+
+function on_input(self, action_id, action)
+    if action_id == hash("click") and action.pressed then
+        if self.visible and self.target_grid then
+            msg.post("root#main", "destroy_cube", self.target_grid)
+        end
+    end
+end

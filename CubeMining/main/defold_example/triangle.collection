@@ -1,0 +1,19 @@
+name: "triangle"
+scale_along_z: 0
+embedded_instances {
+  id: "go"
+  data: "embedded_components {\n"
+  "  id: \"mesh\"\n"
+  "  type: \"mesh\"\n"
+  "  data: \"material: \\\"/main/defold_example/mesh.material\\\"\\n"
+  "vertices: \\\"/main/defold_example/triangle.buffer\\\"\\n"
+  "position_stream: \\\"position\\\"\\n"
+  "normal_stream: \\\"position\\\"\\n"
+  "\"\n"
+  "}\n"
+  ""
+  scale3 {
+    x: 100.0
+    y: 100.0
+  }
+}

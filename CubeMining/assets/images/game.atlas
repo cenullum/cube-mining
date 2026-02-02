@@ -1,0 +1,10 @@
+images {
+  image: "/assets/images/side.png"
+}
+images {
+  image: "/assets/images/top.png"
+}
+images {
+  image: "/assets/images/unbreakable.png"
+}
+extrude_borders: 2
