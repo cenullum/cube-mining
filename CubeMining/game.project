@@ -16,7 +16,7 @@ input_method = HiddenInputField
 scale_mode = stretch
 
 [project]
-title = Meshes In Defold
+title = Cube Mining
 
 [render]
 clear_color_blue = 0.33

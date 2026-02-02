@@ -1,15 +1,22 @@
 local function get_targeted_cube(ray_start, ray_dir, max_dist)
-    local step = 2 -- small step for accuracy
+    local step = 0.05 -- Adjusted for scale 1
     local dist = 0
+
+    -- Grid offset from main.script
+    local OFFSET_X = -2.5
+    local OFFSET_Y = -2.5
+    local OFFSET_Z = 490
+
     while dist < max_dist do
         local p = ray_start + ray_dir * dist
-        -- The cubes in example_7 are at integer coordinates x, y, z in mesh space,
-        -- and the Mesh GO is scaled by 100.
-        -- So world positions are (x*100, y*100, z*100).
-        -- We find the closest integer grid point.
-        local gx = math.floor((p.x / 100) + 0.5)
-        local gy = math.floor((p.y / 100) + 0.5)
-        local gz = math.floor((p.z / 100) + 0.5)
+
+        -- The cubes in example_7 have centers at (gx, gy, gz) in mesh space.
+        -- Mesh GO is at (-2.5, -2.5, 490) with scale 1.
+        -- So world center of cube (gx, gy, gz) is (-2.5 + gx, -2.5 + gy, 490 + gz).
+
+        local gx = math.floor(p.x - OFFSET_X + 0.5)
+        local gy = math.floor(p.y - OFFSET_Y + 0.5)
+        local gz = math.floor(p.z - OFFSET_Z + 0.5)
 
         -- Bounds check (matching example_7's 5x5x5 grid)
         if gx >= 0 and gx < 5 and gy >= 0 and gy < 5 and gz >= 0 and gz < 5 then
@@ -19,9 +26,9 @@ local function get_targeted_cube(ray_start, ray_dir, max_dist)
 
             if cube_exists then
                 -- Check distance to ensure it's actually within a cube
-                -- A unit cube at (gx, gy, gz) scaled by 100 extends +/- 50 from center.
-                local cx, cy, cz = gx * 100, gy * 100, gz * 100
-                if math.abs(p.x - cx) <= 50 and math.abs(p.y - cy) <= 50 and math.abs(p.z - cz) <= 50 then
+                -- A unit cube at (gx, gy, gz) extends +/- 0.5 from center.
+                local cx, cy, cz = OFFSET_X + gx, OFFSET_Y + gy, OFFSET_Z + gz
+                if math.abs(p.x - cx) <= 0.5 and math.abs(p.y - cy) <= 0.5 and math.abs(p.z - cz) <= 0.5 then
                     return vmath.vector3(cx, cy, cz), gx, gy, gz
                 end
             end
@@ -75,8 +82,8 @@ function init(self)
     local buffer_resource = resource.create_buffer("/main/cursor.bufferc", { buffer = buf })
     go.set(mesh_url, "vertices", buffer_resource)
 
-    -- Scale 2% larger than 100
-    self.base_scale = vmath.vector3(102, 102, 102)
+    -- Scale 2% larger than 1.0
+    self.base_scale = vmath.vector3(1.02, 1.02, 1.02)
     go.set_scale(self.base_scale)
 
     self.visible = false
@@ -91,7 +98,7 @@ function update(self, dt)
     local cam_rot = go.get_world_rotation("camera")
     local cam_dir = vmath.rotate(cam_rot, vmath.vector3(0, 0, -1))
 
-    local target, gx, gy, gz = get_targeted_cube(cam_pos, cam_dir, 2000)
+    local target, gx, gy, gz = get_targeted_cube(cam_pos, cam_dir, 100) -- Adjusted ray distance
     if target then
         if not self.visible then
             msg.post("#mesh", "enable")
