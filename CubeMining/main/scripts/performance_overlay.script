@@ -1,15 +1,15 @@
 local function format_mem(kb)
     if kb > 1024 then
-        return string.format("%.2f MB", kb / 1024)
+        return string.format("%d MB", math.floor(kb / 1024))
     else
-        return string.format("%.2f KB", kb)
+        return string.format("%d KB", math.floor(kb))
     end
 end
 
 -- Helper to convert logical screen coordinates to world coordinates fixed to the camera
 local function ScreenToWorld(x, y, d, cam_pos, cam_rot, width, height, aspect)
-    local fov = math.rad(45) -- Match free_camera.script
-    local tan_half_fov = math.tan(fov / 2)
+    local fov = 0.39269908169872         -- math.rad(45) / 2 cached
+    local tan_half_fov = 0.4142135623731 -- math.tan(fov) cached
 
     -- Normalize screen coordinates to [-1, 1]
     local nx = (x / width - 0.5) * 2
@@ -20,20 +20,39 @@ local function ScreenToWorld(x, y, d, cam_pos, cam_rot, width, height, aspect)
     local dy = ny * d * tan_half_fov
     local dz = -d
 
-    local local_pos = vmath.vector3(dx, dy, dz)
     -- Rotate to world space and add camera position
-    return cam_pos + vmath.rotate(cam_rot, local_pos)
+    return cam_pos + vmath.rotate(cam_rot, vmath.vector3(dx, dy, dz))
 end
 
 function init(self)
     msg.post(".", "acquire_input_focus")
     self.mode = 0 -- 0: Off, 1: Text, 2: Text + Graph
+
+    -- FPS Metrics (defold-metrics style)
+    self.fps_samples = 60
+    self.fps_frames = {}
+    self.avg_fps = 0
+
+    -- Graph & 1% Lows
     self.frame_times = {}
-    self.max_samples = 100
-    self.current_fps = 0
+    self.max_graph_samples = 120
+
+    self.current_time = socket.gettime()
+    self.prev_time = self.current_time
+
+    self.avg_fps = 0
     self.low_1_fps = 0
 
-    -- Logical size from game.project
+    -- Throttling for heavy operations only
+    self.update_timer = 0
+    self.update_interval = 0.5
+
+    -- Pre-allocated objects
+    self.color_green = vmath.vector4(0, 1, 0, 1)
+    self.color_target = vmath.vector4(0, 1, 0, 0.2)
+    self.vec_offset = vmath.vector3(0, 0, 0)
+
+    -- Logical size
     self.logical_width = 960
     self.logical_height = 640
 end
@@ -41,39 +60,55 @@ end
 function update(self, dt)
     if self.mode == 0 then return end
 
-    -- FPS calculation
-    self.current_fps = 1 / math.max(dt, 0.0001)
+    -- 1. Wall-Clock Time Measurements
+    self.current_time = socket.gettime()
+    local real_dt = self.current_time - self.prev_time
+    self.prev_time = self.current_time
 
-    -- Sample management
-    table.insert(self.frame_times, dt)
-    if #self.frame_times > self.max_samples then
+    -- 2. FPS Calculation (Strict defold-metrics logic)
+    table.insert(self.fps_frames, self.current_time)
+    if #self.fps_frames == self.fps_samples + 1 then
+        table.remove(self.fps_frames, 1)
+        local dt_total = self.fps_frames[#self.fps_frames] - self.fps_frames[1]
+        if dt_total > 0 then
+            self.avg_fps = (#self.fps_frames - 1) / dt_total
+        end
+    end
+
+    -- 3. Delta Time for Graph & 1% Lows
+    local dt_display = math.max(real_dt, 0.0001)
+
+    -- 4. Sample Management for Graph & 1% Lows
+    table.insert(self.frame_times, dt_display)
+    if #self.frame_times > self.max_graph_samples then
         table.remove(self.frame_times, 1)
     end
 
-    -- 1% Low FPS calculation
-    if #self.frame_times >= 10 then -- Need some minimal samples
-        local sorted_times = {}
-        for i, v in ipairs(self.frame_times) do sorted_times[i] = v end
-        table.sort(sorted_times)
-
-        -- The 1% slowest frames (largest dt)
-        local index = math.max(1, math.floor(#sorted_times * 0.99))
-        self.low_1_fps = 1 / math.max(sorted_times[index], 0.0001)
+    -- 5. Heavy Logic Throttling (Keep sorting expensive tables throttled)
+    self.update_timer = self.update_timer + dt
+    if self.update_timer >= self.update_interval then
+        self.update_timer = 0
+        local samples = #self.frame_times
+        if samples >= 20 then
+            local sorted_times = {}
+            for i, v in ipairs(self.frame_times) do sorted_times[i] = v end
+            table.sort(sorted_times)
+            local index = math.floor(samples * 0.99)
+            self.low_1_fps = 1 / sorted_times[math.max(1, index)]
+        end
     end
 
-    -- Base position and style
-    local x_start = 200
-    local y_start = 200
-    local color = vmath.vector4(0, 1, 0, 1)
-
-    -- Display Text
+    -- 6. Display Text (Real-time update as requested)
     local ram = collectgarbage("count")
     local faces = _G.stats_faces or 0
     local vertices = _G.stats_vertices or 0
     local build_time = _G.stats_mesh_build_time or 0
 
+    local x_start = 20
+    local y_start = 200
+
     local lines = {
-        string.format("FPS: %.1f", self.current_fps),
+        string.format("FPS: %.2f", self.avg_fps),
         string.format("1%% Low FPS: %.1f", self.low_1_fps),
         string.format("Faces: %d", faces),
         string.format("Vertices: %d", vertices),
@@ -82,58 +117,60 @@ function update(self, dt)
     }
 
     for i, line in ipairs(lines) do
+        self.vec_offset.x = x_start
+        self.vec_offset.y = y_start - (i * 20)
         msg.post("@render:", "draw_debug_text", {
             text = line,
-            position = vmath.vector3(x_start, y_start - (i * 20), 0),
-            color = color
+            position = self.vec_offset,
+            color = self.color_green
         })
     end
 
-    -- Display Graph (Mode 2)
+    -- 7. Display Graph (Mode 2)
     if self.mode == 2 and #self.frame_times > 1 then
         local success, cam_pos = pcall(go.get_position, "camera")
-        if not success then return end -- Camera might not be ready
+        if not success then return end
         local cam_rot = go.get_rotation("camera")
         local width, height = window.get_size()
         local aspect = width / height
-        local d = 0.5 -- Distance in front of camera
+        local d = 0.5
 
-        local graph_width = 200
+        local graph_width = 240
         local graph_height = 80
         local graph_x = x_start
-        local graph_y = y_start + 10 -- Position above text
+        local graph_y = y_start + 10
 
-        local max_graph_fps = 144    -- Cap visual height
-        local min_graph_fps = 0
-        local step_x = graph_width / (self.max_samples - 1)
+        local max_graph_fps = 144
+        local step_x = graph_width / (self.max_graph_samples - 1)
 
-        for i = 1, #self.frame_times - 1 do
-            local fps1 = 1 / math.max(self.frame_times[i], 0.0001)
-            local fps2 = 1 / math.max(self.frame_times[i + 1], 0.0001)
+        -- Optimized Graph Loop
+        local prev_h = math.min(1, (1 / (self.frame_times[1] or 0.016)) / max_graph_fps) * graph_height
+        local prev_pos = ScreenToWorld(graph_x, graph_y + prev_h, d, cam_pos, cam_rot, self.logical_width,
+            self.logical_height, aspect)
 
-            -- Normalize h1 and h2
-            local h1 = math.min(1, (fps1 - min_graph_fps) / max_graph_fps) * graph_height
-            local h2 = math.min(1, (fps2 - min_graph_fps) / max_graph_fps) * graph_height
-
-            local sx1, sy1 = graph_x + (i - 1) * step_x, graph_y + h1
-            local sx2, sy2 = graph_x + i * step_x, graph_y + h2
+        for i = 2, #self.frame_times do
+            local fps = 1 / self.frame_times[i]
+            local h = math.min(1, fps / max_graph_fps) * graph_height
+            local curr_x = graph_x + (i - 1) * step_x
+            local curr_pos = ScreenToWorld(curr_x, graph_y + h, d, cam_pos, cam_rot, self.logical_width,
+                self.logical_height, aspect)
 
             msg.post("@render:", "draw_line", {
-                start_point = ScreenToWorld(sx1, sy1, d, cam_pos, cam_rot, self.logical_width, self.logical_height,
-                    aspect),
-                end_point = ScreenToWorld(sx2, sy2, d, cam_pos, cam_rot, self.logical_width, self.logical_height, aspect),
-                color = color
+                start_point = prev_pos,
+                end_point = curr_pos,
+                color = self.color_green
             })
+            prev_pos = curr_pos
         end
 
-        -- Target line (60 FPS)
+        -- 60 FPS Target Line
         local h60 = (60 / max_graph_fps) * graph_height
         msg.post("@render:", "draw_line", {
             start_point = ScreenToWorld(graph_x, graph_y + h60, d, cam_pos, cam_rot, self.logical_width,
                 self.logical_height, aspect),
             end_point = ScreenToWorld(graph_x + graph_width, graph_y + h60, d, cam_pos, cam_rot, self.logical_width,
                 self.logical_height, aspect),
-            color = vmath.vector4(0, 1, 0, 0.2)
+            color = self.color_target
         })
     end
 end

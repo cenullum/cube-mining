@@ -22,7 +22,7 @@ embedded_instances {
   id: "root"
   data: "components {\n"
   "  id: \"main\"\n"
-  "  component: \"/main/main.script\"\n"
+  "  component: \"/main/scripts/generate_voxel.script\"\n"
   "  properties {\n"
   "    id: \"mesh_prefab\"\n"
   "    value: \"/root#mesh_prefab\"\n"

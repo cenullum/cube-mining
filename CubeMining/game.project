@@ -17,6 +17,7 @@ scale_mode = stretch
 
 [project]
 title = Cube Mining
+dependencies = 
 
 [render]
 clear_color_blue = 0.33
