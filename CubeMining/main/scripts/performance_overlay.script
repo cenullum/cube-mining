@@ -1,0 +1,147 @@
+local function format_mem(kb)
+    if kb > 1024 then
+        return string.format("%.2f MB", kb / 1024)
+    else
+        return string.format("%.2f KB", kb)
+    end
+end
+
+-- Helper to convert logical screen coordinates to world coordinates fixed to the camera
+local function ScreenToWorld(x, y, d, cam_pos, cam_rot, width, height, aspect)
+    local fov = math.rad(45) -- Match free_camera.script
+    local tan_half_fov = math.tan(fov / 2)
+
+    -- Normalize screen coordinates to [-1, 1]
+    local nx = (x / width - 0.5) * 2
+    local ny = (y / height - 0.5) * 2
+
+    -- Calculate position in camera space
+    local dx = nx * d * tan_half_fov * aspect
+    local dy = ny * d * tan_half_fov
+    local dz = -d
+
+    local local_pos = vmath.vector3(dx, dy, dz)
+    -- Rotate to world space and add camera position
+    return cam_pos + vmath.rotate(cam_rot, local_pos)
+end
+
+function init(self)
+    msg.post(".", "acquire_input_focus")
+    self.mode = 0 -- 0: Off, 1: Text, 2: Text + Graph
+    self.frame_times = {}
+    self.max_samples = 100
+    self.current_fps = 0
+    self.low_1_fps = 0
+
+    -- Logical size from game.project
+    self.logical_width = 960
+    self.logical_height = 640
+end
+
+function update(self, dt)
+    if self.mode == 0 then return end
+
+    -- FPS calculation
+    self.current_fps = 1 / math.max(dt, 0.0001)
+
+    -- Sample management
+    table.insert(self.frame_times, dt)
+    if #self.frame_times > self.max_samples then
+        table.remove(self.frame_times, 1)
+    end
+
+    -- 1% Low FPS calculation
+    if #self.frame_times >= 10 then -- Need some minimal samples
+        local sorted_times = {}
+        for i, v in ipairs(self.frame_times) do sorted_times[i] = v end
+        table.sort(sorted_times)
+
+        -- The 1% slowest frames (largest dt)
+        local index = math.max(1, math.floor(#sorted_times * 0.99))
+        self.low_1_fps = 1 / math.max(sorted_times[index], 0.0001)
+    end
+
+    -- Base position and style
+    local x_start = 200
+    local y_start = 200
+    local color = vmath.vector4(0, 1, 0, 1)
+
+    -- Display Text
+    local ram = collectgarbage("count")
+    local faces = _G.stats_faces or 0
+    local vertices = _G.stats_vertices or 0
+    local build_time = _G.stats_mesh_build_time or 0
+
+    local lines = {
+        string.format("FPS: %.1f", self.current_fps),
+        string.format("1%% Low FPS: %.1f", self.low_1_fps),
+        string.format("Faces: %d", faces),
+        string.format("Vertices: %d", vertices),
+        string.format("Mesh Build: %.2f ms", build_time),
+        string.format("RAM: %s", format_mem(ram))
+    }
+
+    for i, line in ipairs(lines) do
+        msg.post("@render:", "draw_debug_text", {
+            text = line,
+            position = vmath.vector3(x_start, y_start - (i * 20), 0),
+            color = color
+        })
+    end
+
+    -- Display Graph (Mode 2)
+    if self.mode == 2 and #self.frame_times > 1 then
+        local success, cam_pos = pcall(go.get_position, "camera")
+        if not success then return end -- Camera might not be ready
+        local cam_rot = go.get_rotation("camera")
+        local width, height = window.get_size()
+        local aspect = width / height
+        local d = 0.5 -- Distance in front of camera
+
+        local graph_width = 200
+        local graph_height = 80
+        local graph_x = x_start
+        local graph_y = y_start + 10 -- Position above text
+
+        local max_graph_fps = 144    -- Cap visual height
+        local min_graph_fps = 0
+        local step_x = graph_width / (self.max_samples - 1)
+
+        for i = 1, #self.frame_times - 1 do
+            local fps1 = 1 / math.max(self.frame_times[i], 0.0001)
+            local fps2 = 1 / math.max(self.frame_times[i + 1], 0.0001)
+
+            -- Normalize h1 and h2
+            local h1 = math.min(1, (fps1 - min_graph_fps) / max_graph_fps) * graph_height
+            local h2 = math.min(1, (fps2 - min_graph_fps) / max_graph_fps) * graph_height
+
+            local sx1, sy1 = graph_x + (i - 1) * step_x, graph_y + h1
+            local sx2, sy2 = graph_x + i * step_x, graph_y + h2
+
+            msg.post("@render:", "draw_line", {
+                start_point = ScreenToWorld(sx1, sy1, d, cam_pos, cam_rot, self.logical_width, self.logical_height,
+                    aspect),
+                end_point = ScreenToWorld(sx2, sy2, d, cam_pos, cam_rot, self.logical_width, self.logical_height, aspect),
+                color = color
+            })
+        end
+
+        -- Target line (60 FPS)
+        local h60 = (60 / max_graph_fps) * graph_height
+        msg.post("@render:", "draw_line", {
+            start_point = ScreenToWorld(graph_x, graph_y + h60, d, cam_pos, cam_rot, self.logical_width,
+                self.logical_height, aspect),
+            end_point = ScreenToWorld(graph_x + graph_width, graph_y + h60, d, cam_pos, cam_rot, self.logical_width,
+                self.logical_height, aspect),
+            color = vmath.vector4(0, 1, 0, 0.2)
+        })
+    end
+end
+
+function on_input(self, action_id, action)
+    if action_id == hash("toggle_performance") and action.pressed then
+        self.mode = (self.mode + 1) % 3
+        local modes = { "Off", "Text", "Text + Graph" }
+        print("Performance overlay mode: " .. modes[self.mode + 1])
+    end
+end
