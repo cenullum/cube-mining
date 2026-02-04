@@ -1,6 +1,7 @@
 # Cube Mining
 
 A 3D voxel mining example built with the **Defold Game Engine**. This project demonstrates how to handle dynamic voxel environments, efficient mesh generation, and real-time performance monitoring.
+<img width="962" height="677" alt="Screenshot from 2026-02-04 03-08-34" src="https://github.com/user-attachments/assets/2c58b41f-587a-4ea5-99f6-c8cea40e6dbf" />
 
 ## Features
 
@@ -24,6 +25,11 @@ A 3D voxel mining example built with the **Defold Game Engine**. This project de
 - **Scale**: The project is currently focused on a single **16x16x16** voxel cube. It does not implement a chunking system or procedural terrain generation like Minecraft.
 - **Threading**: Mesh generation and GPU buffer updates are currently handled on the **main thread**. So it fps frops until it create whole mesh.
 - **Optimization**: To maximize performance, surfaces of cubes that are not visible (i.e., touching another solid block) are excluded from the mesh. As you can see in the image, faces are only added when "holes" are created, ensuring efficient rendering.
+
+
+<img width="963" height="681" alt="Screenshot from 2026-02-04 03-09-35" src="https://github.com/user-attachments/assets/949a8c8d-a483-44a7-bafe-b49c6f37decd" />
+<img width="965" height="678" alt="Screenshot from 2026-02-04 03-09-04" src="https://github.com/user-attachments/assets/ce13d4ab-a806-4f67-bc29-c13766086044" />
+
 
 ## Inspiration & Acknowledgement
 
