@@ -62,7 +62,7 @@ function init(self)
         "Space/Ctrl: Up/Down",
         "Left Click: Break",
         "Right Click: Place",
-        "F6: Toggle Metrics"
+        "M: Toggle Metrics"
     }
 end
 

@@ -18,7 +18,7 @@ A 3D voxel mining example built with the **Defold Game Engine**. This project de
 - **Ctrl**: Descend
 - **Left Click**: Break block
 - **Right Click**: Place block
-- **F6**: Toggle Performance Overlay (Off / Text / Text + Graph)
+- **M**: Toggle Performance Overlay (Off / Text / Text + Graph)
 
 ## Scope & Technical Notes
 

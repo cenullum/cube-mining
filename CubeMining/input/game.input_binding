@@ -39,6 +39,6 @@ mouse_trigger {
   action: "click_right"
 }
 key_trigger {
-  input: KEY_F6
+  input: KEY_M
   action: "toggle_performance"
 }
