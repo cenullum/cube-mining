@@ -375,7 +375,6 @@ end
 function init(self)
     init_voxel_world(self)
     self.time = 0
-    fps.go()
 end
 
 function on_message(self, message_id, message, sender)
