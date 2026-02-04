@@ -1,3 +1,5 @@
+<img width="2476" height="744" alt="4" src="https://github.com/user-attachments/assets/10566272-4e3d-46bf-8141-1be5c9d70c88" />
+
 # Cube Mining
 
 A 3D voxel mining example built with the **Defold Game Engine**. This project demonstrates how to handle dynamic voxel environments, efficient mesh generation, and real-time performance monitoring.
@@ -54,7 +56,6 @@ If you find this project helpful and would like to support its development, you 
 [https://cenullum.com/donation](https://cenullum.com/donation)
 
 
-<img width="2476" height="744" alt="4" src="https://github.com/user-attachments/assets/10566272-4e3d-46bf-8141-1be5c9d70c88" />
 
 ## License
 
