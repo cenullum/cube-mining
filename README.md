@@ -53,6 +53,9 @@ Contributions are welcome! Whether it's optimization, new features, or bug fixes
 If you find this project helpful and would like to support its development, you can make a donation here:
 [https://cenullum.com/donation](https://cenullum.com/donation)
 
+
+<img width="2476" height="744" alt="4" src="https://github.com/user-attachments/assets/10566272-4e3d-46bf-8141-1be5c9d70c88" />
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
