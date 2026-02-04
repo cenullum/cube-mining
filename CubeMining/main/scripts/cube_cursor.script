@@ -10,7 +10,6 @@ local function get_targeted_cube(ray_start, ray_dir, max_dist)
     local OFFSET_Y = offset
     local OFFSET_Z = 490
 
-    local last_p = ray_start
 
     while dist < max_dist do
         local p = ray_start + ray_dir * dist
@@ -51,7 +50,6 @@ local function get_targeted_cube(ray_start, ray_dir, max_dist)
                 end
             end
         end
-        last_p = p
         dist = dist + step
     end
     return nil

@@ -2,6 +2,13 @@
 -- This script manages dynamic voxel mesh generation using a greedy meshing algorithm.
 -- It handles world state, optimizes rendering by merging faces, and updates the GPU buffer at runtime.
 
+---@alias url any
+---@alias resource any
+---@alias buffer any
+---@alias bufferstream any
+---@alias hash any
+---@alias vector3 any
+
 go.property("mesh_prefab", msg.url())
 go.property("game_atlas", resource.atlas())
 go.property("grid_size", 16)
@@ -16,14 +23,13 @@ go.property("grid_size", 16)
 ---@field texcoord0 bufferstream|nil
 ---@field texcoord1 bufferstream|nil
 ---@field positions_count integer|nil
----@field indices_stream bufferstream|nil
 ---@field uv_cache table|nil
 ---@field mask table|nil
 ---@field mesh_url url|nil
 ---@field buffer_resource resource|nil
----@field update_counter number|nil
----@field time number
 ---@field world number[][][]|nil
+---@field total_cubes integer|nil
+---@field prev_vertex_count integer|nil
 ---@field v_template vector3[]|nil
 ---@field indices_template integer[]|nil
 
@@ -99,7 +105,7 @@ local function get_block(self, x, y, z)
 end
 
 --- Primary mesh generation logic using Greedy Meshing.
---- It scans slices of the voxel grid, identifies visible faces, and merges them into large quads.
+--- Optimized to be allocation-free and avoid slow string formatting.
 ---@param self game_script
 local function update_mesh(self)
     local start_time = os.clock()
@@ -111,84 +117,63 @@ local function update_mesh(self)
     local texcoord1 = self.texcoord1
     local uv_cache = self.uv_cache
 
-    local vmath_vector3 = vmath.vector3
     local get_block_local = get_block
-    local str_format = string.format
-
-    -- Count total cubes for stats
-    local total_cubes = 0
-    for x = 0, grid_size - 1 do
-        local wx = world[x]
-        for y = 0, grid_size - 1 do
-            local wxy = wx[y]
-            for z = 0, grid_size - 1 do
-                if wxy[z] == 1 then total_cubes = total_cubes + 1 end
-            end
-        end
-    end
-
-    local baseline_faces = total_cubes * 6
-    local culled_faces = 0
     local greedy_faces = 0
-    local unique_vertex_pool = {}
-    local unique_vertex_count = 0
-
-    -- Reset vertex streams
-    for i = 1, self.positions_count do positions[i] = 0 end
 
     local top_data = uv_cache.top
     local side_data = uv_cache.side
 
     local quad_idx = 0
 
-    -- Populates vertex streams with quad data.
-    -- Supports texture tiling within atlas via texcoord1 attributes.
-    local function add_quad(v1, v2, v3, v4, uv_data, w, h)
+    -- Allocation-free quad addition. Directly writes values to buffer streams.
+    local function add_quad(p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z, p4x, p4y, p4z, uv_data, w, h)
         local base = quad_idx * 18
         local uv_base = quad_idx * 12
         local offset_base = quad_idx * 24
 
-        local verts = { v1, v2, v3, v1, v3, v4 }
-        local uvs = { { 0, h }, { w, h }, { w, 0 }, { 0, h }, { w, 0 }, { 0, 0 } }
+        local uw, uh = uv_data.w, uv_data.h
+        local wuh, huh = w * uw, h * uh
 
-        for i = 1, 6 do
-            local v = verts[i]
-            local uv_val = uvs[i]
+        -- V1
+        positions[base + 1] = p1x; positions[base + 2] = p1y; positions[base + 3] = p1z
+        texcoord0[uv_base + 1] = 0; texcoord0[uv_base + 2] = huh
+        -- V2
+        positions[base + 4] = p2x; positions[base + 5] = p2y; positions[base + 6] = p2z
+        texcoord0[uv_base + 3] = wuh; texcoord0[uv_base + 4] = huh
+        -- V3
+        positions[base + 7] = p3x; positions[base + 8] = p3y; positions[base + 9] = p3z
+        texcoord0[uv_base + 5] = wuh; texcoord0[uv_base + 6] = 0
+        -- V4 (Same as V1)
+        positions[base + 10] = p1x; positions[base + 11] = p1y; positions[base + 12] = p1z
+        texcoord0[uv_base + 7] = 0; texcoord0[uv_base + 8] = huh
+        -- V5 (Same as V3)
+        positions[base + 13] = p3x; positions[base + 14] = p3y; positions[base + 15] = p3z
+        texcoord0[uv_base + 9] = wuh; texcoord0[uv_base + 10] = 0
+        -- V6
+        positions[base + 16] = p4x; positions[base + 17] = p4y; positions[base + 18] = p4z
+        texcoord0[uv_base + 11] = 0; texcoord0[uv_base + 12] = 0
 
-            -- Track unique vertices based on position and relative UV mapping
-            local key = str_format("%.2f%.2f%.2f%.2f%.2f", v.x, v.y, v.z, uv_val[1], uv_val[2])
-            if not unique_vertex_pool[key] then
-                unique_vertex_pool[key] = true
-                unique_vertex_count = unique_vertex_count + 1
-            end
-
-            positions[base + (i - 1) * 3 + 1] = v.x
-            positions[base + (i - 1) * 3 + 2] = v.y
-            positions[base + (i - 1) * 3 + 3] = v.z
-
-            -- Absolute tile scale and relative tiling UVs
-            texcoord0[uv_base + (i - 1) * 2 + 1] = uv_val[1] * uv_data.w
-            texcoord0[uv_base + (i - 1) * 2 + 2] = uv_val[2] * uv_data.h
-
-            -- Atlas tile metadata for shader-side UV wrapping
-            texcoord1[offset_base + (i - 1) * 4 + 1] = uv_data.u
-            texcoord1[offset_base + (i - 1) * 4 + 2] = uv_data.v
-            texcoord1[offset_base + (i - 1) * 4 + 3] = uv_data.w
-            texcoord1[offset_base + (i - 1) * 4 + 4] = uv_data.h
+        local uu, uv = uv_data.u, uv_data.v
+        for i = 0, 5 do
+            local off = offset_base + i * 4 + 1
+            texcoord1[off] = uu
+            texcoord1[off + 1] = uv
+            texcoord1[off + 2] = uw
+            texcoord1[off + 3] = uh
         end
         quad_idx = quad_idx + 1
     end
 
-    -- Scan all 6 directions (axis pairs) for face visibility
+    -- Scan 6 directions. Loops are ordered to minimize world array access overhead.
     for d = 1, 6 do
         for i = 0, grid_size - 1 do
-            -- Reset visibility mask for current slice
+            -- Reset mask for slice
             for m = 1, grid_size * grid_size do mask[m] = false end
 
+            -- Visibility scan
             for j = 0, grid_size - 1 do
                 for k = 0, grid_size - 1 do
                     local x, y, z, nx, ny, nz
-                    -- Map k, j, i to 3D world space based on current sweep direction
                     if d == 1 then
                         x, y, z = k, j, i; nx, ny, nz = x, y, z + 1
                     elseif d == 2 then
@@ -203,26 +188,24 @@ local function update_mesh(self)
                         x, y, z = i, k, j; nx, ny, nz = x - 1, y, z
                     end
 
-                    -- A face is visible if it's solid and its neighbor is air
                     if world[x][y][z] == 1 and get_block_local(self, nx, ny, nz) == 0 then
                         mask[j * grid_size + k + 1] = true
-                        culled_faces = culled_faces + 1
                     end
                 end
             end
 
-            -- Merge adjacent visible faces in the 2D slice into larger rectangles
+            -- Greedy merge
             for j = 0, grid_size - 1 do
+                local row_offset = j * grid_size
                 for k = 0, grid_size - 1 do
-                    if mask[j * grid_size + k + 1] then
+                    if mask[row_offset + k + 1] then
                         local w, h = 1, 1
-                        -- Expand rectangle horizontally
-                        while k + w < grid_size and mask[j * grid_size + k + w + 1] do w = w + 1 end
-                        -- Expand rectangle vertically
+                        while k + w < grid_size and mask[row_offset + k + w + 1] do w = w + 1 end
                         local can_expand_h = true
                         while j + h < grid_size do
+                            local next_row_offset = (j + h) * grid_size
                             for r = 0, w - 1 do
-                                if not mask[(j + h) * grid_size + k + r + 1] then
+                                if not mask[next_row_offset + k + r + 1] then
                                     can_expand_h = false; break
                                 end
                             end
@@ -231,53 +214,52 @@ local function update_mesh(self)
                         end
 
                         local uv_data = (d == 3 or d == 4) and top_data or side_data
-                        local v1, v2, v3, v4
-                        -- Winding order is crucial for backface culling
+
+                        -- Pass raw coordinates to add_quad to avoid vector3 allocations
                         if d == 1 then
-                            v1 = vmath_vector3(k - 0.5, j - 0.5, i + 0.5); v2 = vmath_vector3(k + w - 0.5, j - 0.5, i +
-                                0.5)
-                            v3 = vmath_vector3(k + w - 0.5, j + h - 0.5, i + 0.5); v4 = vmath_vector3(k - 0.5, j + h -
-                                0.5, i + 0.5)
+                            add_quad(k - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j + h - 0.5,
+                                i + 0.5, k - 0.5, j + h - 0.5, i + 0.5, uv_data, w, h)
                         elseif d == 2 then
-                            v1 = vmath_vector3(k + w - 0.5, j - 0.5, i - 0.5); v2 = vmath_vector3(k - 0.5, j - 0.5, i -
-                                0.5)
-                            v3 = vmath_vector3(k - 0.5, j + h - 0.5, i - 0.5); v4 = vmath_vector3(k + w - 0.5, j + h -
-                                0.5, i - 0.5)
+                            add_quad(k + w - 0.5, j - 0.5, i - 0.5, k - 0.5, j - 0.5, i - 0.5, k - 0.5, j + h - 0.5,
+                                i - 0.5, k + w - 0.5, j + h - 0.5, i - 0.5, uv_data, w, h)
                         elseif d == 3 then
-                            v1 = vmath_vector3(k - 0.5, i + 0.5, j + h - 0.5); v2 = vmath_vector3(k + w - 0.5, i + 0.5,
-                                j + h - 0.5)
-                            v3 = vmath_vector3(k + w - 0.5, i + 0.5, j - 0.5); v4 = vmath_vector3(k - 0.5, i + 0.5, j -
-                                0.5)
+                            add_quad(k - 0.5, i + 0.5, j + h - 0.5, k + w - 0.5, i + 0.5, j + h - 0.5, k + w - 0.5,
+                                i + 0.5, j - 0.5, k - 0.5, i + 0.5, j - 0.5, uv_data, w, h)
                         elseif d == 4 then
-                            v1 = vmath_vector3(k - 0.5, i - 0.5, j - 0.5); v2 = vmath_vector3(k + w - 0.5, i - 0.5, j -
-                                0.5)
-                            v3 = vmath_vector3(k + w - 0.5, i - 0.5, j + h - 0.5); v4 = vmath_vector3(k - 0.5, i - 0.5,
-                                j + h - 0.5)
+                            add_quad(k - 0.5, i - 0.5, j - 0.5, k + w - 0.5, i - 0.5, j - 0.5, k + w - 0.5, i - 0.5,
+                                j + h - 0.5, k - 0.5, i - 0.5, j + h - 0.5, uv_data, w, h)
                         elseif d == 5 then
-                            v1 = vmath_vector3(i + 0.5, k - 0.5, j - 0.5); v2 = vmath_vector3(i + 0.5, k + w - 0.5, j -
-                                0.5)
-                            v3 = vmath_vector3(i + 0.5, k + w - 0.5, j + h - 0.5); v4 = vmath_vector3(i + 0.5, k - 0.5,
-                                j + h - 0.5)
+                            add_quad(i + 0.5, k - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j - 0.5, i + 0.5, k + w - 0.5,
+                                j + h - 0.5, i + 0.5, k - 0.5, j + h - 0.5, uv_data, w, h)
                         elseif d == 6 then
-                            v1 = vmath_vector3(i - 0.5, k + w - 0.5, j - 0.5); v2 = vmath_vector3(i - 0.5, k - 0.5, j -
-                                0.5)
-                            v3 = vmath_vector3(i - 0.5, k - 0.5, j + h - 0.5); v4 = vmath_vector3(i - 0.5, k + w - 0.5,
-                                j + h - 0.5)
+                            add_quad(i - 0.5, k + w - 0.5, j - 0.5, i - 0.5, k - 0.5, j - 0.5, i - 0.5, k - 0.5,
+                                j + h - 0.5, i - 0.5, k + w - 0.5, j + h - 0.5, uv_data, w, h)
                         end
-                        add_quad(v1, v2, v3, v4, uv_data, w, h)
+
                         greedy_faces = greedy_faces + 1
-                        -- Mark merged faces as processed
-                        for r = 0, h - 1 do for c = 0, w - 1 do mask[(j + r) * grid_size + k + c + 1] = false end end
+                        for r = 0, h - 1 do
+                            local proc_row_offset = (j + r) * grid_size
+                            for c = 0, w - 1 do mask[proc_row_offset + k + c + 1] = false end
+                        end
                     end
                 end
             end
         end
     end
 
-    _G.stats_faces = greedy_faces
-    _G.stats_vertices = unique_vertex_count
+    -- Clear previously written vertices that are no longer part of the mesh (trail clearing)
+    local current_vertex_count = quad_idx * 18
+    local prev_vertex_count = self.prev_vertex_count or 0
+    if prev_vertex_count > current_vertex_count then
+        for i = current_vertex_count + 1, prev_vertex_count do
+            positions[i] = 0
+        end
+    end
+    self.prev_vertex_count = current_vertex_count
 
-    -- Update the GPU mesh buffer with optimized geometry
+    _G.stats_faces = greedy_faces
+    _G.stats_vertices = quad_idx * 4 -- Theoretical unique vertices (simplified)
+
     resource.set_buffer(self.buffer_resource, self.buf)
     go.set(self.mesh_url, "vertices", self.buffer_resource)
     _G.stats_mesh_build_time = (os.clock() - start_time) * 1000
@@ -350,6 +332,7 @@ local function init_voxel_world(self)
 
     -- Initial grid generation
     self.world = {}
+    self.total_cubes = num_cubes
     _G.shared_cubemap = {}
     for cx = 0, grid_size - 1 do
         self.world[cx] = {}
@@ -382,10 +365,13 @@ function on_message(self, message_id, message, sender)
         local gx, gy, gz = message.gx, message.gy, message.gz
         if gx and gy and gz and self.grid_size then
             if self.world[gx] and self.world[gx][gy] and self.world[gx][gy][gz] then
-                self.world[gx][gy][gz] = 0
-                local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
-                if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = false end
-                update_mesh(self)
+                if self.world[gx][gy][gz] == 1 then
+                    self.world[gx][gy][gz] = 0
+                    self.total_cubes = (self.total_cubes or 1) - 1
+                    local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
+                    if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = false end
+                    update_mesh(self)
+                end
             end
         end
     elseif message_id == hash("place_cube") then
@@ -394,6 +380,7 @@ function on_message(self, message_id, message, sender)
             if gx >= 0 and gx < self.grid_size and gy >= 0 and gy < self.grid_size and gz >= 0 and gz < self.grid_size then
                 if self.world[gx] and self.world[gx][gy] and self.world[gx][gy][gz] == 0 then
                     self.world[gx][gy][gz] = 1
+                    self.total_cubes = (self.total_cubes or 0) + 1
                     local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
                     if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = true end
                     update_mesh(self)

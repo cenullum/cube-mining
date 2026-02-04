@@ -8,8 +8,7 @@ end
 
 -- Helper to convert logical screen coordinates to world coordinates fixed to the camera
 local function ScreenToWorld(x, y, d, cam_pos, cam_rot, width, height, aspect)
-    local fov = 0.39269908169872414          -- math.rad(45) / 2 cached
-    local tan_half_fov = 0.41421356237309503 -- math.tan(fov) cached
+    local tan_half_fov = 0.41421356237309503 -- math.tan(math.rad(45)/2) cached
 
     -- Normalize screen coordinates to [-1, 1]
     local nx = (x / width - 0.5) * 2
@@ -168,9 +167,6 @@ function update(self, dt)
 
     -- 7. Display Graph (Mode 2)
     if self.mode == 2 and #self.frame_times > 1 then
-        local graph_x = x_start
-        local graph_y = y_start + 10
-
         -- Use global camera data pushed from free_camera.script for optimization
         local cam_pos = _G.cam_pos or vmath.vector3()
         local cam_rot = _G.cam_rot or vmath.quat()
