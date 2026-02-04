@@ -81,20 +81,15 @@ function init(self)
     }
 
     local buf = buffer.create(#indices, {
-        { name = hash("position"),  type = buffer.VALUE_TYPE_FLOAT32, count = 3 },
-        { name = hash("texcoord0"), type = buffer.VALUE_TYPE_FLOAT32, count = 2 }
+        { name = hash("position"), type = buffer.VALUE_TYPE_FLOAT32, count = 3 }
     })
     local positions = buffer.get_stream(buf, "position")
-    local texcoords = buffer.get_stream(buf, "texcoord0")
 
     for i, idx in ipairs(indices) do
         local vert = v[idx]
         positions[(i - 1) * 3 + 1] = vert.x
         positions[(i - 1) * 3 + 2] = vert.y
         positions[(i - 1) * 3 + 3] = vert.z
-        -- UVs not needed but adding placeholders
-        texcoords[(i - 1) * 2 + 1] = 0
-        texcoords[(i - 1) * 2 + 2] = 0
     end
 
     local mesh_url = msg.url("#mesh")

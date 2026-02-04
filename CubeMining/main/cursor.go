@@ -7,7 +7,6 @@ embedded_components {
   type: "mesh"
   data: "material: \"/assets/materials/cursor.material\"\n"
   "vertices: \"/main/square/empty.buffer\"\n"
-  "textures: \"\"\n"
   "position_stream: \"position\"\n"
   "normal_stream: \"position\"\n"
   ""

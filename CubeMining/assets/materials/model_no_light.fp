@@ -1,30 +1,36 @@
 #version 140
 
-in highp vec4 var_position;
-in mediump vec2 var_texcoord0;
-in mediump vec4 var_atlas_offset;
+// --- Inputs from Vertex Shader ---
+in mediump vec2 var_texcoord0;     // Tiling coordinate (scaled by quad size)
+in mediump vec4 var_atlas_metadata; // Atlas bounds [x: min_u, y: min_v, z: width, w: height]
 
+// --- Fragment Output ---
 out vec4 out_fragColor;
 
-uniform mediump sampler2D tex0;
+// --- Samplers ---
+uniform mediump sampler2D texture0; // The block texture atlas (nearest filtered)
 
+// --- Uniforms ---
 uniform fs_uniforms
 {
-    mediump vec4 tint;
+    mediump vec4 tint; // Face tint color (default white)
 };
 
 void main()
 {
-    // Pre-multiply alpha since all runtime textures already are
+    // Pre-multiply alpha for proper engine blending
     vec4 tint_pm = vec4(tint.xyz * tint.w, tint.w);
     
-    // UV Modulo logic for atlas textures:
-    // var_texcoord0: ranges from 0 to (Count * Scale)
-    // var_atlas_offset.xy: tile offset in atlas (min_u, min_v)
-    // var_atlas_offset.zw: tile size in atlas (width, height)
-    vec2 mod_uv = mod(var_texcoord0, var_atlas_offset.zw) + var_atlas_offset.xy;
+    // UV Tiling & Atlas Wrapping Logic:
+    // 1. mod(var_texcoord0, var_atlas_metadata.zw): 
+    //    Repeats the UV coordinate only within the width/height of the tile.
+    // 2. + var_atlas_metadata.xy: 
+    //    Offsets the repeated coordinate to the correct location in the atlas.
+    vec2 atlas_uv = mod(var_texcoord0, var_atlas_metadata.zw) + var_atlas_metadata.xy;
     
-    vec4 color = texture(tex0, mod_uv) * tint_pm;
+    // Sample texture with the calculated atlas UV
+    vec4 color = texture(texture0, atlas_uv) * tint_pm;
 
+    // Output final color (force alpha to 1.0 for solid blocks)
     out_fragColor = vec4(color.rgb, 1.0);
 }

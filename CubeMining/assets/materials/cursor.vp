@@ -1,10 +1,8 @@
 #version 140
 
 in highp vec4 position;
-in mediump vec2 texcoord0;
 
 out highp vec4 var_position;
-out mediump vec2 var_texcoord0;
 
 uniform vs_uniforms
 {
@@ -16,6 +14,5 @@ void main()
 {
     vec4 p = mtx_worldview * vec4(position.xyz, 1.0);
     var_position = p;
-    var_texcoord0 = texcoord0;
     gl_Position = mtx_proj * p;
 }
