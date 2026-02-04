@@ -3,19 +3,20 @@ instances {
   id: "camera"
   prototype: "/main/camera.go"
   position {
-    x: 0.0
-    y: 0.0
-    z: 500.0
+    x: 11.0
+    y: 11.0
+    z: 508.0
+  }
+  rotation {
+    x: -0.20550302
+    y: 0.396312
+    z: 0.091495834
+    w: 0.89013135
   }
 }
 instances {
   id: "cursor"
   prototype: "/main/cursor.go"
-  position {
-    x: 0.0
-    y: 0.0
-    z: 0.0
-  }
 }
 scale_along_z: 1
 embedded_instances {
