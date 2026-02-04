@@ -3,15 +3,9 @@ instances {
   id: "camera"
   prototype: "/main/camera.go"
   position {
-    x: 11.0
-    y: 11.0
-    z: 508.0
-  }
-  rotation {
-    x: -0.20550302
-    y: 0.396312
-    z: 0.091495834
-    w: 0.89013135
+    x: -13.0
+    y: 8.0
+    z: 498.0
   }
 }
 instances {
