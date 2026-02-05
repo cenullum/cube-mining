@@ -1,4 +1,5 @@
-<img width="2476" height="744" alt="4" src="https://github.com/user-attachments/assets/10566272-4e3d-46bf-8141-1be5c9d70c88" />
+![545237458-10566272-4e3d-46bf-8141-1be5c9d70c88](https://github.com/user-attachments/assets/dc76a10c-c135-40af-b671-8bd5601a37ef)
+
 
 # Cube Mining
 
@@ -37,8 +38,8 @@ A 3D voxel mining example built with the **Defold Game Engine**. This project de
 - **Item Voxelization Architecture**: Unlike the world mesh which uses a greedy culling approach, the `voxelizer` script analyzes sprite transparency to extrude edges. It generates a high-detail mesh with front/back quads and individual side faces for every solid pixel, creating a true 3D effect from a 2D source.
 
 
-<img width="963" height="681" alt="Screenshot from 2026-02-04 03-09-35" src="https://github.com/user-attachments/assets/949a8c8d-a483-44a7-bafe-b49c6f37decd" />
-<img width="965" height="678" alt="Screenshot from 2026-02-04 03-09-04" src="https://github.com/user-attachments/assets/ce13d4ab-a806-4f67-bc29-c13766086044" />
+![544664750-ce13d4ab-a806-4f67-bc29-c13766086044](https://github.com/user-attachments/assets/42c935b8-5b09-4c1f-b4b4-25eeee3ebdcf)
+![544664770-949a8c8d-a483-44a7-bafe-b49c6f37decd](https://github.com/user-attachments/assets/b4c08286-4e98-4f9e-9cc4-fc57b469ec31)
 
 
 
