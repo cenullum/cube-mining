@@ -1,9 +1,11 @@
 #version 140
 
-in highp vec4 position;
-in mediump vec2 texcoord0;
-in mediump vec4 texcoord1; // [u, v, w, h]
+// --- Inputs ---
+in highp vec4 position;     // Local vertex position
+in mediump vec2 texcoord0;  // Local tiling coordinates (0..width, 0..height)
+in mediump vec4 texcoord1;  // Atlas metadata [u, v, width, height]
 
+// --- Outputs ---
 out mediump vec2 var_texcoord0;
 out mediump vec4 var_atlas_metadata;
 

@@ -1,0 +1,48 @@
+-- item_sway.script
+-- Applies smooth position and rotation "sway" to a held item based on mouse movement.
+
+go.property("sway_amount", 0.005)
+go.property("sway_speed", 10.0)
+go.property("rot_amount", 0.02)
+
+function init(self)
+    -- Parent this pivot to the camera at runtime to avoid collection syntax errors
+    go.set_parent(".", "/camera")
+
+    msg.post(".", "acquire_input_focus")
+    self.target_pos = vmath.vector3()
+    self.target_rot = vmath.quat()
+end
+
+function update(self, dt)
+    -- Smoothly interpolate current position/rotation toward the sway targets
+    local current_pos = go.get_position()
+    local current_rot = go.get_rotation()
+
+    local lerp_t = math.min(dt * self.sway_speed, 1.0)
+    local next_pos = vmath.lerp(lerp_t, current_pos, self.target_pos)
+    local next_rot = vmath.slerp(lerp_t, current_rot, self.target_rot)
+
+    go.set_position(next_pos)
+    go.set_rotation(next_rot)
+
+    -- Smoothly decay targets back to zero (center of the screen)
+    local decay_t = math.min(dt * (self.sway_speed * 0.5), 1.0)
+    self.target_pos = vmath.lerp(decay_t, self.target_pos, vmath.vector3())
+    self.target_rot = vmath.slerp(decay_t, self.target_rot, vmath.quat())
+end
+
+function on_input(self, action_id, action)
+    -- Capture mouse delta for sway calculation
+    if not action_id then
+        local dx = action.dx or 0
+        local dy = action.dy or 0
+
+        -- Set target offsets based on mouse speed
+        self.target_pos.x = -dx * self.sway_amount
+        self.target_pos.y = -dy * self.sway_amount
+
+        -- Create a slight tilting rotation
+        self.target_rot = vmath.quat_rotation_y(-dx * self.rot_amount) * vmath.quat_rotation_x(dy * self.rot_amount)
+    end
+end

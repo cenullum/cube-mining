@@ -7,6 +7,19 @@ instances {
     y: 8.0
     z: 498.0
   }
+  component_properties {
+    id: "voxelizer"
+    properties {
+      id: "depth"
+      value: "1.0"
+      type: PROPERTY_TYPE_NUMBER
+    }
+    properties {
+      id: "sway_pivot"
+      value: "/sway_pivot"
+      type: PROPERTY_TYPE_URL
+    }
+  }
 }
 instances {
   id: "cursor"
@@ -45,4 +58,17 @@ embedded_instances {
   "\"\n"
   "}\n"
   ""
+}
+embedded_instances {
+  id: "sway_pivot"
+  data: "components {\n"
+  "  id: \"sway_script\"\n"
+  "  component: \"/main/scripts/item_sway.script\"\n"
+  "}\n"
+  ""
+  position {
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  }
 }

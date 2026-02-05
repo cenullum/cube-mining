@@ -16,4 +16,10 @@ images {
 images {
   image: "/assets/images/items/sword.png"
 }
+images {
+  image: "/assets/images/items/16x16.png"
+}
+images {
+  image: "/assets/images/items/64x64.png"
+}
 extrude_borders: 2
