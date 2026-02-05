@@ -66,9 +66,4 @@ embedded_instances {
   "  component: \"/main/scripts/item_sway.script\"\n"
   "}\n"
   ""
-  position {
-    x: 0.0
-    y: 0.0
-    z: 0.0
-  }
 }
