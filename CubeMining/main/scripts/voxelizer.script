@@ -27,11 +27,13 @@ local function add_v(pos, uv0, uv1, x, y, z, u, v, metadata)
     -- texcoord0: normalized 0..1 coordinates within the atlas sub-region
     table.insert(uv0, u); table.insert(uv0, v)
     -- texcoord1: atlas metadata [u, v, width, height]
-    table.insert(uv1, metadata.u); table.insert(uv1, metadata.v); table.insert(uv1, metadata.w); table.insert(uv1, metadata.h)
+    table.insert(uv1, metadata.u); table.insert(uv1, metadata.v); table.insert(uv1, metadata.w); table.insert(uv1,
+        metadata.h)
 end
 
 -- Adds a quad consisting of 2 triangles (CCW winding)
-local function add_face(pos, uv0, uv1, x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4, z4, metadata, u1, v1, u2, v2, u3, v3, u4, v4)
+local function add_face(pos, uv0, uv1, x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4, z4, metadata, u1, v1, u2, v2, u3, v3,
+                        u4, v4)
     add_v(pos, uv0, uv1, x1, y1, z1, u1, v1, metadata)
     add_v(pos, uv0, uv1, x2, y2, z2, u2, v2, metadata)
     add_v(pos, uv0, uv1, x3, y3, z3, u3, v3, metadata)
@@ -43,7 +45,7 @@ end
 function build_voxel_mesh(self, item_index)
     local start_time = os.clock()
     local item = ITEMS[item_index]
-    
+
     local img_data = sys.load_resource(item.path)
     if not img_data then img_data = sys.load_resource(string.sub(item.path, 2)) end
     if not img_data then return end
@@ -61,7 +63,7 @@ function build_voxel_mesh(self, item_index)
             local geom = atlas_res.geometries[i]
             local min_u, max_u, min_v, max_v = math.huge, -math.huge, math.huge, -math.huge
             for j = 1, #geom.uvs, 2 do
-                local u, v = geom.uvs[j], geom.uvs[j+1]
+                local u, v = geom.uvs[j], geom.uvs[j + 1]
                 min_u = math.min(min_u, u); max_u = math.max(max_u, u)
                 min_v = math.min(min_v, v); max_v = math.max(max_v, v)
             end
@@ -79,7 +81,7 @@ function build_voxel_mesh(self, item_index)
     local ox, oy = -width / 2, -height / 2
 
     -- FRONT FACE (+Z): Map quad vertices to 0..1 range
-    add_face(positions, uv0, uv1, 
+    add_face(positions, uv0, uv1,
         ox, oy, depth, ox + width, oy, depth, ox + width, oy + height, depth, ox, oy + height, depth,
         metadata, 0, 0, 1, 0, 1, 1, 0, 1)
 
@@ -96,23 +98,28 @@ function build_voxel_mesh(self, item_index)
                 -- Map side face to the exact center of its source pixel [0..1]
                 local pu = (x + 0.5) / width
                 local pv = (height - 1 - y + 0.5) / height
-                
+
                 -- Detect edges and add side faces pointing to (pu, pv)
                 if select(4, get_pixel(img, x - 1, y)) < 128 then -- Left
                     add_face(positions, uv0, uv1, ox + x, oy + height - 1 - y, 0, ox + x, oy + height - 1 - y, depth,
-                            ox + x, oy + height - y, depth, ox + x, oy + height - y, 0, metadata, pu, pv, pu, pv, pu, pv, pu, pv)
+                        ox + x, oy + height - y, depth, ox + x, oy + height - y, 0, metadata, pu, pv, pu, pv, pu, pv, pu,
+                        pv)
                 end
                 if select(4, get_pixel(img, x + 1, y)) < 128 then -- Right
-                    add_face(positions, uv0, uv1, ox + x + 1, oy + height - 1 - y, depth, ox + x + 1, oy + height - 1 - y, 0,
-                            ox + x + 1, oy + height - y, 0, ox + x + 1, oy + height - y, depth, metadata, pu, pv, pu, pv, pu, pv, pu, pv)
+                    add_face(positions, uv0, uv1, ox + x + 1, oy + height - 1 - y, depth, ox + x + 1, oy + height - 1 - y,
+                        0,
+                        ox + x + 1, oy + height - y, 0, ox + x + 1, oy + height - y, depth, metadata, pu, pv, pu, pv, pu,
+                        pv, pu, pv)
                 end
                 if select(4, get_pixel(img, x, y - 1)) < 128 then -- Top
                     add_face(positions, uv0, uv1, ox + x, oy + height - y, depth, ox + x + 1, oy + height - y, depth,
-                            ox + x + 1, oy + height - y, 0, ox + x, oy + height - y, 0, metadata, pu, pv, pu, pv, pu, pv, pu, pv)
+                        ox + x + 1, oy + height - y, 0, ox + x, oy + height - y, 0, metadata, pu, pv, pu, pv, pu, pv, pu,
+                        pv)
                 end
                 if select(4, get_pixel(img, x, y + 1)) < 128 then -- Bottom
                     add_face(positions, uv0, uv1, ox + x, oy + height - 1 - y, 0, ox + x + 1, oy + height - 1 - y, 0,
-                            ox + x + 1, oy + height - 1 - y, depth, ox + x, oy + height - 1 - y, depth, metadata, pu, pv, pu, pv, pu, pv, pu, pv)
+                        ox + x + 1, oy + height - 1 - y, depth, ox + x, oy + height - 1 - y, depth, metadata, pu, pv, pu,
+                        pv, pu, pv, pu, pv)
                 end
             end
         end
@@ -124,35 +131,38 @@ function build_voxel_mesh(self, item_index)
         { name = hash("texcoord0"), type = buffer.VALUE_TYPE_FLOAT32, count = 2 },
         { name = hash("texcoord1"), type = buffer.VALUE_TYPE_FLOAT32, count = 4 }
     })
-    local ps, u0, u1 = buffer.get_stream(buf, "position"), buffer.get_stream(buf, "texcoord0"), buffer.get_stream(buf, "texcoord1")
+    local ps, u0, u1 = buffer.get_stream(buf, "position"), buffer.get_stream(buf, "texcoord0"),
+        buffer.get_stream(buf, "texcoord1")
     for i = 1, #positions do ps[i] = positions[i] end
     for i = 1, #uv0 do u0[i] = uv0[i] end
     for i = 1, #uv1 do u1[i] = uv1[i] end
 
     -- Initialize visual objects once and update their vertices
     if not self.held_mesh_url then
-        local h_id = factory.create(self.mesh_prefab); self.held_mesh_url = msg.url(h_id); self.held_mesh_url.fragment = hash("mesh")
+        local h_id = factory.create(self.mesh_prefab); self.held_mesh_url = msg.url(h_id); self.held_mesh_url.fragment =
+        hash("mesh")
         go.set(self.held_mesh_url, "texture0", hash(atlas_res.texture))
-        
-        -- Hand position and permanent rotation
+
+        -- Hand position and permanent rotation (15 deg right)
         go.set_position(vmath.vector3(0.4, -0.4, -0.8), h_id)
-        go.set_rotation(vmath.quat_rotation_y(0.2) * vmath.quat_rotation_x(-0.2), h_id)
-        
-        -- Reduced scale (2/3 of 0.04)
-        go.set_scale(vmath.vector3(0.026, 0.026, 0.026), h_id)
-        
+        go.set_rotation(vmath.quat_rotation_y(0.26) * vmath.quat_rotation_x(-0.2), h_id)
+
+        -- Reduced scale (from 0.026 to 0.017)
+        go.set_scale(vmath.vector3(0.017, 0.017, 0.017), h_id)
+
         -- Parenting to sway pivot or camera
         local pivot = self.sway_pivot
         if pivot.path == hash("") then pivot = go.get_id() end
         go.set_parent(h_id, pivot)
-        
-        local w_id = factory.create(self.mesh_prefab); self.world_mesh_url = msg.url(w_id); self.world_mesh_url.fragment = hash("mesh")
+
+        local w_id = factory.create(self.mesh_prefab); self.world_mesh_url = msg.url(w_id); self.world_mesh_url.fragment =
+        hash("mesh")
         go.set(self.world_mesh_url, "texture0", hash(atlas_res.texture))
         go.set_position(vmath.vector3(0, 10, 500), w_id); go.set_scale(vmath.vector3(0.05, 0.05, 0.05), w_id)
-        
+
         self.item_buffers = {} -- Cache for buffer resource handles
     end
-    
+
     local path = "/item_" .. item.id .. ".bufferc"
     local res = self.item_buffers[item.id]
     if not res then
@@ -161,7 +171,7 @@ function build_voxel_mesh(self, item_index)
     else
         resource.set_buffer(res, buf)
     end
-    
+
     go.set(self.held_mesh_url, "vertices", res); go.set(self.world_mesh_url, "vertices", res)
     _G.item_mesh_build_time = (os.clock() - start_time) * 1000
 end
