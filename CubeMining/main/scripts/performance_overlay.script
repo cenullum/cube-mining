@@ -62,7 +62,8 @@ function init(self)
         "Space/Ctrl: Up/Down",
         "Left Click: Break",
         "Right Click: Place",
-        "M: Toggle Metrics"
+        "M: Toggle Metrics",
+        "Q: Switch Item"
     }
 end
 
@@ -128,7 +129,8 @@ function update(self, dt)
         string.format("1%% Low FPS: %.1f", self.low_1_fps),
         string.format("Faces: %d", faces),
         string.format("Vertices: %d", vertices),
-        string.format("Mesh Build: %.2f ms", build_time),
+        string.format("World Build: %.2f ms", build_time),
+        string.format("Item Build: %.2f ms", _G.item_mesh_build_time or 0),
         string.format("RAM: %s", format_mem(ram))
     }
 

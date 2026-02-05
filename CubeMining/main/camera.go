@@ -12,3 +12,23 @@ embedded_components {
   "auto_aspect_ratio: 1\n"
   ""
 }
+components {
+  id: "voxelizer"
+  component: "/main/scripts/voxelizer.script"
+  properties {
+    id: "mesh_prefab"
+    value: "/camera#voxel_mesh_factory"
+    type: PROPERTY_TYPE_URL
+  }
+  properties {
+    id: "game_atlas"
+    value: "/assets/images/game.atlas"
+    type: PROPERTY_TYPE_HASH
+  }
+}
+embedded_components {
+  id: "voxel_mesh_factory"
+  type: "factory"
+  data: "prototype: \"/main/voxel_mesh.go\"\n"
+  ""
+}

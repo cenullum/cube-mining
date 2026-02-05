@@ -42,3 +42,11 @@ key_trigger {
   input: KEY_M
   action: "toggle_performance"
 }
+key_trigger {
+  input: KEY_Q
+  action: "key_q"
+}
+key_trigger {
+  input: KEY_F6
+  action: "toggle_performance"
+}

@@ -1,10 +1,19 @@
 images {
-  image: "/assets/images/side.png"
+  image: "/assets/images/tile_texture/side.png"
 }
 images {
-  image: "/assets/images/top.png"
+  image: "/assets/images/tile_texture/top.png"
 }
 images {
-  image: "/assets/images/unbreakable.png"
+  image: "/assets/images/tile_texture/unbreakable.png"
+}
+images {
+  image: "/assets/images/items/gun.png"
+}
+images {
+  image: "/assets/images/items/pickaxe.png"
+}
+images {
+  image: "/assets/images/items/sword.png"
 }
 extrude_borders: 2
