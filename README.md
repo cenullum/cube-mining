@@ -6,7 +6,8 @@ A 3D voxel mining example built with the **Defold Game Engine**. This project de
 
 # Play the demo here: https://cenullum.itch.io/cubemining
 
-![aaa](https://github.com/user-attachments/assets/000ccf81-3917-4288-83a3-fe71eb23d793)
+[aaaa.webm](https://github.com/user-attachments/assets/75f88298-c303-4e95-97e7-847ef5146cf9)
+
 
 
 ## Features
