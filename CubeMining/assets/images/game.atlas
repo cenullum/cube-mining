@@ -8,6 +8,12 @@ images {
   image: "/assets/images/tile_texture/unbreakable.png"
 }
 images {
+  image: "/assets/images/tile_texture/golden_side.png"
+}
+images {
+  image: "/assets/images/tile_texture/golden_top.png"
+}
+images {
   image: "/assets/images/items/gun.png"
 }
 images {

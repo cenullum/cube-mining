@@ -2,45 +2,19 @@
 -- This script manages dynamic voxel mesh generation using a greedy meshing algorithm.
 -- It handles world state, optimizes rendering by merging faces, and updates the GPU buffer at runtime.
 
----@alias url any
----@alias resource any
----@alias buffer any
----@alias bufferstream any
----@alias hash any
----@alias vector3 any
+local block_data = require "main.scripts.block_data"
+
+local vmath = vmath
+local resource = resource
+local buffer = buffer
+local go = go
+local msg = msg
+local factory = factory
+local hash = hash
 
 go.property("mesh_prefab", msg.url())
 go.property("game_atlas", resource.atlas())
 go.property("grid_size", 16)
-
----@class game_script
----@field mesh_prefab url
----@field game_atlas resource
----@field num_indices number|nil
----@field grid_size number|nil
----@field buf buffer|nil
----@field positions bufferstream|nil
----@field texcoord0 bufferstream|nil
----@field texcoord1 bufferstream|nil
----@field positions_count integer|nil
----@field uv_cache table|nil
----@field mask table|nil
----@field mesh_url url|nil
----@field buffer_resource resource|nil
----@field world number[][][]|nil
----@field total_cubes integer|nil
----@field prev_vertex_count integer|nil
----@field v_template vector3[]|nil
----@field indices_template integer[]|nil
-
----@class mesh_object
----@field go_id hash
----@field mesh_url url
----@field vertices vector3[]|nil
----@field indices integer[]|nil
----@field positions bufferstream
----@field texcoord0 bufferstream
----@field normals bufferstream
 
 local H_MESH = hash("mesh")
 local PATCH_BUFFER = "/assets/models/patch_%s.bufferc"
@@ -49,8 +23,6 @@ _G.stats_faces = 0
 _G.stats_vertices = 0
 _G.stats_mesh_build_time = 0
 
----@param self game_script
----@return mesh_object
 local function create_mesh(self)
     local object = {}
     object.go_id = factory.create(self.mesh_prefab)
@@ -59,43 +31,6 @@ local function create_mesh(self)
     return object
 end
 
----@param atlas_geometry table
----@param atlas_width number
----@param atlas_height number
-local function rotated_atlas_to_mesh_uv(atlas_geometry, atlas_width, atlas_height)
-    local image_width = atlas_geometry.width
-    local image_height = atlas_geometry.height
-
-    local min_u, max_u, min_v, max_v = math.huge, -math.huge, math.huge, -math.huge
-    for i = 1, #atlas_geometry.uvs, 2 do
-        min_u = math.min(min_u, atlas_geometry.uvs[i]); max_u = math.max(max_u, atlas_geometry.uvs[i])
-        min_v = math.min(min_v, atlas_geometry.uvs[i + 1]); max_v = math.max(max_v, atlas_geometry.uvs[i + 1])
-    end
-
-    local is_rotated = atlas_geometry.rotated
-    if is_rotated == nil then
-        local uv_width = math.abs(max_u - min_u)
-        local uv_height = math.abs(max_v - min_v)
-        is_rotated = (uv_width ~= image_width) or (uv_height ~= image_height)
-    end
-
-    min_u, max_u = min_u / atlas_width, max_u / atlas_width
-    min_v, max_v = min_v / atlas_height, max_v / atlas_height
-
-    if is_rotated then
-        return {
-            { u = max_u, v = 1 - min_v }, { u = min_u, v = 1 - min_v },
-            { u = min_u, v = 1 - max_v }, { u = max_u, v = 1 - max_v },
-        }
-    else
-        return {
-            { u = min_u, v = 1 - min_v }, { u = min_u, v = 1 - max_v },
-            { u = max_u, v = 1 - max_v }, { u = max_u, v = 1 - min_v }
-        }
-    end
-end
-
----@param self game_script
 local function get_block(self, x, y, z)
     local size = self.grid_size or 0
     if x < 0 or x >= size or y < 0 or y >= size or z < 0 or z >= size then
@@ -104,9 +39,6 @@ local function get_block(self, x, y, z)
     return self.world[x][y][z]
 end
 
---- Primary mesh generation logic using Greedy Meshing.
---- Optimized to be allocation-free and avoid slow string formatting.
----@param self game_script
 local function update_mesh(self)
     local start_time = os.clock()
     local grid_size = self.grid_size
@@ -115,17 +47,11 @@ local function update_mesh(self)
     local positions = self.positions
     local texcoord0 = self.texcoord0
     local texcoord1 = self.texcoord1
-    local uv_cache = self.uv_cache
 
     local get_block_local = get_block
     local greedy_faces = 0
-
-    local top_data = uv_cache.top
-    local side_data = uv_cache.side
-
     local quad_idx = 0
 
-    -- Allocation-free quad addition. Directly writes values to buffer streams.
     local function add_quad(p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z, p4x, p4y, p4z, uv_data, w, h)
         local base = quad_idx * 18
         local uv_base = quad_idx * 12
@@ -164,13 +90,11 @@ local function update_mesh(self)
         quad_idx = quad_idx + 1
     end
 
-    -- Scan 6 directions. Loops are ordered to minimize world array access overhead.
     for d = 1, 6 do
         for i = 0, grid_size - 1 do
-            -- Reset mask for slice
             for m = 1, grid_size * grid_size do mask[m] = false end
 
-            -- Visibility scan
+            -- Visibility Scan
             for j = 0, grid_size - 1 do
                 for k = 0, grid_size - 1 do
                     local x, y, z, nx, ny, nz
@@ -188,24 +112,32 @@ local function update_mesh(self)
                         x, y, z = i, k, j; nx, ny, nz = x - 1, y, z
                     end
 
-                    if world[x][y][z] == 1 and get_block_local(self, nx, ny, nz) == 0 then
-                        mask[j * grid_size + k + 1] = true
+                    local b_id = world[x][y][z]
+                    local neighbor_id = get_block_local(self, nx, ny, nz)
+                    local b_def = block_data.get_block(b_id)
+                    local n_def = block_data.get_block(neighbor_id)
+
+                    if b_def and not b_def.transparent then
+                        if not n_def or n_def.transparent then
+                            mask[j * grid_size + k + 1] = b_id
+                        end
                     end
                 end
             end
 
-            -- Greedy merge
+            -- Greedy Merge
             for j = 0, grid_size - 1 do
                 local row_offset = j * grid_size
                 for k = 0, grid_size - 1 do
-                    if mask[row_offset + k + 1] then
+                    local b_id = mask[row_offset + k + 1]
+                    if b_id then
                         local w, h = 1, 1
-                        while k + w < grid_size and mask[row_offset + k + w + 1] do w = w + 1 end
+                        while k + w < grid_size and mask[row_offset + k + w + 1] == b_id do w = w + 1 end
                         local can_expand_h = true
                         while j + h < grid_size do
                             local next_row_offset = (j + h) * grid_size
                             for r = 0, w - 1 do
-                                if not mask[next_row_offset + k + r + 1] then
+                                if mask[next_row_offset + k + r + 1] ~= b_id then
                                     can_expand_h = false; break
                                 end
                             end
@@ -213,30 +145,31 @@ local function update_mesh(self)
                             h = h + 1
                         end
 
-                        local uv_data = (d == 3 or d == 4) and top_data or side_data
-
-                        -- Pass raw coordinates to add_quad to avoid vector3 allocations
-                        if d == 1 then
-                            add_quad(k - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j + h - 0.5,
-                                i + 0.5, k - 0.5, j + h - 0.5, i + 0.5, uv_data, w, h)
-                        elseif d == 2 then
-                            add_quad(k + w - 0.5, j - 0.5, i - 0.5, k - 0.5, j - 0.5, i - 0.5, k - 0.5, j + h - 0.5,
-                                i - 0.5, k + w - 0.5, j + h - 0.5, i - 0.5, uv_data, w, h)
-                        elseif d == 3 then
-                            add_quad(k - 0.5, i + 0.5, j + h - 0.5, k + w - 0.5, i + 0.5, j + h - 0.5, k + w - 0.5,
-                                i + 0.5, j - 0.5, k - 0.5, i + 0.5, j - 0.5, uv_data, w, h)
-                        elseif d == 4 then
-                            add_quad(k - 0.5, i - 0.5, j - 0.5, k + w - 0.5, i - 0.5, j - 0.5, k + w - 0.5, i - 0.5,
-                                j + h - 0.5, k - 0.5, i - 0.5, j + h - 0.5, uv_data, w, h)
-                        elseif d == 5 then
-                            add_quad(i + 0.5, k - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j - 0.5, i + 0.5, k + w - 0.5,
-                                j + h - 0.5, i + 0.5, k - 0.5, j + h - 0.5, uv_data, w, h)
-                        elseif d == 6 then
-                            add_quad(i - 0.5, k + w - 0.5, j - 0.5, i - 0.5, k - 0.5, j - 0.5, i - 0.5, k - 0.5,
-                                j + h - 0.5, i - 0.5, k + w - 0.5, j + h - 0.5, uv_data, w, h)
+                        local b_def = block_data.get_block(b_id)
+                        local uv_data = b_def and b_def.uvs and b_def.uvs[d]
+                        if uv_data then
+                            if d == 1 then
+                                add_quad(k - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j + h -
+                                    0.5, i + 0.5, k - 0.5, j + h - 0.5, i + 0.5, uv_data, w, h)
+                            elseif d == 2 then
+                                add_quad(k + w - 0.5, j - 0.5, i - 0.5, k - 0.5, j - 0.5, i - 0.5, k - 0.5, j + h - 0.5,
+                                    i - 0.5, k + w - 0.5, j + h - 0.5, i - 0.5, uv_data, w, h)
+                            elseif d == 3 then
+                                add_quad(k - 0.5, i + 0.5, j + h - 0.5, k + w - 0.5, i + 0.5, j + h - 0.5, k + w - 0.5,
+                                    i + 0.5, j - 0.5, k - 0.5, i + 0.5, j - 0.5, uv_data, w, h)
+                            elseif d == 4 then
+                                add_quad(k - 0.5, i - 0.5, j - 0.5, k + w - 0.5, i - 0.5, j - 0.5, k + w - 0.5, i - 0.5,
+                                    j + h - 0.5, k - 0.5, i - 0.5, j + h - 0.5, uv_data, w, h)
+                            elseif d == 5 then
+                                add_quad(i + 0.5, k - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j - 0.5, i + 0.5, k + w - 0.5,
+                                    j + h - 0.5, i + 0.5, k - 0.5, j + h - 0.5, uv_data, w, h)
+                            elseif d == 6 then
+                                add_quad(i - 0.5, k + w - 0.5, j - 0.5, i - 0.5, k - 0.5, j - 0.5, i - 0.5, k - 0.5,
+                                    j + h - 0.5, i - 0.5, k + w - 0.5, j + h - 0.5, uv_data, w, h)
+                            end
+                            greedy_faces = greedy_faces + 1
                         end
 
-                        greedy_faces = greedy_faces + 1
                         for r = 0, h - 1 do
                             local proc_row_offset = (j + r) * grid_size
                             for c = 0, w - 1 do mask[proc_row_offset + k + c + 1] = false end
@@ -247,76 +180,34 @@ local function update_mesh(self)
         end
     end
 
-    -- Clear previously written vertices that are no longer part of the mesh (trail clearing)
     local current_vertex_count = quad_idx * 18
     local prev_vertex_count = self.prev_vertex_count or 0
     if prev_vertex_count > current_vertex_count then
-        for i = current_vertex_count + 1, prev_vertex_count do
-            positions[i] = 0
-        end
+        for i = current_vertex_count + 1, prev_vertex_count do positions[i] = 0 end
     end
     self.prev_vertex_count = current_vertex_count
 
     _G.stats_faces = greedy_faces
-    _G.stats_vertices = quad_idx * 4 -- Theoretical unique vertices (simplified)
-
+    _G.stats_vertices = quad_idx * 4
     resource.set_buffer(self.buffer_resource, self.buf)
     go.set(self.mesh_url, "vertices", self.buffer_resource)
     _G.stats_mesh_build_time = (os.clock() - start_time) * 1000
 end
 
---- Initializes the voxel grid, pre-calculates UV data, and allocates buffers.
---- Descriptive replacement for the previous 'example_7'.
----@param self game_script
-local function init_voxel_world(self)
+local function create_chunk(self, world_data)
     local mesh_go = create_mesh(self)
     local grid_size = self.grid_size
     _G.grid_size = grid_size
     local num_cubes = grid_size * grid_size * grid_size
 
     local atlas = resource.get_atlas(self.game_atlas)
-    local texture_info = resource.get_texture_info(atlas.texture)
     go.set(mesh_go.mesh_url, "texture0", hash(atlas.texture))
 
-    -- Find top and side texture indices in the atlas
-    local top_id, side_id
-    for index, animation in ipairs(atlas.animations) do
-        local anim_id = type(animation.id) == "string" and hash(animation.id) or animation.id
-        if anim_id == hash("top") then
-            top_id = index
-        elseif anim_id == hash("side") then
-            side_id = index
-        end
-    end
-
-    local function get_uv_data(geometry_id)
-        local geom = atlas.geometries[geometry_id]
-        local min_u, max_u, min_v, max_v = math.huge, -math.huge, math.huge, -math.huge
-        for i = 1, #geom.uvs, 2 do
-            local u, v = geom.uvs[i], geom.uvs[i + 1]
-            if u < min_u then min_u = u end
-            if u > max_u then max_u = u end
-            if v < min_v then min_v = v end
-            if v > max_v then max_v = v end
-        end
-        return {
-            u = min_u / texture_info.width,
-            v = (texture_info.height - max_v) / texture_info.height,
-            w = (max_u - min_u) / texture_info.width,
-            h = (max_v - min_v) / texture_info.height
-        }
-    end
-
-    -- Cache UV metadata to avoid per-frame calculations
-    self.uv_cache = {
-        top = top_id and get_uv_data(top_id) or { u = 0, v = 0, w = 0, h = 0 },
-        side = side_id and get_uv_data(side_id) or { u = 0, v = 0, w = 0, h = 0 }
-    }
+    block_data.init(self.game_atlas)
 
     self.mask = {}
     for i = 1, grid_size * grid_size do self.mask[i] = false end
 
-    -- Buffer size allocation: Culled shell is roughly 3 faces per cube max.
     local max_faces = num_cubes * 3
     local buf = buffer.create(max_faces * 6, {
         { name = hash("position"),  type = buffer.VALUE_TYPE_FLOAT32, count = 3 },
@@ -326,22 +217,20 @@ local function init_voxel_world(self)
 
     self.buf = buf
     self.positions = buffer.get_stream(buf, "position")
-    self.positions_count = #self.positions
     self.texcoord0 = buffer.get_stream(buf, "texcoord0")
     self.texcoord1 = buffer.get_stream(buf, "texcoord1")
 
-    -- Initial grid generation
-    self.world = {}
-    self.total_cubes = num_cubes
+    self.world = world_data
+    self.total_cubes = 0
     _G.shared_cubemap = {}
     for cx = 0, grid_size - 1 do
-        self.world[cx] = {}
         for cy = 0, grid_size - 1 do
-            self.world[cx][cy] = {}
             for cz = 0, grid_size - 1 do
-                self.world[cx][cy][cz] = 1
-                local cube_idx = cx + cy * grid_size + cz * grid_size * grid_size
-                _G.shared_cubemap[cube_idx] = true
+                if self.world[cx][cy][cz] ~= 0 then
+                    self.total_cubes = self.total_cubes + 1
+                    local cube_idx = cx + cy * grid_size + cz * grid_size * grid_size
+                    _G.shared_cubemap[cube_idx] = true
+                end
             end
         end
     end
@@ -356,7 +245,29 @@ local function init_voxel_world(self)
 end
 
 function init(self)
-    init_voxel_world(self)
+    local grid_size = self.grid_size
+    local world_data = {}
+    math.randomseed(os.time())
+
+    for cx = 0, grid_size - 1 do
+        world_data[cx] = {}
+        for cy = 0, grid_size - 1 do
+            world_data[cx][cy] = {}
+            for cz = 0, grid_size - 1 do
+                if cy == 0 then
+                    world_data[cx][cy][cz] = 2 -- Unbreakable layer
+                else
+                    if math.random() < 0.3 then
+                        world_data[cx][cy][cz] = 3 -- Golden Ore
+                    else
+                        world_data[cx][cy][cz] = 1 -- Stone
+                    end
+                end
+            end
+        end
+    end
+
+    create_chunk(self, world_data)
     self.time = 0
 end
 
@@ -365,7 +276,8 @@ function on_message(self, message_id, message, sender)
         local gx, gy, gz = message.gx, message.gy, message.gz
         if gx and gy and gz and self.grid_size then
             if self.world[gx] and self.world[gx][gy] and self.world[gx][gy][gz] then
-                if self.world[gx][gy][gz] == 1 then
+                local b_id = self.world[gx][gy][gz]
+                if b_id ~= 0 and b_id ~= 2 then -- Not air and not unbreakable
                     self.world[gx][gy][gz] = 0
                     self.total_cubes = (self.total_cubes or 1) - 1
                     local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
