@@ -71,10 +71,10 @@ function init(self)
     self.color_green = vmath.vector4(0, 1, 0, 1)
     self.color_target = vmath.vector4(0, 1, 0, 0.2)
     self.color_red = vmath.vector4(1, 0, 0, 1)
-    self.color_blue = vmath.vector4(0, 0.5, 1, 1) -- A nice blue matching Minecraft/Defold
+    self.color_blue = vmath.vector4(0, 0.5, 1, 1)
     self.vec_offset = vmath.vector3(0, 0, 0)
 
-    -- Logical size
+    -- Logical size (fallback)
     self.logical_width = 960
     self.logical_height = 640
 
@@ -88,13 +88,25 @@ function init(self)
         "M: Toggle Metrics",
         "Q: Switch Item"
     }
+
+    -- Cache window size for optimization
+    self.width, self.height = window.get_size()
+
+    -- Efficiently listen for window resize events instead of polling
+    window.set_listener(function(self, event, data)
+        if event == window.WINDOW_EVENT_RESIZED then
+            self.width = data.width
+            self.height = data.height
+        end
+    end)
 end
 
 function update(self, dt)
     -- 0. Always display controls (Persistent & Optimized)
     for i, line in ipairs(self.controls) do
         self.vec_offset.x = 20
-        self.vec_offset.y = self.logical_height - 20 - (i * 20)
+        self.vec_offset.y = self.height - 20 - (i * 20)
+
         msg.post("@render:", "draw_debug_text", {
             text = line,
             position = self.vec_offset,
@@ -167,11 +179,10 @@ function update(self, dt)
         })
     end
 
-    -- 7. Camera & Overlay Common Data (Optimized: calculated once)
+    -- 7. Camera & Overlay Common Data (Optimized: cached shared values)
     local cam_pos = _G.cam_pos or vmath.vector3()
     local cam_rot = _G.cam_rot or vmath.quat()
-    local width, height = window.get_size()
-    local aspect = width / height
+    local aspect = self.width / self.height
     local d = 0.5 -- Distance in front of camera
 
     -- 8. Camera Stats (Top-Right)
@@ -188,8 +199,8 @@ function update(self, dt)
     }
 
     for i, line in ipairs(cam_lines) do
-        self.vec_offset.x = self.logical_width - 250
-        self.vec_offset.y = self.logical_height - 20 - (i * 20)
+        self.vec_offset.x = self.width - 260
+        self.vec_offset.y = self.height - 20 - (i * 20)
         msg.post("@render:", "draw_debug_text", {
             text = line,
             position = self.vec_offset,
@@ -198,16 +209,16 @@ function update(self, dt)
     end
 
     -- 9. Camera-Oriented Axes
-    local center_x = width / 2
-    local center_y = height / 2
-    local center_pos = ScreenToWorld(center_x, center_y, d, cam_pos, cam_rot, width, height, aspect)
+    local center_x = self.width / 2
+    local center_y = self.height / 2
+    local center_pos = ScreenToWorld(center_x, center_y, d, cam_pos, cam_rot, self.width, self.height, aspect)
     DrawAxes(self, center_pos, 0.02)
 
     -- 10. Display Graph (Mode 2)
     if self.mode == 2 and #self.frame_times > 1 then
         -- Scale logical coordinates to actual screen coordinates
-        local scale_x = width / self.logical_width
-        local scale_y = height / self.logical_height
+        local scale_x = self.width / self.logical_width
+        local scale_y = self.height / self.logical_height
 
         local graph_width_scaled = 240 * scale_x
         local graph_height_scaled = 80 * scale_y
@@ -219,15 +230,15 @@ function update(self, dt)
 
         -- Optimized Graph Loop
         local prev_h = math.min(1, (1 / (self.frame_times[1] or 0.016)) / max_graph_fps) * graph_height_scaled
-        local prev_pos = ScreenToWorld(graph_x_scaled, graph_y_scaled + prev_h, d, cam_pos, cam_rot, width,
-            height, aspect)
+        local prev_pos = ScreenToWorld(graph_x_scaled, graph_y_scaled + prev_h, d, cam_pos, cam_rot, self.width,
+            self.height, aspect)
 
         for i = 2, #self.frame_times do
             local fps = 1 / self.frame_times[i]
             local h = math.min(1, fps / max_graph_fps) * graph_height_scaled
             local curr_x = graph_x_scaled + (i - 1) * step_x
-            local curr_pos = ScreenToWorld(curr_x, graph_y_scaled + h, d, cam_pos, cam_rot, width,
-                height, aspect)
+            local curr_pos = ScreenToWorld(curr_x, graph_y_scaled + h, d, cam_pos, cam_rot, self.width,
+                self.height, aspect)
 
             msg.post("@render:", "draw_line", {
                 start_point = prev_pos,
@@ -240,11 +251,11 @@ function update(self, dt)
         -- 60 FPS Target Line
         local h60 = (60 / max_graph_fps) * graph_height_scaled
         msg.post("@render:", "draw_line", {
-            start_point = ScreenToWorld(graph_x_scaled, graph_y_scaled + h60, d, cam_pos, cam_rot, width,
-                height, aspect),
+            start_point = ScreenToWorld(graph_x_scaled, graph_y_scaled + h60, d, cam_pos, cam_rot, self.width,
+                self.height, aspect),
             end_point = ScreenToWorld(graph_x_scaled + graph_width_scaled, graph_y_scaled + h60, d, cam_pos, cam_rot,
-                width,
-                height, aspect),
+                self.width,
+                self.height, aspect),
             color = self.color_target
         })
     end
