@@ -23,6 +23,27 @@ local function ScreenToWorld(x, y, d, cam_pos, cam_rot, width, height, aspect)
     return cam_pos + vmath.rotate(cam_rot, vmath.vector3(dx, dy, dz))
 end
 
+local function DrawAxes(self, center_pos, axis_len)
+    -- X-Axis (Red)
+    msg.post("@render:", "draw_line", {
+        start_point = center_pos,
+        end_point = center_pos + vmath.vector3(axis_len, 0, 0),
+        color = self.color_red
+    })
+    -- Y-Axis (Green)
+    msg.post("@render:", "draw_line", {
+        start_point = center_pos,
+        end_point = center_pos + vmath.vector3(0, axis_len, 0),
+        color = self.color_green
+    })
+    -- Z-Axis (Blue)
+    msg.post("@render:", "draw_line", {
+        start_point = center_pos,
+        end_point = center_pos + vmath.vector3(0, 0, axis_len),
+        color = self.color_blue
+    })
+end
+
 function init(self)
     msg.post(".", "acquire_input_focus")
     self.mode = 0 -- 0: Off, 1: Text, 2: Text + Graph
@@ -49,6 +70,8 @@ function init(self)
     -- Pre-allocated objects
     self.color_green = vmath.vector4(0, 1, 0, 1)
     self.color_target = vmath.vector4(0, 1, 0, 0.2)
+    self.color_red = vmath.vector4(1, 0, 0, 1)
+    self.color_blue = vmath.vector4(0, 0.5, 1, 1) -- A nice blue matching Minecraft/Defold
     self.vec_offset = vmath.vector3(0, 0, 0)
 
     -- Logical size
@@ -144,16 +167,23 @@ function update(self, dt)
         })
     end
 
-    -- 7. Camera Stats (Top-Right)
-    local cp = _G.cam_pos or vmath.vector3()
-    local cr = _G.cam_rot or vmath.quat()
+    -- 7. Camera & Overlay Common Data (Optimized: calculated once)
+    local cam_pos = _G.cam_pos or vmath.vector3()
+    local cam_rot = _G.cam_rot or vmath.quat()
+    local width, height = window.get_size()
+    local aspect = width / height
+    local d = 0.5 -- Distance in front of camera
+
+    -- 8. Camera Stats (Top-Right)
     -- Convert quat to euler for readability
-    local ce = vmath.vector3(math.deg(math.asin(2 * (cr.w * cr.x - cr.y * cr.z))),
-        math.deg(math.atan2(2 * (cr.w * cr.y + cr.z * cr.x), 1 - 2 * (cr.x * cr.x + cr.y * cr.y))),
-        math.deg(math.atan2(2 * (cr.w * cr.z + cr.x * cr.y), 1 - 2 * (cr.y * cr.y + cr.z * cr.z))))
+    local ce = vmath.vector3(math.deg(math.asin(2 * (cam_rot.w * cam_rot.x - cam_rot.y * cam_rot.z))),
+        math.deg(math.atan2(2 * (cam_rot.w * cam_rot.y + cam_rot.z * cam_rot.x),
+            1 - 2 * (cam_rot.x * cam_rot.x + cam_rot.y * cam_rot.y))),
+        math.deg(math.atan2(2 * (cam_rot.w * cam_rot.z + cam_rot.x * cam_rot.y),
+            1 - 2 * (cam_rot.y * cam_rot.y + cam_rot.z * cam_rot.z))))
 
     local cam_lines = {
-        string.format("CAM POS: %.2f, %.2f, %.2f", cp.x, cp.y, cp.z),
+        string.format("CAM POS: %.2f, %.2f, %.2f", cam_pos.x, cam_pos.y, cam_pos.z),
         string.format("CAM ROT: %.1f, %.1f, %.1f", ce.x, ce.y, ce.z)
     }
 
@@ -167,15 +197,14 @@ function update(self, dt)
         })
     end
 
-    -- 7. Display Graph (Mode 2)
-    if self.mode == 2 and #self.frame_times > 1 then
-        -- Use global camera data pushed from free_camera.script for optimization
-        local cam_pos = _G.cam_pos or vmath.vector3()
-        local cam_rot = _G.cam_rot or vmath.quat()
-        local width, height = window.get_size()
-        local aspect = width / height
-        local d = 0.5
+    -- 9. Camera-Oriented Axes
+    local center_x = width / 2
+    local center_y = height / 2
+    local center_pos = ScreenToWorld(center_x, center_y, d, cam_pos, cam_rot, width, height, aspect)
+    DrawAxes(self, center_pos, 0.02)
 
+    -- 10. Display Graph (Mode 2)
+    if self.mode == 2 and #self.frame_times > 1 then
         -- Scale logical coordinates to actual screen coordinates
         local scale_x = width / self.logical_width
         local scale_y = height / self.logical_height
