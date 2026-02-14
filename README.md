@@ -9,7 +9,7 @@ A 3D voxel mining example built with the **Defold Game Engine**. This project de
 
 [aaaa.webm](https://github.com/user-attachments/assets/75f88298-c303-4e95-97e7-847ef5146cf9)
 
-
+![aa](https://github.com/user-attachments/assets/e0bb405c-9b9c-4741-8166-3dc3645603db)
 
 ## Features
 
@@ -32,7 +32,8 @@ A 3D voxel mining example built with the **Defold Game Engine**. This project de
 - **Q**: Cycle held items (Gun, Pickaxe, Sword, etc.)
 - **M**: Toggle Performance Overlay (Off / Text / Text + Graph)
 - **P**: Toggle Noclip / Free Cam mode
-- **T**: Spawn mouse at targeted block
+- **T**: Spawn mouse 
+at targeted block
 - **Y**: Spawn mice rapidly while held
 
 ## Scope & Technical Notes
