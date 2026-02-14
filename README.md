@@ -14,21 +14,26 @@ A 3D voxel mining example built with the **Defold Game Engine**. This project de
 ## Features
 
 - **Greedy Meshing Algorithm**: Optimizes rendering by merging adjacent faces into larger quads, significantly reducing vertex count and draw calls.
+- **Swept AABB Collision System**: High-performance collision detection and resolution with sub-stepping to prevent tunneling through blocks.
 - **Runtime Sprite-to-Mesh Voxelization**: Dynamically converts 2D pixel art sprites (like the held gun or sword) into 3D voxel meshes at runtime, giving them real depth and volume.
+- **Golden Ore & Unbreakable Layers**: New block types including rare golden ore and indestructible bedrock at the bottom of the world.
 - **Dynamic Voxel Interaction**: Real-time destroying and placing of blocks with immediate mesh updates.
-- **Performance Monitoring**: Integrated overlay providing real-time FPS, 1% low frames, RAM usage, and mesh statistics.
+- **Performance Monitoring**: Integrated overlay providing real-time FPS, 1% low frames, RAM usage, mesh statistics, and **live player position tracking**.
 - **Custom Shader-based UV Mapping**: Precise texture tiling and atlas-based UV wrapping for voxel surfaces.
 
 ## Controls
 
 - **WASD**: Move around
 - **Shift**: Sprint (Move faster)
-- **Space**: Ascend
+- **Space**: Ascend (Jump in Walk mode)
 - **Ctrl**: Descend
 - **Left Click**: Break block / Attack animation
 - **Right Click**: Place block
 - **Q**: Cycle held items (Gun, Pickaxe, Sword, etc.)
 - **M**: Toggle Performance Overlay (Off / Text / Text + Graph)
+- **P**: Toggle Noclip / Free Cam mode
+- **T**: Spawn mouse at targeted block
+- **Y**: Spawn mice rapidly while held
 
 ## Scope & Technical Notes
 
@@ -51,9 +56,14 @@ This project was inspired by the [Meshes-In-Defold](https://github.com/mozok/Mes
 
 - **[generate_voxel.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/generate_voxel.script)**: The core engine for the voxel world. It manages the grid state, implements the greedy meshing algorithm, and handles GPU buffer updates.
 - **[voxelizer.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/voxelizer.script)**: An optimized runtime system that converts 2D sprite data into 3D voxelized meshes. It handles atlas metadata caching and direct buffer streaming for high-performance mesh generation.
+- **[physics.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/physics.lua)**: Shared physics module implementing AABB collision detection and "move and slide" resolution with sub-stepped checks to prevent tunneling.
+- **[character_controller.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/character_controller.script)**: Manages player movement, input handling, and camera logic, supporting both walking and free-cam modes.
 - **[item_sway.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/item_sway.script)**: Manages smooth procedural animations for held items, including mouse-based swaying and click-triggered attack movements.
-- **[performance_overlay.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/performance_overlay.script)**: Provides a visual debugger and control instructions. Features a toggleable graph for performance analysis.
-- **[cube_cursor.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/cube_cursor.script)**: Manages 3D cursor interaction, allowing users to accurately target and modify the voxel world.
+- **[performance_overlay.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/performance_overlay.script)**: Provides a visual debugger, including FPS, RAM usage, and camera position/rotation.
+- **[cube_cursor.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/cube_cursor.script)**: Manages 3D cursor interaction for targeting and modifying the voxel world.
+- **[world.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/world.lua)**: Centralized world data management, providing shared access to the voxel grid and dimensions.
+- **[block_data.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/block_data.lua)**: Extensible system for defining block properties, transparency, and UV metadata.
+- **[npc.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/npc.lua)**: Base module for NPC logic and AI movement within the voxel world.
 
 ## Contributing
 
