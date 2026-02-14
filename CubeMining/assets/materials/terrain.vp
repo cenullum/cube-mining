@@ -1,0 +1,39 @@
+#version 140
+
+in highp vec4 position;     // Local vertex position (x, y, z)
+in mediump vec2 texcoord0;  // Tiling coordinates
+in mediump vec4 texcoord1;  // Atlas metadata
+in mediump vec3 normal;      // Normal vector
+
+// --- Outputs ---
+out mediump vec2 var_texcoord0;     // Passed to fragment shader
+out mediump vec4 var_atlas_metadata; // Passed to fragment shader
+out mediump float var_light;        // Lighting factor
+
+// --- Uniforms ---
+uniform vs_uniforms
+{
+    uniform mediump mat4 mtx_worldview;
+    uniform mediump mat4 mtx_proj;
+    uniform mediump mat4 mtx_normal;
+    uniform mediump vec4 light;
+};
+
+void main()
+{
+    // Standard position transformation
+    vec4 p = mtx_worldview * position;
+    
+    // Calculate diffuse lighting in world space
+    // Terrain GO is axis-aligned and not rotated, so local normal = world normal
+    vec3 n = normalize(normal);
+    float diff = max(dot(n, normalize(light.xyz)), 0.0);
+    var_light = diff + light.w; // Add ambient factor
+    
+    // Pass attributes to fragment shader
+    var_texcoord0 = texcoord0;
+    var_atlas_metadata = texcoord1;
+    
+    // Final clip space position
+    gl_Position = mtx_proj * p;
+}

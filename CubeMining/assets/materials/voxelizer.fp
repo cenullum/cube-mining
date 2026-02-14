@@ -3,6 +3,7 @@
 // --- Inputs ---
 in mediump vec2 var_texcoord0;     // Normalized quad coordinate [0..1]
 in mediump vec4 var_atlas_metadata; // Atlas bounds [u, v, width, height]
+in mediump float var_light;
 
 // --- Output ---
 out vec4 out_fragColor;
@@ -24,5 +25,5 @@ void main()
     // Hard discard for pixel art transparency
     if (color.a < 0.1) discard;
     
-    out_fragColor = color;
+    out_fragColor = vec4(color.rgb * var_light, color.a);
 }

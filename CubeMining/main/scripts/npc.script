@@ -1,0 +1,15 @@
+-- npc.script
+local npc = require "main.scripts.npc"
+
+go.property("gravity", -25.0)
+go.property("jump_force", 8.0)
+go.property("speed", 3.0)
+go.property("rotation_offset_y", 0.0)
+
+function init(self)
+    npc.init(self)
+end
+
+function update(self, dt)
+    npc.update(self, dt)
+end

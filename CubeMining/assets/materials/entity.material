@@ -1,8 +1,7 @@
-name: "voxelizer"
+name: "entity"
 tags: "model"
-tags: "transparent"
-vertex_program: "/assets/materials/voxelizer.vp"
-fragment_program: "/assets/materials/voxelizer.fp"
+vertex_program: "/assets/materials/entity.vp"
+fragment_program: "/assets/materials/entity.fp"
 vertex_space: VERTEX_SPACE_LOCAL
 vertex_constants {
   name: "mtx_worldview"
@@ -37,29 +36,9 @@ fragment_constants {
   }
 }
 samplers {
-  name: "texture0"
+  name: "tex0"
   wrap_u: WRAP_MODE_CLAMP_TO_EDGE
   wrap_v: WRAP_MODE_CLAMP_TO_EDGE
   filter_min: FILTER_MODE_MIN_NEAREST
   filter_mag: FILTER_MODE_MAG_NEAREST
-}
-attributes {
-  name: "texcoord0"
-  semantic_type: SEMANTIC_TYPE_TEXCOORD
-  double_values {
-    v: 0.0
-    v: 0.0
-    v: 0.0
-    v: 0.0
-  }
-}
-attributes {
-  name: "texcoord1"
-  semantic_type: SEMANTIC_TYPE_TEXCOORD
-  double_values {
-    v: 0.0
-    v: 0.0
-    v: 0.0
-    v: 0.0
-  }
 }

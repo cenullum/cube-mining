@@ -13,6 +13,17 @@ local sys = sys
 local image = image
 local hash = hash
 
+local H_POSITION = hash("position")
+local H_TEXCOORD0 = hash("texcoord0")
+local H_TEXCOORD1 = hash("texcoord1")
+local H_NORMAL = hash("normal")
+local H_TEXTURE0 = hash("texture0")
+local H_VERTICES = hash("vertices")
+local H_BUILD_ITEM = hash("build_item")
+local H_SWITCH_ITEM = hash("switch_item")
+local H_ACQUIRE_INPUT_FOCUS = hash("acquire_input_focus")
+local H_MESH = hash("mesh")
+
 local ITEMS = {
     { id = hash("gun"),     path = "/assets/images/items/gun.png" },
     { id = hash("pickaxe"), path = "/assets/images/items/pickaxe.png" },
@@ -34,13 +45,15 @@ local function get_alpha(buf, width, height, x, y)
 end
 
 -- Efficiently writes a quad into the buffer streams
-local function write_face(p, t0, t1, idx,
+local function write_face(p, t0, t1, n, idx,
                           v1, v2, v3, v4,
                           metadata,
+                          norm,
                           u1, v1_uv, u2, v2_uv, u3, v3_uv, u4, v4_uv)
     local i = idx * 18 + 1
     local j = idx * 12 + 1
     local k = idx * 24 + 1
+    local l = idx * 18 + 1
 
     -- Triangle 1 (CCW)
     p[i], p[i + 1], p[i + 2] = v1.x, v1.y, v1.z
@@ -64,6 +77,9 @@ local function write_face(p, t0, t1, idx,
     for m = 0, 5 do
         local ki = k + m * 4
         t1[ki], t1[ki + 1], t1[ki + 2], t1[ki + 3] = mu, mv, mw, mh
+
+        local li = l + m * 3
+        n[li], n[li + 1], n[li + 2] = norm.x, norm.y, norm.z
     end
 
     return idx + 1
@@ -87,18 +103,33 @@ function build_voxel_mesh(self, item_index)
     local face_count = 0
 
     -- Helper for face data collection
-    local function collect_face(v1, v2, v3, v4, m, u1, v1_uv, u2, v2_uv, u3, v3_uv, u4, v4_uv)
+    local function collect_face(v1, v2, v3, v4, m, norm, u1, v1_uv, u2, v2_uv, u3, v3_uv, u4, v4_uv)
         face_count = face_count + 1
-        faces[face_count] = { v1 = v1, v2 = v2, v3 = v3, v4 = v4, m = m, u1 = u1, v1_uv = v1_uv, u2 = u2, v2_uv = v2_uv, u3 =
-        u3, v3_uv = v3_uv, u4 = u4, v4_uv = v4_uv }
+        faces[face_count] = {
+            v1 = v1,
+            v2 = v2,
+            v3 = v3,
+            v4 = v4,
+            m = m,
+            norm = norm,
+            u1 = u1,
+            v1_uv = v1_uv,
+            u2 = u2,
+            v2_uv = v2_uv,
+            u3 = u3,
+            v3_uv = v3_uv,
+            u4 = u4,
+            v4_uv = v4_uv
+        }
     end
 
     -- FRONT/BACK
     collect_face(vmath.vector3(ox, oy, depth), vmath.vector3(ox + width, oy, depth),
-        vmath.vector3(ox + width, oy + height, depth), vmath.vector3(ox, oy + height, depth), meta, 0, 0, 1, 0, 1, 1, 0,
+        vmath.vector3(ox + width, oy + height, depth), vmath.vector3(ox, oy + height, depth), meta,
+        vmath.vector3(0, 0, 1), 0, 0, 1, 0, 1, 1, 0,
         1)
     collect_face(vmath.vector3(ox + width, oy, 0), vmath.vector3(ox, oy, 0), vmath.vector3(ox, oy + height, 0),
-        vmath.vector3(ox + width, oy + height, 0), meta, 1, 0, 0, 0, 0, 1, 1, 1)
+        vmath.vector3(ox + width, oy + height, 0), meta, vmath.vector3(0, 0, -1), 1, 0, 0, 0, 0, 1, 1, 1)
 
     -- SIDES
     for x = 0, width - 1 do
@@ -110,22 +141,26 @@ function build_voxel_mesh(self, item_index)
                 local h_y = height - 1 - y
                 if get_alpha(buf_data, width, height, x - 1, y) < 128 then -- Left
                     collect_face(vmath.vector3(ox + x, oy + h_y, 0), vmath.vector3(ox + x, oy + h_y, depth),
-                        vmath.vector3(ox + x, oy + h_y + 1, depth), vmath.vector3(ox + x, oy + h_y + 1, 0), pm, 0, 0, 0,
+                        vmath.vector3(ox + x, oy + h_y + 1, depth), vmath.vector3(ox + x, oy + h_y + 1, 0), pm,
+                        vmath.vector3(-1, 0, 0), 0, 0, 0,
                         0, 0, 0, 0, 0)
                 end
                 if get_alpha(buf_data, width, height, x + 1, y) < 128 then -- Right
                     collect_face(vmath.vector3(ox + x + 1, oy + h_y, depth), vmath.vector3(ox + x + 1, oy + h_y, 0),
-                        vmath.vector3(ox + x + 1, oy + h_y + 1, 0), vmath.vector3(ox + x + 1, oy + h_y + 1, depth), pm, 0,
+                        vmath.vector3(ox + x + 1, oy + h_y + 1, 0), vmath.vector3(ox + x + 1, oy + h_y + 1, depth), pm,
+                        vmath.vector3(1, 0, 0), 0,
                         0, 0, 0, 0, 0, 0, 0)
                 end
                 if get_alpha(buf_data, width, height, x, y - 1) < 128 then -- Top
                     collect_face(vmath.vector3(ox + x, oy + h_y + 1, depth), vmath.vector3(ox + x + 1, oy + h_y + 1,
-                        depth), vmath.vector3(ox + x + 1, oy + h_y + 1, 0), vmath.vector3(ox + x, oy + h_y + 1, 0), pm, 0,
+                            depth), vmath.vector3(ox + x + 1, oy + h_y + 1, 0), vmath.vector3(ox + x, oy + h_y + 1, 0),
+                        pm, vmath.vector3(0, 1, 0), 0,
                         0, 0, 0, 0, 0, 0, 0)
                 end
                 if get_alpha(buf_data, width, height, x, y + 1) < 128 then -- Bottom
                     collect_face(vmath.vector3(ox + x, oy + h_y, 0), vmath.vector3(ox + x + 1, oy + h_y, 0),
-                        vmath.vector3(ox + x + 1, oy + h_y, depth), vmath.vector3(ox + x, oy + h_y, depth), pm, 0, 0, 0,
+                        vmath.vector3(ox + x + 1, oy + h_y, depth), vmath.vector3(ox + x, oy + h_y, depth), pm,
+                        vmath.vector3(0, -1, 0), 0, 0, 0,
                         0, 0, 0, 0, 0)
                 end
             end
@@ -134,27 +169,30 @@ function build_voxel_mesh(self, item_index)
 
     -- Create target buffer
     local buf = buffer.create(face_count * 6, {
-        { name = hash("position"),  type = buffer.VALUE_TYPE_FLOAT32, count = 3 },
-        { name = hash("texcoord0"), type = buffer.VALUE_TYPE_FLOAT32, count = 2 },
-        { name = hash("texcoord1"), type = buffer.VALUE_TYPE_FLOAT32, count = 4 }
+        { name = H_POSITION,  type = buffer.VALUE_TYPE_FLOAT32, count = 3 },
+        { name = H_TEXCOORD0, type = buffer.VALUE_TYPE_FLOAT32, count = 2 },
+        { name = H_TEXCOORD1, type = buffer.VALUE_TYPE_FLOAT32, count = 4 },
+        { name = H_NORMAL,    type = buffer.VALUE_TYPE_FLOAT32, count = 3 }
     })
-    local ps = buffer.get_stream(buf, "position")
-    local u0 = buffer.get_stream(buf, "texcoord0")
-    local u1 = buffer.get_stream(buf, "texcoord1")
+    local ps = buffer.get_stream(buf, H_POSITION)
+    local u0 = buffer.get_stream(buf, H_TEXCOORD0)
+    local u1 = buffer.get_stream(buf, H_TEXCOORD1)
+    local ns = buffer.get_stream(buf, H_NORMAL)
 
     -- Streaming write
     local current_idx = 0
     for f = 1, face_count do
         local face = faces[f]
-        current_idx = write_face(ps, u0, u1, current_idx, face.v1, face.v2, face.v3, face.v4, face.m, face.u1, face
-        .v1_uv, face.u2, face.v2_uv, face.u3, face.v3_uv, face.u4, face.v4_uv)
+        current_idx = write_face(ps, u0, u1, ns, current_idx, face.v1, face.v2, face.v3, face.v4, face.m, face.norm,
+            face.u1, face
+            .v1_uv, face.u2, face.v2_uv, face.u3, face.v3_uv, face.u4, face.v4_uv)
     end
 
     -- Mesh update
     if not self.held_mesh_url then
         local h_id = factory.create(self.mesh_prefab); self.held_mesh_url = msg.url(h_id); self.held_mesh_url.fragment =
-        hash("mesh")
-        go.set(self.held_mesh_url, "texture0", hash(meta.texture))
+            H_MESH
+        go.set(self.held_mesh_url, H_TEXTURE0, hash(meta.texture))
         go.set_position(vmath.vector3(0.4, -0.4, -0.8), h_id)
         go.set_rotation(vmath.quat_rotation_y(0.26) * vmath.quat_rotation_x(-0.2), h_id)
         go.set_scale(vmath.vector3(0.017, 0.017, 0.017), h_id)
@@ -164,8 +202,8 @@ function build_voxel_mesh(self, item_index)
         go.set_parent(h_id, pivot)
 
         local w_id = factory.create(self.mesh_prefab); self.world_mesh_url = msg.url(w_id); self.world_mesh_url.fragment =
-        hash("mesh")
-        go.set(self.world_mesh_url, "texture0", hash(meta.texture))
+            H_MESH
+        go.set(self.world_mesh_url, H_TEXTURE0, hash(meta.texture))
         go.set_position(vmath.vector3(0, 10, 500), w_id); go.set_scale(vmath.vector3(0.05, 0.05, 0.05), w_id)
 
         self.item_buffers = {}
@@ -180,12 +218,12 @@ function build_voxel_mesh(self, item_index)
         resource.set_buffer(res, buf)
     end
 
-    go.set(self.held_mesh_url, "vertices", res); go.set(self.world_mesh_url, "vertices", res)
+    go.set(self.held_mesh_url, H_VERTICES, res); go.set(self.world_mesh_url, H_VERTICES, res)
     _G.item_mesh_build_time = (os.clock() - start_time) * 1000
 end
 
 function init(self)
-    msg.post(".", "acquire_input_focus")
+    msg.post(".", H_ACQUIRE_INPUT_FOCUS)
     self.current_item = 1
     self.item_meta = {}
 
@@ -222,15 +260,15 @@ function init(self)
         end
     end
 
-    msg.post(".", "build_item")
+    msg.post(".", H_BUILD_ITEM)
 end
 
 function on_message(self, message_id, message, sender)
-    if message_id == hash("build_item") then build_voxel_mesh(self, self.current_item) end
+    if message_id == H_BUILD_ITEM then build_voxel_mesh(self, self.current_item) end
 end
 
 function on_input(self, action_id, action)
-    if action_id == hash("key_q") and action.pressed then
+    if action_id == H_SWITCH_ITEM and action.pressed then
         self.current_item = (self.current_item % #ITEMS) + 1
         build_voxel_mesh(self, self.current_item)
     end

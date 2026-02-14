@@ -67,10 +67,11 @@ function M.init(atlas_res_id)
 
     for id, def in pairs(blocks.definitions) do
         if def.transparent then
-            block_cache[id] = { transparent = true, name = def.name }
+            block_cache[id] = { transparent = true, name = def.name, solid = false }
         else
             local faces = def.faces
             local uv_map = {}
+            local is_solid = true -- Default solid for non-transparent blocks as per user request
 
             local function assign_face(dir, tex_name)
                 local uv = get_uv_data(atlas, texture_info, tex_name)
@@ -106,7 +107,8 @@ function M.init(atlas_res_id)
             block_cache[id] = {
                 name = def.name,
                 uvs = uv_map,
-                transparent = false
+                transparent = false,
+                solid = is_solid
             }
         end
     end

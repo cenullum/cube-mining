@@ -6,6 +6,21 @@ local function format_mem(kb)
     end
 end
 
+local vmath = vmath
+local msg = msg
+local hash = hash
+local table = table
+local string = string
+local math = math
+local socket = socket
+local window = window
+
+-- Pre-hashed strings
+local H_DRAW_LINE = hash("draw_line")
+local H_DRAW_DEBUG_TEXT = hash("draw_debug_text")
+local H_TOGGLE_PERFORMANCE = hash("toggle_performance")
+local H_ACQUIRE_INPUT_FOCUS = hash("acquire_input_focus")
+
 -- Helper to convert logical screen coordinates to world coordinates fixed to the camera
 local function ScreenToWorld(x, y, d, cam_pos, cam_rot, width, height, aspect)
     local tan_half_fov = 0.41421356237309503 -- math.tan(math.rad(45)/2) cached
@@ -25,19 +40,19 @@ end
 
 local function DrawAxes(self, center_pos, axis_len)
     -- X-Axis (Red)
-    msg.post("@render:", "draw_line", {
+    msg.post("@render:", H_DRAW_LINE, {
         start_point = center_pos,
         end_point = center_pos + vmath.vector3(axis_len, 0, 0),
         color = self.color_red
     })
     -- Y-Axis (Green)
-    msg.post("@render:", "draw_line", {
+    msg.post("@render:", H_DRAW_LINE, {
         start_point = center_pos,
         end_point = center_pos + vmath.vector3(0, axis_len, 0),
         color = self.color_green
     })
     -- Z-Axis (Blue)
-    msg.post("@render:", "draw_line", {
+    msg.post("@render:", H_DRAW_LINE, {
         start_point = center_pos,
         end_point = center_pos + vmath.vector3(0, 0, axis_len),
         color = self.color_blue
@@ -45,8 +60,9 @@ local function DrawAxes(self, center_pos, axis_len)
 end
 
 function init(self)
-    msg.post(".", "acquire_input_focus")
+    msg.post(".", H_ACQUIRE_INPUT_FOCUS)
     self.mode = 0 -- 0: Off, 1: Text, 2: Text + Graph
+    _G.performance_mode = 0
 
     -- FPS Metrics (defold-metrics style)
     self.fps_samples = 60
@@ -86,7 +102,10 @@ function init(self)
         "Left Click: Break",
         "Right Click: Place",
         "M: Toggle Metrics",
-        "Q: Switch Item"
+        "Q: Switch Item",
+        "P: Noclip",
+        "T: Spawn mouse",
+        "Y: Spawn mouse rapidly"
     }
 
     -- Cache window size for optimization
@@ -107,7 +126,7 @@ function update(self, dt)
         self.vec_offset.x = 20
         self.vec_offset.y = self.height - 20 - (i * 20)
 
-        msg.post("@render:", "draw_debug_text", {
+        msg.post("@render:", H_DRAW_DEBUG_TEXT, {
             text = line,
             position = self.vec_offset,
             color = self.color_green
@@ -166,13 +185,14 @@ function update(self, dt)
         string.format("Vertices: %d", vertices),
         string.format("World Build: %.2f ms", build_time),
         string.format("Item Build: %.2f ms", _G.item_mesh_build_time or 0),
-        string.format("RAM: %s", format_mem(ram))
+        string.format("RAM: %s", format_mem(ram)),
+        string.format("Mouse: %d", _G.mouse_count or 0)
     }
 
     for i, line in ipairs(lines) do
         self.vec_offset.x = x_start
         self.vec_offset.y = y_start - (i * 20)
-        msg.post("@render:", "draw_debug_text", {
+        msg.post("@render:", H_DRAW_DEBUG_TEXT, {
             text = line,
             position = self.vec_offset,
             color = self.color_green
@@ -201,7 +221,7 @@ function update(self, dt)
     for i, line in ipairs(cam_lines) do
         self.vec_offset.x = self.width - 260
         self.vec_offset.y = self.height - 20 - (i * 20)
-        msg.post("@render:", "draw_debug_text", {
+        msg.post("@render:", H_DRAW_DEBUG_TEXT, {
             text = line,
             position = self.vec_offset,
             color = self.color_green
@@ -209,10 +229,12 @@ function update(self, dt)
     end
 
     -- 9. Camera-Oriented Axes
-    local center_x = self.width / 2
-    local center_y = self.height / 2
-    local center_pos = ScreenToWorld(center_x, center_y, d, cam_pos, cam_rot, self.width, self.height, aspect)
-    DrawAxes(self, center_pos, 0.02)
+    if _G.cam_pos then
+        local center_x = self.width / 2
+        local center_y = self.height / 2
+        local center_pos = ScreenToWorld(center_x, center_y, d, cam_pos, cam_rot, self.width, self.height, aspect)
+        DrawAxes(self, center_pos, 0.02)
+    end
 
     -- 10. Display Graph (Mode 2)
     if self.mode == 2 and #self.frame_times > 1 then
@@ -240,7 +262,7 @@ function update(self, dt)
             local curr_pos = ScreenToWorld(curr_x, graph_y_scaled + h, d, cam_pos, cam_rot, self.width,
                 self.height, aspect)
 
-            msg.post("@render:", "draw_line", {
+            msg.post("@render:", H_DRAW_LINE, {
                 start_point = prev_pos,
                 end_point = curr_pos,
                 color = self.color_green
@@ -250,7 +272,7 @@ function update(self, dt)
 
         -- 60 FPS Target Line
         local h60 = (60 / max_graph_fps) * graph_height_scaled
-        msg.post("@render:", "draw_line", {
+        msg.post("@render:", H_DRAW_LINE, {
             start_point = ScreenToWorld(graph_x_scaled, graph_y_scaled + h60, d, cam_pos, cam_rot, self.width,
                 self.height, aspect),
             end_point = ScreenToWorld(graph_x_scaled + graph_width_scaled, graph_y_scaled + h60, d, cam_pos, cam_rot,
@@ -262,11 +284,10 @@ function update(self, dt)
 end
 
 function on_input(self, action_id, action)
-    if action_id == hash("toggle_performance") and action.pressed then
+    if action_id == H_TOGGLE_PERFORMANCE and action.pressed then
         self.mode = (self.mode + 1) % 3
+        _G.performance_mode = self.mode
         local modes = { "Off", "Text", "Text + Graph" }
         print("Performance overlay mode: " .. modes[self.mode + 1])
-        -- Notify camera to start/stop pushing data
-        msg.post("camera", "set_performance_mode", { mode = self.mode })
     end
 end

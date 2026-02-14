@@ -4,20 +4,30 @@
 in highp vec4 position;     // Local vertex position
 in mediump vec2 texcoord0;  // Local tiling coordinates (0..width, 0..height)
 in mediump vec4 texcoord1;  // Atlas metadata [u, v, width, height]
+in mediump vec3 normal;     // Normal from stream
 
 // --- Outputs ---
 out mediump vec2 var_texcoord0;
 out mediump vec4 var_atlas_metadata;
+out mediump float var_light;
 
 uniform vs_uniforms
 {
     uniform mediump mat4 mtx_worldview;
     uniform mediump mat4 mtx_proj;
+    uniform mediump mat4 mtx_world;
+    uniform mediump vec4 light;
 };
 
 void main()
 {
     var_texcoord0 = texcoord0;
     var_atlas_metadata = texcoord1;
+    
+    // World-space normals for consistent environmental lighting
+    vec3 n = normalize((mtx_world * vec4(normal, 0.0)).xyz);
+    vec3 l = normalize(light.xyz);
+    var_light = max(dot(n, l), 0.0) + light.w; 
+    
     gl_Position = mtx_proj * mtx_worldview * vec4(position.xyz, 1.0);
 }

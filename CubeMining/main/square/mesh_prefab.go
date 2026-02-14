@@ -1,7 +1,7 @@
 embedded_components {
   id: "mesh"
   type: "mesh"
-  data: "material: \"/assets/materials/model_no_light.material\"\n"
+  data: "material: \"/assets/materials/terrain.material\"\n"
   "vertices: \"/main/square/empty.buffer\"\n"
   "textures: \"/assets/images/tile_texture/unbreakable.png\"\n"
   "position_stream: \"position\"\n"

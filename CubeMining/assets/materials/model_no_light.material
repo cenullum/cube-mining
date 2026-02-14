@@ -1,4 +1,4 @@
-name: "model_no_light"
+name: "unlit"
 tags: "model"
 vertex_program: "/assets/materials/model_no_light.vp"
 fragment_program: "/assets/materials/model_no_light.fp"
@@ -20,11 +20,4 @@ fragment_constants {
     z: 1.0
     w: 1.0
   }
-}
-samplers {
-  name: "texture0"
-  wrap_u: WRAP_MODE_CLAMP_TO_EDGE
-  wrap_v: WRAP_MODE_CLAMP_TO_EDGE
-  filter_min: FILTER_MODE_MIN_NEAREST
-  filter_mag: FILTER_MODE_MAG_NEAREST
 }

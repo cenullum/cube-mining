@@ -30,6 +30,26 @@ key_trigger {
   input: KEY_ESC
   action: "key_esc"
 }
+key_trigger {
+  input: KEY_M
+  action: "toggle_performance"
+}
+key_trigger {
+  input: KEY_Q
+  action: "switch_item"
+}
+key_trigger {
+  input: KEY_P
+  action: "switch_mode"
+}
+key_trigger {
+  input: KEY_SPACE
+  action: "jump"
+}
+key_trigger {
+  input: KEY_T
+  action: "spawn_mouse"
+}
 mouse_trigger {
   input: MOUSE_BUTTON_1
   action: "click"
@@ -39,11 +59,6 @@ mouse_trigger {
   action: "click_right"
 }
 key_trigger {
-  input: KEY_M
-  action: "toggle_performance"
+  input: KEY_Y
+  action: "spawn_fast"
 }
-key_trigger {
-  input: KEY_Q
-  action: "key_q"
-}
-

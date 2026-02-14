@@ -21,7 +21,14 @@ dependencies =
 custom_resources = assets/images/items/
 
 [render]
-clear_color_blue = 0.33
-clear_color_green = 0.29
-clear_color_red = 0.29
+clear_color_blue = 0.88
+clear_color_green = 0.55
+clear_color_red = 0.3
+
+[graphics]
+default_texture_min_filter = nearest
+default_texture_mag_filter = nearest
+
+[model]
+max_count = 1024
 

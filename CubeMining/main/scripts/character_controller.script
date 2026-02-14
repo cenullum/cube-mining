@@ -1,0 +1,428 @@
+-- character_controller.script
+
+local physics = require "main.scripts.physics"
+
+local vmath = vmath
+local msg = msg
+local go = go
+local window = window
+local factory = factory
+local hash = hash
+local math = math
+
+-- Pre-hashed strings for optimization
+local H_CAMERA = hash("camera")
+local H_ACQUIRE_INPUT_FOCUS = hash("acquire_input_focus")
+local H_KEY_ESC = hash("key_esc")
+local H_CLICK = hash("click")
+local H_MOVE_FORWARD = hash("move_forward")
+local H_MOVE_BACKWARD = hash("move_backward")
+local H_MOVE_LEFT = hash("move_left")
+local H_MOVE_RIGHT = hash("move_right")
+local H_MOVE_UP = hash("move_up")
+local H_MOVE_DOWN = hash("move_down")
+local H_JUMP = hash("jump")
+local H_SPRINT = hash("sprint")
+local H_SWITCH_MODE = hash("switch_mode")
+local H_SET_VIEW_PROJECTION = hash("set_view_projection")
+local H_DRAW_LINE = hash("draw_line")
+local H_EULER = hash("euler")
+local H_SET_PERFORMANCE_MODE = hash("set_performance_mode")
+local H_SPAWN_MOUSE = hash("spawn_mouse")
+local H_SPAWN_FAST = hash("spawn_fast")
+
+go.property("speed", 5)
+go.property("jump_force", 9.0) -- Tweaked for standard gravity
+go.property("sensitivity", 0.15)
+go.property("gravity", -25.0)
+go.property("mouse_factory", msg.url())
+
+local STATE_FREE_CAM = 1
+local STATE_WALK = 2
+
+function init(self)
+    msg.post(".", H_ACQUIRE_INPUT_FOCUS)
+
+    -- Set starting position as requested
+    go.set_position(vmath.vector3(1, 10, 500))
+
+    self.state = STATE_WALK
+    self.velocity = vmath.vector3(0, 0, 0)
+    self.pitch = 0
+    self.yaw = 0
+
+    -- Inputs
+    self.input = vmath.vector3()
+    self.sprinting = false
+    self.jump_pressed = false
+    self.fly_mode = true -- Start in fly mode (free cam)
+    self.spawn_fast = false
+
+    -- Character Physics params
+    -- AABB size: 0.6 width, 1.5 height
+    self.size = vmath.vector3(0.6, 1.5, 0.6)
+
+    -- Eye Height (GO is at eyes, feet are below)
+    self.eye_height = 1.25
+    self.eye_offset = vmath.vector3(0, self.eye_height, 0)
+
+    -- Mouse Lock
+    window.set_mouse_lock(true)
+
+    -- Initial camera setup
+    local rot = go.get_rotation()
+    local euler = go.get(".", H_EULER)
+    self.yaw = euler.y
+    self.pitch = euler.x
+end
+
+local function get_targeted_cube(ray_start, ray_dir, max_dist)
+    local step = 0.05 -- Adjusted for scale 1
+    local dist = 0
+
+    local grid_size = _G.grid_size or 5
+    local offset = -grid_size / 2 + 0.5
+
+    -- Grid offset from main.script
+    local OFFSET_X = offset
+    local OFFSET_Y = offset
+    local OFFSET_Z = 490
+
+
+    while dist < max_dist do
+        local p = ray_start + ray_dir * dist
+
+        local gx = math.floor(p.x - OFFSET_X + 0.5)
+        local gy = math.floor(p.y - OFFSET_Y + 0.5)
+        local gz = math.floor(p.z - OFFSET_Z + 0.5)
+
+        -- Bounds check
+        if gx >= 0 and gx < grid_size and gy >= 0 and gy < grid_size and gz >= 0 and gz < grid_size then
+            -- Check if the cube exists in the shared map
+            local cube_idx = gx + gy * grid_size + gz * grid_size * grid_size
+            local cube_exists = (_G.shared_cubemap == nil) or (_G.shared_cubemap[cube_idx] == true)
+
+            if cube_exists then
+                -- Check distance to ensure it's actually within a cube
+                local cx, cy, cz = OFFSET_X + gx, OFFSET_Y + gy, OFFSET_Z + gz
+                if math.abs(p.x - cx) <= 0.5 and math.abs(p.y - cy) <= 0.5 and math.abs(p.z - cz) <= 0.5 then
+                    -- Hit a block
+                    -- Calculate normal based on which side was entered
+                    local normal = vmath.vector3(0, 0, 0)
+                    local dx = p.x - cx
+                    local dy = p.y - cy
+                    local dz = p.z - cz
+
+                    local abs_x = math.abs(dx)
+                    local abs_y = math.abs(dy)
+                    local abs_z = math.abs(dz)
+
+                    if abs_x > abs_y and abs_x > abs_z then
+                        normal.x = dx > 0 and 1 or -1
+                    elseif abs_y > abs_z then
+                        normal.y = dy > 0 and 1 or -1
+                    else
+                        normal.z = dz > 0 and 1 or -1
+                    end
+
+                    return vmath.vector3(cx, cy, cz), gx, gy, gz, normal
+                end
+            end
+        end
+        dist = dist + step
+    end
+    return nil
+end
+
+local function update_camera(self)
+    -- Compute rotation
+    local rot = vmath.quat_rotation_y(math.rad(self.yaw)) * vmath.quat_rotation_x(math.rad(self.pitch))
+    go.set_rotation(rot)
+
+    -- GO is at eye level now, so no offset for camera view
+    local eye_pos = go.get_position()
+
+    -- Export camera state for performance_overlay
+    _G.cam_pos = eye_pos
+    _G.cam_rot = rot
+
+    -- Continuous Mouse Spawning (Y Key)
+    if self.spawn_fast then
+        local cam_dir = vmath.rotate(rot, vmath.vector3(0, 0, -1))
+        local target, gx, gy, gz, normal = get_targeted_cube(eye_pos, cam_dir, 100)
+        if target then
+            local grid_size = _G.grid_size or 5
+            local offset = -grid_size / 2 + 0.5
+            local spawn_gx = gx + normal.x
+            local spawn_gy = gy + normal.y
+            local spawn_gz = gz + normal.z
+            local spawn_pos = vmath.vector3(offset + spawn_gx, offset + spawn_gy, 490 + spawn_gz)
+            factory.create(self.mouse_factory, spawn_pos, vmath.quat())
+        end
+    end
+
+    -- Camera View Matrix
+    local view = vmath.matrix4_from_quat(rot)
+    view = vmath.inv(view)
+    local pos_inv = vmath.matrix4_translation(-eye_pos)
+    view = view * pos_inv
+
+    local width, height = window.get_size()
+    local aspect = width / height
+    local fov = math.rad(60)
+    local projection = vmath.matrix4_perspective(fov, aspect, 0.1, 1000.0)
+
+    msg.post("@render:", H_SET_VIEW_PROJECTION, { id = H_CAMERA, view = view, projection = projection })
+end
+
+function update(self, dt)
+    -- Rotation Logic
+    -- (Applied in update_camera directly from accumulated pitch/yaw)
+
+    if self.state == STATE_FREE_CAM then
+        -- Free Camera Logic (Spectator)
+        local rot = go.get_rotation()
+        local forward = vmath.rotate(rot, vmath.vector3(0, 0, -1))
+        local right = vmath.rotate(rot, vmath.vector3(1, 0, 0))
+        local up = vmath.vector3(0, 1, 0)
+
+        local speed = self.speed * (self.sprinting and 3 or 1)
+
+        local move_dir = forward * self.input.z + right * self.input.x + up * self.input.y
+        if vmath.length_sqr(move_dir) > 0 then
+            move_dir = vmath.normalize(move_dir)
+        end
+
+        local p = go.get_position()
+        go.set_position(p + move_dir * speed * dt)
+
+        self.velocity = vmath.vector3(0) -- Reset velocity for when we switch back
+    elseif self.state == STATE_WALK then
+        -- Character Controller Logic
+        local rot_y = vmath.quat_rotation_y(math.rad(self.yaw))
+        local forward = vmath.rotate(rot_y, vmath.vector3(0, 0, -1))
+        local right = vmath.rotate(rot_y, vmath.vector3(1, 0, 0))
+
+        -- Flatten forward/right to horizontal plane
+        forward.y = 0
+        right.y = 0
+        if vmath.length_sqr(forward) > 0.001 then forward = vmath.normalize(forward) end
+        if vmath.length_sqr(right) > 0.001 then right = vmath.normalize(right) end
+
+        local wish_dir = forward * self.input.z + right * self.input.x
+        if vmath.length_sqr(wish_dir) > 1 then wish_dir = vmath.normalize(wish_dir) end
+
+        local speed = self.speed * (self.sprinting and 1.5 or 1)
+
+        -- Apply horizontal movement
+        local resistance = 10.0 -- Ground friction/damping
+        local target_vel_x = wish_dir.x * speed
+        local target_vel_z = wish_dir.z * speed
+
+        -- Accelerate towards target velocity
+        self.velocity.x = vmath.lerp(0.1, self.velocity.x, target_vel_x)
+        self.velocity.z = vmath.lerp(0.1, self.velocity.z, target_vel_z)
+
+        -- Gravity
+        self.velocity.y = self.velocity.y + self.gravity * dt
+
+        local eye_pos = go.get_position()
+        local feet_pos = eye_pos - self.eye_offset
+
+        -- Physics Step
+        local new_feet_pos, new_vel, grounded = physics.move_and_slide(feet_pos, self.velocity, self.size, dt)
+
+        self.velocity = new_vel
+
+        -- Update EYES based on new FEET
+        local new_eye_pos = new_feet_pos + self.eye_offset
+        go.set_position(new_eye_pos)
+
+        -- Jump
+        if self.jump_pressed and grounded then
+            self.velocity.y = self.jump_force
+            self.jump_pressed = false -- Consume jump
+        end
+
+        -- Reset jump constraints if falling too fast
+        if not grounded and self.velocity.y < -30 then self.velocity.y = -30 end
+    end
+
+    -- Debug Drawing
+    if _G.performance_mode == 2 then
+        -- Calculate feet pos from GO pos (eyes)
+        local pos = go.get_position() - self.eye_offset
+
+        local half_size = self.size * 0.5
+        -- Pivot at bottom-center of feet pos
+        local min = pos + vmath.vector3(-half_size.x, 0, -half_size.z)
+        local max = pos + vmath.vector3(half_size.x, self.size.y, half_size.z)
+        local color = vmath.vector4(1, 0, 0, 1) -- Red
+
+        -- Draw bottom rect
+        msg.post("@render:", H_DRAW_LINE,
+            {
+                start_point = vmath.vector3(min.x, min.y, min.z),
+                end_point = vmath.vector3(max.x, min.y, min.z),
+                color =
+                    color
+            })
+        msg.post("@render:", H_DRAW_LINE,
+            {
+                start_point = vmath.vector3(max.x, min.y, min.z),
+                end_point = vmath.vector3(max.x, min.y, max.z),
+                color =
+                    color
+            })
+        msg.post("@render:", H_DRAW_LINE,
+            {
+                start_point = vmath.vector3(max.x, min.y, max.z),
+                end_point = vmath.vector3(min.x, min.y, max.z),
+                color =
+                    color
+            })
+        msg.post("@render:", H_DRAW_LINE,
+            {
+                start_point = vmath.vector3(min.x, min.y, max.z),
+                end_point = vmath.vector3(min.x, min.y, min.z),
+                color =
+                    color
+            })
+
+        -- Draw top rect
+        msg.post("@render:", H_DRAW_LINE,
+            {
+                start_point = vmath.vector3(min.x, max.y, min.z),
+                end_point = vmath.vector3(max.x, max.y, min.z),
+                color =
+                    color
+            })
+        msg.post("@render:", H_DRAW_LINE,
+            {
+                start_point = vmath.vector3(max.x, max.y, min.z),
+                end_point = vmath.vector3(max.x, max.y, max.z),
+                color =
+                    color
+            })
+        msg.post("@render:", H_DRAW_LINE,
+            {
+                start_point = vmath.vector3(max.x, max.y, max.z),
+                end_point = vmath.vector3(min.x, max.y, max.z),
+                color =
+                    color
+            })
+        msg.post("@render:", H_DRAW_LINE,
+            {
+                start_point = vmath.vector3(min.x, max.y, max.z),
+                end_point = vmath.vector3(min.x, max.y, min.z),
+                color =
+                    color
+            })
+
+        -- Draw verticals
+        msg.post("@render:", H_DRAW_LINE,
+            {
+                start_point = vmath.vector3(min.x, min.y, min.z),
+                end_point = vmath.vector3(min.x, max.y, min.z),
+                color =
+                    color
+            })
+        msg.post("@render:", H_DRAW_LINE,
+            {
+                start_point = vmath.vector3(max.x, min.y, min.z),
+                end_point = vmath.vector3(max.x, max.y, min.z),
+                color =
+                    color
+            })
+        msg.post("@render:", H_DRAW_LINE,
+            {
+                start_point = vmath.vector3(max.x, min.y, max.z),
+                end_point = vmath.vector3(max.x, max.y, max.z),
+                color =
+                    color
+            })
+        msg.post("@render:", H_DRAW_LINE,
+            {
+                start_point = vmath.vector3(min.x, min.y, max.z),
+                end_point = vmath.vector3(min.x, max.y, max.z),
+                color =
+                    color
+            })
+    end
+
+    update_camera(self)
+end
+
+function on_input(self, action_id, action)
+    if not action_id then
+        if window.get_mouse_lock() then
+            -- Mouse movement
+            self.yaw = self.yaw - action.dx * self.sensitivity
+            self.pitch = self.pitch + action.dy * self.sensitivity
+
+            -- Clamp pitch
+            if self.pitch > 89 then self.pitch = 89 end
+            if self.pitch < -89 then self.pitch = -89 end
+        end
+        return
+    end
+
+    if action_id == H_KEY_ESC and action.released then
+        window.set_mouse_lock(false)
+    elseif action_id == H_CLICK and action.pressed and not window.get_mouse_lock() then
+        window.set_mouse_lock(true)
+    end
+
+    -- Movement Input
+    if action_id == H_MOVE_FORWARD then
+        if action.pressed then self.input.z = 1 elseif action.released then self.input.z = 0 end
+    elseif action_id == H_MOVE_BACKWARD then
+        if action.pressed then self.input.z = -1 elseif action.released then self.input.z = 0 end
+    elseif action_id == H_MOVE_LEFT then
+        if action.pressed then self.input.x = -1 elseif action.released then self.input.x = 0 end
+    elseif action_id == H_MOVE_RIGHT then
+        if action.pressed then self.input.x = 1 elseif action.released then self.input.x = 0 end
+    elseif action_id == H_MOVE_UP and self.state == STATE_FREE_CAM then
+        if action.pressed then self.input.y = 1 elseif action.released then self.input.y = 0 end
+    elseif action_id == H_MOVE_DOWN and self.state == STATE_FREE_CAM then
+        if action.pressed then self.input.y = -1 elseif action.released then self.input.y = 0 end
+    elseif action_id == H_JUMP then
+        if action.pressed then self.jump_pressed = true end
+        if action.released then self.jump_pressed = false end
+    elseif action_id == H_SPRINT then
+        self.sprinting = not action.released
+    elseif action_id == H_SWITCH_MODE and action.released then
+        if self.state == STATE_FREE_CAM then
+            self.state = STATE_WALK
+            print("Switched to WALK mode")
+        else
+            self.state = STATE_FREE_CAM
+            print("Switched to FREE CAM mode")
+        end
+    elseif action_id == H_SPAWN_MOUSE and action.released then
+        -- Spawn mouse at looked-at block
+        local cam_pos = go.get_world_position()
+        local cam_rot = go.get_world_rotation()
+        local cam_dir = vmath.rotate(cam_rot, vmath.vector3(0, 0, -1))
+
+        local target, gx, gy, gz, normal = get_targeted_cube(cam_pos, cam_dir, 100)
+        if target then
+            -- Position in the center of the air block adjacent to the clicked face
+            -- Using grid logic to ensure perfect alignment
+            local grid_size = _G.grid_size or 5
+            local offset = -grid_size / 2 + 0.5
+            local spawn_gx = gx + normal.x
+            local spawn_gy = gy + normal.y
+            local spawn_gz = gz + normal.z
+
+            local spawn_pos = vmath.vector3(offset + spawn_gx, offset + spawn_gy, 490 + spawn_gz)
+            factory.create(self.mouse_factory, spawn_pos, vmath.quat())
+        end
+    elseif action_id == H_SPAWN_FAST then
+        if action.pressed then
+            self.spawn_fast = true
+        elseif action.released then
+            self.spawn_fast = false
+        end
+    end
+end

@@ -3,6 +3,7 @@
 -- It handles world state, optimizes rendering by merging faces, and updates the GPU buffer at runtime.
 
 local block_data = require "main.scripts.block_data"
+local world = require "main.scripts.world"
 
 local vmath = vmath
 local resource = resource
@@ -17,6 +18,14 @@ go.property("game_atlas", resource.atlas())
 go.property("grid_size", 16)
 
 local H_MESH = hash("mesh")
+local H_POSITION = hash("position")
+local H_TEXCOORD0 = hash("texcoord0")
+local H_TEXCOORD1 = hash("texcoord1")
+local H_DESTROY_CUBE = hash("destroy_cube")
+local H_PLACE_CUBE = hash("place_cube")
+local H_TEXTURE0 = hash("texture0")
+local H_VERTICES = hash("vertices")
+
 local PATCH_BUFFER = "/assets/models/patch_%s.bufferc"
 
 _G.stats_faces = 0
@@ -36,23 +45,28 @@ local function get_block(self, x, y, z)
     if x < 0 or x >= size or y < 0 or y >= size or z < 0 or z >= size then
         return 0 -- Air out of bounds
     end
-    return self.world[x][y][z]
+    -- Use global world data
+    return world.get_block(x, y, z)
 end
 
+local H_NORMAL = hash("normal")
+
+-- Visibility scan and greedy merge...
 local function update_mesh(self)
     local start_time = os.clock()
     local grid_size = self.grid_size
-    local world = self.world
+    -- Use global world data
     local mask = self.mask
     local positions = self.positions
     local texcoord0 = self.texcoord0
     local texcoord1 = self.texcoord1
+    local normals = self.normals
 
     local get_block_local = get_block
     local greedy_faces = 0
     local quad_idx = 0
 
-    local function add_quad(p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z, p4x, p4y, p4z, uv_data, w, h)
+    local function add_quad(p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z, p4x, p4y, p4z, uv_data, w, h, nx, ny, nz)
         local base = quad_idx * 18
         local uv_base = quad_idx * 12
         local offset_base = quad_idx * 24
@@ -78,6 +92,13 @@ local function update_mesh(self)
         -- V6
         positions[base + 16] = p4x; positions[base + 17] = p4y; positions[base + 18] = p4z
         texcoord0[uv_base + 11] = 0; texcoord0[uv_base + 12] = 0
+
+        -- Normals
+        for i = 0, 5 do
+            normals[base + i * 3 + 1] = nx
+            normals[base + i * 3 + 2] = ny
+            normals[base + i * 3 + 3] = nz
+        end
 
         local uu, uv = uv_data.u, uv_data.v
         for i = 0, 5 do
@@ -112,7 +133,7 @@ local function update_mesh(self)
                         x, y, z = i, k, j; nx, ny, nz = x - 1, y, z
                     end
 
-                    local b_id = world[x][y][z]
+                    local b_id = world.get_block(x, y, z)
                     local neighbor_id = get_block_local(self, nx, ny, nz)
                     local b_def = block_data.get_block(b_id)
                     local n_def = block_data.get_block(neighbor_id)
@@ -150,22 +171,22 @@ local function update_mesh(self)
                         if uv_data then
                             if d == 1 then
                                 add_quad(k - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j + h -
-                                    0.5, i + 0.5, k - 0.5, j + h - 0.5, i + 0.5, uv_data, w, h)
+                                    0.5, i + 0.5, k - 0.5, j + h - 0.5, i + 0.5, uv_data, w, h, 0, 0, 1)
                             elseif d == 2 then
                                 add_quad(k + w - 0.5, j - 0.5, i - 0.5, k - 0.5, j - 0.5, i - 0.5, k - 0.5, j + h - 0.5,
-                                    i - 0.5, k + w - 0.5, j + h - 0.5, i - 0.5, uv_data, w, h)
+                                    i - 0.5, k + w - 0.5, j + h - 0.5, i - 0.5, uv_data, w, h, 0, 0, -1)
                             elseif d == 3 then
                                 add_quad(k - 0.5, i + 0.5, j + h - 0.5, k + w - 0.5, i + 0.5, j + h - 0.5, k + w - 0.5,
-                                    i + 0.5, j - 0.5, k - 0.5, i + 0.5, j - 0.5, uv_data, w, h)
+                                    i + 0.5, j - 0.5, k - 0.5, i + 0.5, j - 0.5, uv_data, w, h, 0, 1, 0)
                             elseif d == 4 then
                                 add_quad(k - 0.5, i - 0.5, j - 0.5, k + w - 0.5, i - 0.5, j - 0.5, k + w - 0.5, i - 0.5,
-                                    j + h - 0.5, k - 0.5, i - 0.5, j + h - 0.5, uv_data, w, h)
+                                    j + h - 0.5, k - 0.5, i - 0.5, j + h - 0.5, uv_data, w, h, 0, -1, 0)
                             elseif d == 5 then
                                 add_quad(i + 0.5, k - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j - 0.5, i + 0.5, k + w - 0.5,
-                                    j + h - 0.5, i + 0.5, k - 0.5, j + h - 0.5, uv_data, w, h)
+                                    j + h - 0.5, i + 0.5, k - 0.5, j + h - 0.5, uv_data, w, h, 1, 0, 0)
                             elseif d == 6 then
                                 add_quad(i - 0.5, k + w - 0.5, j - 0.5, i - 0.5, k - 0.5, j - 0.5, i - 0.5, k - 0.5,
-                                    j + h - 0.5, i - 0.5, k + w - 0.5, j + h - 0.5, uv_data, w, h)
+                                    j + h - 0.5, i - 0.5, k + w - 0.5, j + h - 0.5, uv_data, w, h, -1, 0, 0)
                             end
                             greedy_faces = greedy_faces + 1
                         end
@@ -186,47 +207,48 @@ local function update_mesh(self)
         for i = current_vertex_count + 1, prev_vertex_count do positions[i] = 0 end
     end
     self.prev_vertex_count = current_vertex_count
-
     _G.stats_faces = greedy_faces
     _G.stats_vertices = quad_idx * 4
     resource.set_buffer(self.buffer_resource, self.buf)
-    go.set(self.mesh_url, "vertices", self.buffer_resource)
+    go.set(self.mesh_url, H_VERTICES, self.buffer_resource)
     _G.stats_mesh_build_time = (os.clock() - start_time) * 1000
 end
 
-local function create_chunk(self, world_data)
+local function create_chunk(self)
     local mesh_go = create_mesh(self)
     local grid_size = self.grid_size
     _G.grid_size = grid_size
     local num_cubes = grid_size * grid_size * grid_size
 
     local atlas = resource.get_atlas(self.game_atlas)
-    go.set(mesh_go.mesh_url, "texture0", hash(atlas.texture))
+    go.set(mesh_go.mesh_url, H_TEXTURE0, hash(atlas.texture))
 
     block_data.init(self.game_atlas)
 
     self.mask = {}
     for i = 1, grid_size * grid_size do self.mask[i] = false end
 
-    local max_faces = num_cubes * 3
-    local buf = buffer.create(max_faces * 6, {
-        { name = hash("position"),  type = buffer.VALUE_TYPE_FLOAT32, count = 3 },
-        { name = hash("texcoord0"), type = buffer.VALUE_TYPE_FLOAT32, count = 2 },
-        { name = hash("texcoord1"), type = buffer.VALUE_TYPE_FLOAT32, count = 4 }
+    local max_faces   = num_cubes * 3
+    local buf         = buffer.create(max_faces * 6, {
+        { name = H_POSITION,  type = buffer.VALUE_TYPE_FLOAT32, count = 3 },
+        { name = H_TEXCOORD0, type = buffer.VALUE_TYPE_FLOAT32, count = 2 },
+        { name = H_TEXCOORD1, type = buffer.VALUE_TYPE_FLOAT32, count = 4 },
+        { name = H_NORMAL,    type = buffer.VALUE_TYPE_FLOAT32, count = 3 }
     })
 
-    self.buf = buf
-    self.positions = buffer.get_stream(buf, "position")
-    self.texcoord0 = buffer.get_stream(buf, "texcoord0")
-    self.texcoord1 = buffer.get_stream(buf, "texcoord1")
+    self.buf          = buf
+    self.positions    = buffer.get_stream(buf, H_POSITION)
+    self.texcoord0    = buffer.get_stream(buf, H_TEXCOORD0)
+    self.texcoord1    = buffer.get_stream(buf, H_TEXCOORD1)
+    self.normals      = buffer.get_stream(buf, H_NORMAL)
 
-    self.world = world_data
-    self.total_cubes = 0
+    -- Removed self.world assignment, accessing world.data directly or via get_block
+    self.total_cubes  = 0
     _G.shared_cubemap = {}
     for cx = 0, grid_size - 1 do
         for cy = 0, grid_size - 1 do
             for cz = 0, grid_size - 1 do
-                if self.world[cx][cy][cz] ~= 0 then
+                if world.get_block(cx, cy, cz) ~= 0 then
                     self.total_cubes = self.total_cubes + 1
                     local cube_idx = cx + cy * grid_size + cz * grid_size * grid_size
                     _G.shared_cubemap[cube_idx] = true
@@ -246,52 +268,53 @@ end
 
 function init(self)
     local grid_size = self.grid_size
-    local world_data = {}
+
+    -- Initialize global world
+    world.init(grid_size)
+
     math.randomseed(os.time())
 
     for cx = 0, grid_size - 1 do
-        world_data[cx] = {}
         for cy = 0, grid_size - 1 do
-            world_data[cx][cy] = {}
             for cz = 0, grid_size - 1 do
+                local block_id = 0
                 if cy == 0 then
-                    world_data[cx][cy][cz] = 2 -- Unbreakable layer
+                    block_id = 2 -- Unbreakable layer
                 else
                     if math.random() < 0.3 then
-                        world_data[cx][cy][cz] = 3 -- Golden Ore
+                        block_id = 3 -- Golden Ore
                     else
-                        world_data[cx][cy][cz] = 1 -- Stone
+                        block_id = 1 -- Stone
                     end
                 end
+                world.set_block(cx, cy, cz, block_id)
             end
         end
     end
 
-    create_chunk(self, world_data)
+    create_chunk(self) -- Removed world_data argument
     self.time = 0
 end
 
 function on_message(self, message_id, message, sender)
-    if message_id == hash("destroy_cube") then
+    if message_id == H_DESTROY_CUBE then
         local gx, gy, gz = message.gx, message.gy, message.gz
         if gx and gy and gz and self.grid_size then
-            if self.world[gx] and self.world[gx][gy] and self.world[gx][gy][gz] then
-                local b_id = self.world[gx][gy][gz]
-                if b_id ~= 0 and b_id ~= 2 then -- Not air and not unbreakable
-                    self.world[gx][gy][gz] = 0
-                    self.total_cubes = (self.total_cubes or 1) - 1
-                    local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
-                    if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = false end
-                    update_mesh(self)
-                end
+            local b_id = world.get_block(gx, gy, gz)
+            if b_id ~= 0 and b_id ~= 2 then -- Not air and not unbreakable
+                world.set_block(gx, gy, gz, 0)
+                self.total_cubes = (self.total_cubes or 1) - 1
+                local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
+                if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = false end
+                update_mesh(self)
             end
         end
-    elseif message_id == hash("place_cube") then
+    elseif message_id == H_PLACE_CUBE then
         local gx, gy, gz = message.gx, message.gy, message.gz
         if gx and gy and gz and self.grid_size then
             if gx >= 0 and gx < self.grid_size and gy >= 0 and gy < self.grid_size and gz >= 0 and gz < self.grid_size then
-                if self.world[gx] and self.world[gx][gy] and self.world[gx][gy][gz] == 0 then
-                    self.world[gx][gy][gz] = 1
+                if world.get_block(gx, gy, gz) == 0 then
+                    world.set_block(gx, gy, gz, 1)
                     self.total_cubes = (self.total_cubes or 0) + 1
                     local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
                     if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = true end

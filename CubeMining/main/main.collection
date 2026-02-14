@@ -11,7 +11,7 @@ instances {
     id: "voxelizer"
     properties {
       id: "depth"
-      value: "1.0"
+      value: "4.0"
       type: PROPERTY_TYPE_NUMBER
     }
     properties {

@@ -1,0 +1,31 @@
+#version 140
+
+in highp vec4 position;
+in mediump vec2 texcoord0;
+in mediump vec3 normal;
+
+out mediump vec2 var_texcoord0;
+out mediump float var_light;
+
+uniform vs_uniforms
+{
+    uniform mediump mat4 mtx_worldview;
+    uniform mediump mat4 mtx_proj;
+    uniform mediump mat4 mtx_world;
+    uniform mediump vec4 light;
+};
+
+void main()
+{
+    var_texcoord0 = texcoord0;
+    
+    // Transform normal to world space
+    // mtx_world is necessary because the entity (mouse) rotates
+    vec3 world_normal = normalize((mtx_world * vec4(normal, 0.0)).xyz);
+    
+    // Calculate diffuse lighting (directional light is also world-space)
+    float diff = max(dot(world_normal, normalize(light.xyz)), 0.0);
+    var_light = diff + light.w; 
+    
+    gl_Position = mtx_proj * mtx_worldview * position;
+}
