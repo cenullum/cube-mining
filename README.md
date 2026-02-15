@@ -9,9 +9,6 @@ A 3D voxel mining example built with the **Defold Game Engine**. This project de
 ![aa](https://github.com/user-attachments/assets/e0bb405c-9b9c-4741-8166-3dc3645603db)
 ![recording_20260214_014218](https://github.com/user-attachments/assets/577a2205-77c9-462d-b8ac-08a0a5fded29)
 
-[aaaa.webm](https://github.com/user-attachments/assets/75f88298-c303-4e95-97e7-847ef5146cf9)
-
-
 ![gggg](https://github.com/user-attachments/assets/4377dab7-8b8c-4126-b5de-5ebf12c138ed)
 
 
