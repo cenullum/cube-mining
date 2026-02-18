@@ -141,11 +141,11 @@ function update(self, dt)
         -- Scale: 0.1 on the normal axis, slightly larger on others to avoid z-fighting
         local s = vmath.vector3(1.01, 1.01, 1.01)
         if math.abs(normal.x) > 0.5 then
-            s.x = 0.1
+            s.x = 0.15
         elseif math.abs(normal.y) > 0.5 then
-            s.y = 0.1
+            s.y = 0.15
         else
-            s.z = 0.1
+            s.z = 0.15
         end
         go.set_scale(s)
 

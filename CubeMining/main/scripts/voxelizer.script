@@ -242,7 +242,7 @@ function init(self)
             for i, anim in ipairs(atlas_res.animations) do
                 local anim_id = type(anim.id) == "string" and hash(anim.id) or anim.id
                 if anim_id == item.id then
-                    local geom = atlas_res.geometries[i]
+                    local geom = atlas_res.geometries[anim.frame_start]
                     local min_u, max_u, min_v, max_v = math.huge, -math.huge, math.huge, -math.huge
                     for j = 1, #geom.uvs, 2 do
                         local u, v = geom.uvs[j], geom.uvs[j + 1]

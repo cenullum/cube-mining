@@ -29,7 +29,7 @@ local function get_uv_data(atlas, texture_info, animation_name)
     for i, anim in ipairs(atlas.animations) do
         local anim_id = type(anim.id) == "string" and hash(anim.id) or anim.id
         if anim_id == animation_id then
-            geometry_id = i
+            geometry_id = anim.frame_start
             break
         end
     end
