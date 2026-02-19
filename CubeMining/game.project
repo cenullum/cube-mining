@@ -1,6 +1,6 @@
 [bootstrap]
 main_collection = /main/main.collectionc
-render = /assets/render/custom.render
+render = /assets/render/custom.renderc
 
 [script]
 shared_state = 1
@@ -19,7 +19,7 @@ scale_mode = stretch
 [project]
 title = Cube Mining
 dependencies = 
-custom_resources = assets/images/items/
+custom_resources = /assets
 
 [render]
 clear_color_blue = 0.98

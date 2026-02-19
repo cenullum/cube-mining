@@ -15,8 +15,8 @@ local function create_predicates(self)
     self.transparent_pred = render.predicate({ "transparent" })
     self.hand_pred = render.predicate({ "hand" })
     self.gui_pred = render.predicate({ "gui" })
-    self.text_pred = render.predicate({ "text" })
     self.particle_pred = render.predicate({ "particle" })
+    self.debug_text_pred = render.predicate({ "debug_text" })
 end
 
 function init(self)
@@ -65,6 +65,8 @@ function update(self)
     render.draw(self.transparent_pred)
     render.draw(self.particle_pred)
 
+
+
     -- 4. Render Hand (VIEW MODEL) - Always on Top
     -- Clear depth buffer so it draws over the world and transparent items
     render.set_depth_mask(true)
@@ -81,6 +83,11 @@ function update(self)
     render.set_depth_mask(false)
     render.disable_state(graphics.STATE_CULL_FACE)
 
+
+    -- Draw debug lines on top (disable depth test)
+    render.disable_state(render.STATE_DEPTH_TEST)
+    render.draw_debug3d()
+
     -- 5. Render GUI and Debug
     render.set_view(vmath.matrix4())
     render.set_projection(vmath.matrix4_orthographic(0, render.get_window_width(), 0, render.get_window_height(), -1, 1))
@@ -92,7 +99,8 @@ function update(self)
     render.set_depth_mask(false)
 
     render.draw(self.gui_pred)
-    render.draw(self.text_pred)
+    render.draw(self.debug_text_pred)
+
 
     local stats = render.draw(self.transparent_pred)
     print("transparent draw calls:", stats and stats.draw_calls or "nil")
