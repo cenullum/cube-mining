@@ -193,8 +193,16 @@ function build_voxel_mesh(self, item_index)
         local h_id = factory.create(self.mesh_prefab); self.held_mesh_url = msg.url(h_id); self.held_mesh_url.fragment =
             H_MESH
         go.set(self.held_mesh_url, H_TEXTURE0, hash(meta.texture))
-        go.set_position(vmath.vector3(0.4, -0.4, -0.8), h_id)
-        go.set_rotation(vmath.quat_rotation_y(0.26) * vmath.quat_rotation_x(-0.2), h_id)
+        go.set_position(vmath.vector3(0.4, -0.08, -0.8), h_id)
+
+        local qx = vmath.quat_rotation_x(math.rad(1))
+        local qy = vmath.quat_rotation_y(math.rad(-65))
+
+        local rot = qy * qx
+
+        go.set_rotation(rot, h_id)
+
+
         go.set_scale(vmath.vector3(0.017, 0.017, 0.017), h_id)
 
         local pivot = self.sway_pivot

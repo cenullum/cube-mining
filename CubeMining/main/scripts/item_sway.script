@@ -12,9 +12,9 @@ local H_CLICK = hash("click")
 local H_ATTACK_Z = hash("attack_z")
 local H_ATTACK_ROLL = hash("attack_roll")
 
-go.property("sway_amount", 0.005)
-go.property("sway_speed", 10.0)
-go.property("rot_amount", 0.02)
+go.property("sway_amount", 0.0009)
+go.property("sway_speed", 15.0)
+go.property("rot_amount", 0.003)
 
 -- Animation proxy properties
 go.property("attack_z", 0.0)
@@ -69,6 +69,11 @@ function on_input(self, action_id, action)
     if not action_id then
         local dx = action.dx or 0
         local dy = action.dy or 0
+
+        -- Clamp delta to prevent extreme values at high DPI
+        local max_delta = 80
+        dx = math.max(-max_delta, math.min(max_delta, dx))
+        dy = math.max(-max_delta, math.min(max_delta, dy))
 
         self.target_pos.x = -dx * self.sway_amount
         self.target_pos.y = -dy * self.sway_amount
