@@ -11,7 +11,7 @@ out mediump vec2 var_texcoord0;     // Passed to fragment shader
 out mediump vec4 var_atlas_metadata; // Passed to fragment shader
 out mediump float var_light;        // Lighting factor
 out mediump float var_ao;           // Ambient Occlusion factor
-out mediump float var_fog_factor;   // Fog factor (0.0 = full fog, 1.0 = no fog)
+out mediump vec3 var_view_pos;      // Position in view space
 
 // --- Uniforms ---
 uniform vs_uniforms
@@ -20,7 +20,6 @@ uniform vs_uniforms
     uniform mediump mat4 mtx_proj;
     uniform mediump mat4 mtx_normal;
     uniform mediump vec4 light;
-    uniform mediump vec4 fog_params; // x: start, y: end
 };
 
 void main()
@@ -39,9 +38,8 @@ void main()
     var_atlas_metadata = texcoord1;
     var_ao = color.r; // AO is stored in the red channel
     
-    // Calculate Fog Factor (Linear)
-    float dist = length(p.xyz);
-    var_fog_factor = clamp((fog_params.y - dist) / (fog_params.y - fog_params.x), 0.0, 1.0);
+    // Pass view-space position for fog
+    var_view_pos = p.xyz;
 
     // Final clip space position
     gl_Position = mtx_proj * p;

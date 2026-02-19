@@ -28,6 +28,7 @@ clear_color_red = 0.67
 [graphics]
 default_texture_min_filter = nearest
 default_texture_mag_filter = nearest
+max_debug_vertices = 1000000
 
 [model]
 max_count = 1024
