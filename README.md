@@ -45,9 +45,9 @@ at targeted block
 - **Optimization**: To maximize performance, surfaces of cubes that are not visible (i.e., touching another solid block) are excluded from the mesh. As you can see in the image, faces are only added when "holes" are created, ensuring efficient rendering.
 - **Item Voxelization Architecture**: Unlike the world mesh which uses a greedy culling approach, the `voxelizer` script analyzes sprite transparency to extrude edges. It generates a high-detail mesh with front/back quads and individual side faces for every solid pixel, creating a true 3D effect from a 2D source.
 
+<img width="1920" height="1080" alt="Screenshot from 2026-02-19 14-57-07" src="https://github.com/user-attachments/assets/f7e17863-a4b6-4cc2-af10-5a087cc3be77" />
 
-![544664750-ce13d4ab-a806-4f67-bc29-c13766086044](https://github.com/user-attachments/assets/42c935b8-5b09-4c1f-b4b4-25eeee3ebdcf)
-![544664770-949a8c8d-a483-44a7-bafe-b49c6f37decd](https://github.com/user-attachments/assets/b4c08286-4e98-4f9e-9cc4-fc57b469ec31)
+<img width="1920" height="1080" alt="Screenshot from 2026-02-19 14-57-52" src="https://github.com/user-attachments/assets/6416113f-ec0b-434f-849d-88889dc9e5ac" />
 
 
 
