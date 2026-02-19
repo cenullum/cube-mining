@@ -5,6 +5,7 @@ in mediump vec2 var_texcoord0;     // Tiling coordinate (scaled by quad size)
 in mediump vec4 var_atlas_metadata; // Atlas bounds
 in mediump float var_light;        // Lighting factor
 in mediump float var_ao;           // Ambient Occlusion factor
+in mediump float var_fog_factor;   // Fog factor
 
 // --- Fragment Output ---
 out vec4 out_fragColor;
@@ -16,6 +17,7 @@ uniform mediump sampler2D texture0; // The block texture atlas (nearest filtered
 uniform fs_uniforms
 {
     mediump vec4 tint; // Face tint color (default white)
+    mediump vec4 fog_color;
 };
 
 void main()
@@ -35,6 +37,9 @@ void main()
     
     // Combine lighting: Diffuse/Ambient + AO
     color.rgb *= var_light * var_ao;
+
+    // Apply Fog
+    color.rgb = mix(fog_color.rgb, color.rgb, var_fog_factor);
 
     // Output final color (force alpha to 1.0 for solid blocks)
     out_fragColor = vec4(color.rgb, 1.0);

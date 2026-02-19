@@ -21,9 +21,9 @@ dependencies =
 custom_resources = assets/images/items/
 
 [render]
-clear_color_blue = 0.88
-clear_color_green = 0.55
-clear_color_red = 0.3
+clear_color_blue = 0.98
+clear_color_green = 0.79
+clear_color_red = 0.67
 
 [graphics]
 default_texture_min_filter = nearest
