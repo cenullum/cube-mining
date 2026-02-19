@@ -3,7 +3,7 @@
 
 # Cube Mining
 
-A 3D voxel mining example built with the **Defold Game Engine**. This project demonstrates how to handle dynamic voxel environments, efficient mesh generation, and real-time performance monitoring.
+A 3D voxel mining example built with the **Defold Game Engine**. This project includes mesh generation, collision detection, and performance monitoring.
 
 ## Play the demo here: https://cenullum.itch.io/cubemining
 
@@ -15,13 +15,15 @@ A 3D voxel mining example built with the **Defold Game Engine**. This project de
 
 ## Features
 
-- **Greedy Meshing Algorithm**: Optimizes rendering by merging adjacent faces into larger quads, significantly reducing vertex count and draw calls.
-- **Swept AABB Collision System**: High-performance collision detection and resolution with sub-stepping to prevent tunneling through blocks.
-- **Runtime Sprite-to-Mesh Voxelization**: Dynamically converts 2D pixel art sprites (like the held gun or sword) into 3D voxel meshes at runtime, giving them real depth and volume.
-- **Golden Ore & Unbreakable Layers**: New block types including rare golden ore and indestructible bedrock at the bottom of the world.
-- **Dynamic Voxel Interaction**: Real-time destroying and placing of blocks with immediate mesh updates.
-- **Performance Monitoring**: Integrated overlay providing real-time FPS, 1% low frames, RAM usage, mesh statistics, and **live player position tracking**.
-- **Custom Shader-based UV Mapping**: Precise texture tiling and atlas-based UV wrapping for voxel surfaces.
+- **Greedy Meshing Algorithm**: Reduces vertex count and draw calls by merging adjacent faces into quads.
+- **Swept AABB Collision System**: Collision detection and resolution with sub-stepping to prevent tunneling.
+- **Runtime Sprite-to-Mesh Voxelization**: Converts 2D pixel art sprites into 3D voxel meshes at runtime.
+- **Vertex-based Ambient Occlusion**: Calculated per-vertex to darken corners and edges. Toggleable with 'K'.
+- **Distance-based Fog**: Distance-based fog applied to terrain and voxelized items.
+- **Golden Ore & Unbreakable Layers**: Block types including golden ore and bedrock at the bottom of the world.
+- **Voxel Interaction**: Block destruction and placement with mesh updates.
+- **Performance Monitoring**: Overlay showing FPS, 1% low frames, RAM usage, mesh statistics, and player position.
+- **Shader-based UV Mapping**: Texture tiling and atlas-based UV wrapping for voxel surfaces.
 
 ## Controls
 
@@ -33,17 +35,17 @@ A 3D voxel mining example built with the **Defold Game Engine**. This project de
 - **Right Click**: Place block
 - **Q**: Cycle held items (Gun, Pickaxe, Sword, etc.)
 - **M**: Toggle Performance Overlay (Off / Text / Text + Graph)
+- **K**: Toggle Ambient Occlusion
 - **P**: Toggle Noclip / Free Cam mode
-- **T**: Spawn mouse 
-at targeted block
+- **T**: Spawn mouse at targeted block
 - **Y**: Spawn mice rapidly while held
 
 ## Scope & Technical Notes
 
-- **Scale**: The project is currently focused on a single **16x16x16** voxel cube. It does not implement a chunking system or procedural terrain generation like Minecraft.
-- **Threading**: Mesh generation and GPU buffer updates are currently handled on the **main thread**. So it fps frops until it create whole mesh.
-- **Optimization**: To maximize performance, surfaces of cubes that are not visible (i.e., touching another solid block) are excluded from the mesh. As you can see in the image, faces are only added when "holes" are created, ensuring efficient rendering.
-- **Item Voxelization Architecture**: Unlike the world mesh which uses a greedy culling approach, the `voxelizer` script analyzes sprite transparency to extrude edges. It generates a high-detail mesh with front/back quads and individual side faces for every solid pixel, creating a true 3D effect from a 2D source.
+- **Scale**: The project is focused on a single 16x16x16 voxel cube. It does not implement a chunking system or procedural terrain generation.
+- **Threading**: Mesh generation and GPU buffer updates are handled on the main thread.
+- **Culling**: Surfaces that are not visible (touching another solid block) are excluded from the mesh. Faces are added when "holes" are created.
+- **Item Voxelization**: Analyzes sprite transparency to extrude edges. Generates mesh with front/back quads and side faces for solid pixels.
 
 <img width="1920" height="1080" alt="Screenshot from 2026-02-19 14-57-07" src="https://github.com/user-attachments/assets/f7e17863-a4b6-4cc2-af10-5a087cc3be77" />
 
@@ -57,12 +59,12 @@ This project was inspired by the [Meshes-In-Defold](https://github.com/mozok/Mes
 
 ## Key Scripts
 
-- **[generate_voxel.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/generate_voxel.script)**: The core engine for the voxel world. It manages the grid state, implements the greedy meshing algorithm, and handles GPU buffer updates.
-- **[voxelizer.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/voxelizer.script)**: An optimized runtime system that converts 2D sprite data into 3D voxelized meshes. It handles atlas metadata caching and direct buffer streaming for high-performance mesh generation.
-- **[physics.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/physics.lua)**: Shared physics module implementing AABB collision detection and "move and slide" resolution with sub-stepped checks to prevent tunneling.
-- **[character_controller.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/character_controller.script)**: Manages player movement, input handling, and camera logic, supporting both walking and free-cam modes.
-- **[item_sway.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/item_sway.script)**: Manages smooth procedural animations for held items, including mouse-based swaying and click-triggered attack movements.
-- **[performance_overlay.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/performance_overlay.script)**: Provides a visual debugger, including FPS, RAM usage, and camera position/rotation.
+- **[generate_voxel.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/generate_voxel.script)**: Manages the voxel grid state, implements greedy meshing, and handles GPU buffer updates.
+- **[voxelizer.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/voxelizer.script)**: Converts 2D sprite data into 3D meshes at runtime.
+- **[physics.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/physics.lua)**: Shared physics module implementing AABB collision detection and resolution.
+- **[character_controller.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/character_controller.script)**: Manages player movement, input handling, and camera logic.
+- **[item_sway.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/item_sway.script)**: Manages animations for held items, including swaying and click-triggered movements.
+- **[performance_overlay.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/performance_overlay.script)**: Provides a visual debugger for FPS, RAM usage, and camera state.
 - **[cube_cursor.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/cube_cursor.script)**: Manages 3D cursor interaction for targeting and modifying the voxel world.
 - **[world.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/world.lua)**: Centralized world data management, providing shared access to the voxel grid and dimensions.
 - **[block_data.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/block_data.lua)**: Extensible system for defining block properties, transparency, and UV metadata.
