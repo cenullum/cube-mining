@@ -1,6 +1,5 @@
 name: "voxelizer"
-tags: "model"
-tags: "transparent"
+tags: "hand"
 vertex_program: "/assets/materials/voxelizer.vp"
 fragment_program: "/assets/materials/voxelizer.fp"
 vertex_space: VERTEX_SPACE_LOCAL
@@ -52,8 +51,6 @@ fragment_constants {
   value {
     x: 5.0
     y: 16.0
-    z: 0.0
-    w: 0.0
   }
 }
 samplers {

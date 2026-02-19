@@ -40,6 +40,6 @@ embedded_components {
 embedded_components {
   id: "mouse_factory"
   type: "factory"
-  data: "prototype: \"/main/mouse.go\"\n"
+  data: "prototype: \"/main/entity/mouse.go\"\n"
   ""
 }

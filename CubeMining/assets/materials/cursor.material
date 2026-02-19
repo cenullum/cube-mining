@@ -1,5 +1,4 @@
 name: "cursor"
-tags: "tile"
 tags: "transparent"
 vertex_program: "/assets/materials/cursor.vp"
 fragment_program: "/assets/materials/cursor.fp"

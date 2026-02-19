@@ -1,0 +1,106 @@
+-- custom.render_script
+-- A render script that handles 3D rendering with transparency
+-- and an extra "hand" predicate that renders on top of everything.
+
+local render = render
+local vmath = vmath
+local sys = sys
+local hash = hash
+
+-- To support user's suggested snippet format
+local graphics = render
+
+local function create_predicates(self)
+    self.model_pred = render.predicate({ "model" })
+    self.transparent_pred = render.predicate({ "transparent" })
+    self.hand_pred = render.predicate({ "hand" })
+    self.gui_pred = render.predicate({ "gui" })
+    self.text_pred = render.predicate({ "text" })
+    self.particle_pred = render.predicate({ "particle" })
+end
+
+function init(self)
+    create_predicates(self)
+    self.view = vmath.matrix4()
+    self.projection = vmath.matrix4()
+
+    -- Clear colors from game.project are handled by render.clear
+    self.clear_color = vmath.vector4(
+        sys.get_config("render.clear_color_red", 0),
+        sys.get_config("render.clear_color_green", 0),
+        sys.get_config("render.clear_color_blue", 0),
+        sys.get_config("render.clear_color_alpha", 0)
+    )
+end
+
+function update(self)
+    -- 1. Clear color and depth
+    render.set_depth_mask(true)
+    render.set_stencil_mask(0xff)
+    render.clear({
+        [render.BUFFER_COLOR_BIT] = self.clear_color,
+        [render.BUFFER_DEPTH_BIT] = 1,
+        [render.BUFFER_STENCIL_BIT] = 0
+    })
+
+    render.set_viewport(0, 0, render.get_window_width(), render.get_window_height())
+    render.set_view(self.view)
+    render.set_projection(self.projection)
+
+    -- 2. Render Opaque Models & Tiles
+    render.enable_state(render.STATE_DEPTH_TEST)
+    render.enable_state(render.STATE_CULL_FACE)
+    render.set_cull_face(render.FACE_BACK)
+    render.set_depth_mask(true)
+    render.disable_state(render.STATE_BLEND)
+
+    render.draw(self.model_pred)
+
+    -- 3. Render Transparent Bits
+    -- This MUST have blending enabled to look transparent
+    --render.set_depth_mask(true) -- Don't write depth for transparent objects
+    render.enable_state(render.STATE_BLEND)
+    render.set_blend_func(render.BLEND_SRC_ALPHA, render.BLEND_ONE_MINUS_SRC_ALPHA)
+
+    render.draw(self.transparent_pred)
+    render.draw(self.particle_pred)
+
+    -- 4. Render Hand (VIEW MODEL) - Always on Top
+    -- Clear depth buffer so it draws over the world and transparent items
+    render.set_depth_mask(true)
+    render.clear({ [render.BUFFER_DEPTH_BIT] = 1 })
+
+    render.enable_state(render.STATE_DEPTH_TEST)
+
+    -- User's suggested code logic for the hand
+    render.enable_state(graphics.STATE_CULL_FACE)
+    render.set_cull_face(render.FACE_BACK)
+
+    render.draw(self.hand_pred)
+
+    render.set_depth_mask(false)
+    render.disable_state(graphics.STATE_CULL_FACE)
+
+    -- 5. Render GUI and Debug
+    render.set_view(vmath.matrix4())
+    render.set_projection(vmath.matrix4_orthographic(0, render.get_window_width(), 0, render.get_window_height(), -1, 1))
+
+    render.enable_state(render.STATE_BLEND)
+    render.set_blend_func(render.BLEND_SRC_ALPHA, render.BLEND_ONE_MINUS_SRC_ALPHA)
+    render.disable_state(render.STATE_DEPTH_TEST)
+    render.disable_state(render.STATE_CULL_FACE)
+    render.set_depth_mask(false)
+
+    render.draw(self.gui_pred)
+    render.draw(self.text_pred)
+
+    local stats = render.draw(self.transparent_pred)
+    print("transparent draw calls:", stats and stats.draw_calls or "nil")
+end
+
+function on_message(self, message_id, message)
+    if message_id == hash("set_view_projection") then
+        self.view = message.view
+        self.projection = message.projection
+    end
+end
