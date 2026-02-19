@@ -21,10 +21,12 @@ local H_MESH = hash("mesh")
 local H_POSITION = hash("position")
 local H_TEXCOORD0 = hash("texcoord0")
 local H_TEXCOORD1 = hash("texcoord1")
+local H_COLOR = hash("color") -- New stream for AO
 local H_DESTROY_CUBE = hash("destroy_cube")
 local H_PLACE_CUBE = hash("place_cube")
 local H_TEXTURE0 = hash("texture0")
 local H_VERTICES = hash("vertices")
+local H_TOGGLE_AO = hash("toggle_ao")
 
 local PATCH_BUFFER = "/assets/models/patch_%s.bufferc"
 
@@ -49,6 +51,113 @@ local function get_block(self, x, y, z)
     return world.get_block(x, y, z)
 end
 
+-- Helper to check if a block is opaque (occluding)
+local function is_opaque(self, x, y, z, cache)
+    -- Cache key: Simple string or hashed integer.
+    -- X, Y, Z can be negative or > grid_size (neighbors), so handle that.
+    -- Using string key for reliability with negative coords.
+    local key = x .. "_" .. y .. "_" .. z
+    if cache and cache[key] ~= nil then
+        return cache[key]
+    end
+
+    local b_id = get_block(self, x, y, z)
+    local result = false
+    if b_id ~= 0 then
+        local def = block_data.get_block(b_id)
+        result = def and not def.transparent
+    end
+
+    if cache then cache[key] = result end
+    return result
+end
+
+-- Calculate Ambient Occlusion for a specific vertex of a face
+-- Returns a value 0 (bright) to 3 (dark)
+local function vertex_ao(side1, side2, corner)
+    if side1 and side2 then return 3 end
+    return (side1 and 1 or 0) + (side2 and 1 or 0) + (corner and 1 or 0)
+end
+
+-- Calculates AO for the 4 corners of a greedy-meshable unit quad (1x1 face)
+-- Returns table {ao_p1, ao_p2, ao_p3, ao_p4}
+-- Mapping corresponds to P1, P2, P3, P4 in add_quad
+local function calculate_ao(self, x, y, z, face_dir, cache)
+    if not self.ao_enabled then return { 0, 0, 0, 0 } end
+
+    local vals = {}
+    local function op(tx, ty, tz) return is_opaque(self, tx, ty, tz, cache) end
+
+    -- NOTE: P1..P4 defs must match add_quad logic
+    -- Check add_quad logic for each D to confirm P1..P4 positions
+
+    if face_dir == 1 then -- Front (Z+)
+        -- P1: Min X, Min Y
+        -- P2: Max X, Min Y
+        -- P3: Max X, Max Y
+        -- P4: Min X, Max Y
+        local zc = z + 1
+        vals[1] = vertex_ao(op(x - 1, y, zc), op(x, y - 1, zc), op(x - 1, y - 1, zc))
+        vals[2] = vertex_ao(op(x + 1, y, zc), op(x, y - 1, zc), op(x + 1, y - 1, zc))
+        vals[3] = vertex_ao(op(x + 1, y, zc), op(x, y + 1, zc), op(x + 1, y + 1, zc))
+        vals[4] = vertex_ao(op(x - 1, y, zc), op(x, y + 1, zc), op(x - 1, y + 1, zc))
+    elseif face_dir == 2 then -- Back (Z-)
+        -- P1: Max X, Min Y
+        -- P2: Min X, Min Y
+        -- P3: Min X, Max Y
+        -- P4: Max X, Max Y
+        local zc = z - 1
+        vals[1] = vertex_ao(op(x + 1, y, zc), op(x, y - 1, zc), op(x + 1, y - 1, zc))
+        vals[2] = vertex_ao(op(x - 1, y, zc), op(x, y - 1, zc), op(x - 1, y - 1, zc))
+        vals[3] = vertex_ao(op(x - 1, y, zc), op(x, y + 1, zc), op(x - 1, y + 1, zc))
+        vals[4] = vertex_ao(op(x + 1, y, zc), op(x, y + 1, zc), op(x + 1, y + 1, zc))
+    elseif face_dir == 3 then -- Top (Y+)
+        -- P1: Min X, Max Z
+        -- P2: Max X, Max Z
+        -- P3: Max X, Min Z
+        -- P4: Min X, Min Z
+        local yc = y + 1
+        vals[1] = vertex_ao(op(x - 1, yc, z), op(x, yc, z + 1), op(x - 1, yc, z + 1))
+        vals[2] = vertex_ao(op(x + 1, yc, z), op(x, yc, z + 1), op(x + 1, yc, z + 1))
+        vals[3] = vertex_ao(op(x + 1, yc, z), op(x, yc, z - 1), op(x + 1, yc, z - 1))
+        vals[4] = vertex_ao(op(x - 1, yc, z), op(x, yc, z - 1), op(x - 1, yc, z - 1))
+    elseif face_dir == 4 then -- Bottom (Y-)
+        -- P1: Min X, Min Z
+        -- P2: Max X, Min Z
+        -- P3: Max X, Max Z
+        -- P4: Min X, Max Z
+        local yc = y - 1
+        vals[1] = vertex_ao(op(x - 1, yc, z), op(x, yc, z - 1), op(x - 1, yc, z - 1))
+        vals[2] = vertex_ao(op(x + 1, yc, z), op(x, yc, z - 1), op(x + 1, yc, z - 1))
+        vals[3] = vertex_ao(op(x + 1, yc, z), op(x, yc, z + 1), op(x + 1, yc, z + 1))
+        vals[4] = vertex_ao(op(x - 1, yc, z), op(x, yc, z + 1), op(x - 1, yc, z + 1))
+    elseif face_dir == 5 then -- Right (X+)
+        -- Mapping: x=i, y=k, z=j.
+        -- P1: Min Y, Min Z (y-0.5, z-0.5)
+        -- P2: Max Y, Min Z (y+w-0.5, z-0.5)
+        -- P3: Max Y, Max Z (y+w-0.5, z+h-0.5)
+        -- P4: Min Y, Max Z (y-0.5, z+h-0.5)
+        local xc = x + 1
+        vals[1] = vertex_ao(op(xc, y - 1, z), op(xc, y, z - 1), op(xc, y - 1, z - 1))
+        vals[2] = vertex_ao(op(xc, y + 1, z), op(xc, y, z - 1), op(xc, y + 1, z - 1))
+        vals[3] = vertex_ao(op(xc, y + 1, z), op(xc, y, z + 1), op(xc, y + 1, z + 1))
+        vals[4] = vertex_ao(op(xc, y - 1, z), op(xc, y, z + 1), op(xc, y - 1, z + 1))
+    elseif face_dir == 6 then -- Left (X-)
+        -- Mapping: x=i, y=k, z=j
+        -- P1: Max Y, Min Z
+        -- P2: Min Y, Min Z
+        -- P3: Min Y, Max Z
+        -- P4: Max Y, Max Z
+        local xc = x - 1
+        vals[1] = vertex_ao(op(xc, y + 1, z), op(xc, y, z - 1), op(xc, y + 1, z - 1))
+        vals[2] = vertex_ao(op(xc, y - 1, z), op(xc, y, z - 1), op(xc, y - 1, z - 1))
+        vals[3] = vertex_ao(op(xc, y - 1, z), op(xc, y, z + 1), op(xc, y - 1, z + 1))
+        vals[4] = vertex_ao(op(xc, y + 1, z), op(xc, y, z + 1), op(xc, y + 1, z + 1))
+    end
+
+    return vals
+end
+
 local H_NORMAL = hash("normal")
 
 -- Visibility scan and greedy merge...
@@ -60,38 +169,65 @@ local function update_mesh(self)
     local positions = self.positions
     local texcoord0 = self.texcoord0
     local texcoord1 = self.texcoord1
+    local colors = self.colors
     local normals = self.normals
 
     local get_block_local = get_block
     local greedy_faces = 0
     local quad_idx = 0
 
-    local function add_quad(p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z, p4x, p4y, p4z, uv_data, w, h, nx, ny, nz)
+    -- Opacity Cache for this frame
+    local opaque_cache = {}
+
+    local function add_quad(p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z, p4x, p4y, p4z, uv_data, w, h, nx, ny, nz,
+                            ao_vals)
         local base = quad_idx * 18
         local uv_base = quad_idx * 12
         local offset_base = quad_idx * 24
 
+        -- Convert AO (0-3) to float (1.0 - 0.25)
+        -- 0 -> 1.0 (Bright)
+        -- 3 -> 0.4 (Dark)
+        local function ao_f(val) return 1.0 - (val * 0.2) end
+
+        -- Map vals to P1..P4
+        local ao1 = ao_f(ao_vals[1])
+        local ao2 = ao_f(ao_vals[2])
+        local ao3 = ao_f(ao_vals[3])
+        local ao4 = ao_f(ao_vals[4])
+
         local uw, uh = uv_data.w, uv_data.h
         local wuh, huh = w * uw, h * uh
 
-        -- V1
+        -- V1 (P1)
         positions[base + 1] = p1x; positions[base + 2] = p1y; positions[base + 3] = p1z
         texcoord0[uv_base + 1] = 0; texcoord0[uv_base + 2] = huh
-        -- V2
+        colors[offset_base + 1] = ao1; colors[offset_base + 2] = ao1; colors[offset_base + 3] = ao1; colors[offset_base + 4] = 1
+
+        -- V2 (P2)
         positions[base + 4] = p2x; positions[base + 5] = p2y; positions[base + 6] = p2z
         texcoord0[uv_base + 3] = wuh; texcoord0[uv_base + 4] = huh
-        -- V3
+        colors[offset_base + 5] = ao2; colors[offset_base + 6] = ao2; colors[offset_base + 7] = ao2; colors[offset_base + 8] = 1
+
+        -- V3 (P3)
         positions[base + 7] = p3x; positions[base + 8] = p3y; positions[base + 9] = p3z
         texcoord0[uv_base + 5] = wuh; texcoord0[uv_base + 6] = 0
-        -- V4 (Same as V1)
+        colors[offset_base + 9] = ao3; colors[offset_base + 10] = ao3; colors[offset_base + 11] = ao3; colors[offset_base + 12] = 1
+
+        -- V4 (Same as V1/P1)
         positions[base + 10] = p1x; positions[base + 11] = p1y; positions[base + 12] = p1z
         texcoord0[uv_base + 7] = 0; texcoord0[uv_base + 8] = huh
-        -- V5 (Same as V3)
+        colors[offset_base + 13] = ao1; colors[offset_base + 14] = ao1; colors[offset_base + 15] = ao1; colors[offset_base + 16] = 1
+
+        -- V5 (Same as V3/P3)
         positions[base + 13] = p3x; positions[base + 14] = p3y; positions[base + 15] = p3z
         texcoord0[uv_base + 9] = wuh; texcoord0[uv_base + 10] = 0
-        -- V6
+        colors[offset_base + 17] = ao3; colors[offset_base + 18] = ao3; colors[offset_base + 19] = ao3; colors[offset_base + 20] = 1
+
+        -- V6 (P4)
         positions[base + 16] = p4x; positions[base + 17] = p4y; positions[base + 18] = p4z
         texcoord0[uv_base + 11] = 0; texcoord0[uv_base + 12] = 0
+        colors[offset_base + 21] = ao4; colors[offset_base + 22] = ao4; colors[offset_base + 23] = ao4; colors[offset_base + 24] = 1
 
         -- Normals
         for i = 0, 5 do
@@ -113,7 +249,7 @@ local function update_mesh(self)
 
     for d = 1, 6 do
         for i = 0, grid_size - 1 do
-            for m = 1, grid_size * grid_size do mask[m] = false end
+            for m = 1, grid_size * grid_size do mask[m] = nil end
 
             -- Visibility Scan
             for j = 0, grid_size - 1 do
@@ -140,7 +276,12 @@ local function update_mesh(self)
 
                     if b_def and not b_def.transparent then
                         if not n_def or n_def.transparent then
-                            mask[j * grid_size + k + 1] = b_id
+                            local ao_vals = calculate_ao(self, x, y, z, d, opaque_cache)
+                            local a0, a1, a2, a3 = ao_vals[1], ao_vals[2], ao_vals[3], ao_vals[4]
+
+                            -- Encode AO into mask.
+                            local ao_hash = a0 + a1 * 4 + a2 * 16 + a3 * 64
+                            mask[j * grid_size + k + 1] = b_id + ao_hash * 100000
                         end
                     end
                 end
@@ -150,15 +291,22 @@ local function update_mesh(self)
             for j = 0, grid_size - 1 do
                 local row_offset = j * grid_size
                 for k = 0, grid_size - 1 do
-                    local b_id = mask[row_offset + k + 1]
-                    if b_id then
+                    local val = mask[row_offset + k + 1]
+                    if val then
+                        local b_id = val % 100000
+                        local ao_hash = math.floor(val / 100000)
+                        local a0 = ao_hash % 4
+                        local a1 = math.floor(ao_hash / 4) % 4
+                        local a2 = math.floor(ao_hash / 16) % 4
+                        local a3 = math.floor(ao_hash / 64)
+
                         local w, h = 1, 1
-                        while k + w < grid_size and mask[row_offset + k + w + 1] == b_id do w = w + 1 end
+                        while k + w < grid_size and mask[row_offset + k + w + 1] == val do w = w + 1 end
                         local can_expand_h = true
                         while j + h < grid_size do
                             local next_row_offset = (j + h) * grid_size
                             for r = 0, w - 1 do
-                                if mask[next_row_offset + k + r + 1] ~= b_id then
+                                if mask[next_row_offset + k + r + 1] ~= val then
                                     can_expand_h = false; break
                                 end
                             end
@@ -166,34 +314,36 @@ local function update_mesh(self)
                             h = h + 1
                         end
 
+                        local ao_vals = { a0, a1, a2, a3 }
                         local b_def = block_data.get_block(b_id)
                         local uv_data = b_def and b_def.uvs and b_def.uvs[d]
                         if uv_data then
                             if d == 1 then
+                                -- P1, P2, P3, P4 matches calc_aoD1
                                 add_quad(k - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j + h -
-                                    0.5, i + 0.5, k - 0.5, j + h - 0.5, i + 0.5, uv_data, w, h, 0, 0, 1)
+                                    0.5, i + 0.5, k - 0.5, j + h - 0.5, i + 0.5, uv_data, w, h, 0, 0, 1, ao_vals)
                             elseif d == 2 then
                                 add_quad(k + w - 0.5, j - 0.5, i - 0.5, k - 0.5, j - 0.5, i - 0.5, k - 0.5, j + h - 0.5,
-                                    i - 0.5, k + w - 0.5, j + h - 0.5, i - 0.5, uv_data, w, h, 0, 0, -1)
+                                    i - 0.5, k + w - 0.5, j + h - 0.5, i - 0.5, uv_data, w, h, 0, 0, -1, ao_vals)
                             elseif d == 3 then
                                 add_quad(k - 0.5, i + 0.5, j + h - 0.5, k + w - 0.5, i + 0.5, j + h - 0.5, k + w - 0.5,
-                                    i + 0.5, j - 0.5, k - 0.5, i + 0.5, j - 0.5, uv_data, w, h, 0, 1, 0)
+                                    i + 0.5, j - 0.5, k - 0.5, i + 0.5, j - 0.5, uv_data, w, h, 0, 1, 0, ao_vals)
                             elseif d == 4 then
                                 add_quad(k - 0.5, i - 0.5, j - 0.5, k + w - 0.5, i - 0.5, j - 0.5, k + w - 0.5, i - 0.5,
-                                    j + h - 0.5, k - 0.5, i - 0.5, j + h - 0.5, uv_data, w, h, 0, -1, 0)
+                                    j + h - 0.5, k - 0.5, i - 0.5, j + h - 0.5, uv_data, w, h, 0, -1, 0, ao_vals)
                             elseif d == 5 then
                                 add_quad(i + 0.5, k - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j - 0.5, i + 0.5, k + w - 0.5,
-                                    j + h - 0.5, i + 0.5, k - 0.5, j + h - 0.5, uv_data, w, h, 1, 0, 0)
+                                    j + h - 0.5, i + 0.5, k - 0.5, j + h - 0.5, uv_data, w, h, 1, 0, 0, ao_vals)
                             elseif d == 6 then
                                 add_quad(i - 0.5, k + w - 0.5, j - 0.5, i - 0.5, k - 0.5, j - 0.5, i - 0.5, k - 0.5,
-                                    j + h - 0.5, i - 0.5, k + w - 0.5, j + h - 0.5, uv_data, w, h, -1, 0, 0)
+                                    j + h - 0.5, i - 0.5, k + w - 0.5, j + h - 0.5, uv_data, w, h, -1, 0, 0, ao_vals)
                             end
                             greedy_faces = greedy_faces + 1
                         end
 
                         for r = 0, h - 1 do
                             local proc_row_offset = (j + r) * grid_size
-                            for c = 0, w - 1 do mask[proc_row_offset + k + c + 1] = false end
+                            for c = 0, w - 1 do mask[proc_row_offset + k + c + 1] = nil end
                         end
                     end
                 end
@@ -233,7 +383,8 @@ local function create_chunk(self)
         { name = H_POSITION,  type = buffer.VALUE_TYPE_FLOAT32, count = 3 },
         { name = H_TEXCOORD0, type = buffer.VALUE_TYPE_FLOAT32, count = 2 },
         { name = H_TEXCOORD1, type = buffer.VALUE_TYPE_FLOAT32, count = 4 },
-        { name = H_NORMAL,    type = buffer.VALUE_TYPE_FLOAT32, count = 3 }
+        { name = H_NORMAL,    type = buffer.VALUE_TYPE_FLOAT32, count = 3 },
+        { name = H_COLOR,     type = buffer.VALUE_TYPE_FLOAT32, count = 4 }
     })
 
     self.buf          = buf
@@ -241,6 +392,7 @@ local function create_chunk(self)
     self.texcoord0    = buffer.get_stream(buf, H_TEXCOORD0)
     self.texcoord1    = buffer.get_stream(buf, H_TEXCOORD1)
     self.normals      = buffer.get_stream(buf, H_NORMAL)
+    self.colors       = buffer.get_stream(buf, H_COLOR)
 
     -- Removed self.world assignment, accessing world.data directly or via get_block
     self.total_cubes  = 0
@@ -269,6 +421,8 @@ end
 function init(self)
     local grid_size = self.grid_size
 
+    self.ao_enabled = true -- Default On
+
     -- Initialize global world
     world.init(grid_size)
 
@@ -294,6 +448,9 @@ function init(self)
 
     create_chunk(self) -- Removed world_data argument
     self.time = 0
+
+    -- Listen for AO toggle
+    msg.post(".", "acquire_input_focus")
 end
 
 function on_message(self, message_id, message, sender)
@@ -322,6 +479,10 @@ function on_message(self, message_id, message, sender)
                 end
             end
         end
+    elseif message_id == H_TOGGLE_AO or message_id == hash("toggle_ao") then
+        self.ao_enabled = not self.ao_enabled
+        update_mesh(self)
+        print("AO Enabled: " .. tostring(self.ao_enabled))
     end
 end
 

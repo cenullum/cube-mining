@@ -30,6 +30,7 @@ local H_EULER = hash("euler")
 local H_SET_PERFORMANCE_MODE = hash("set_performance_mode")
 local H_SPAWN_MOUSE = hash("spawn_mouse")
 local H_SPAWN_FAST = hash("spawn_fast")
+local H_TOGGLE_AO = hash("toggle_ao")
 
 go.property("speed", 5)
 go.property("jump_force", 9.0) -- Tweaked for standard gravity
@@ -424,5 +425,8 @@ function on_input(self, action_id, action)
         elseif action.released then
             self.spawn_fast = false
         end
+    elseif action_id == H_TOGGLE_AO and action.released then
+        msg.post("/root#main", "toggle_ao")
+        print("AO Toggle Request Sent")
     end
 end

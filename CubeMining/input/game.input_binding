@@ -62,3 +62,11 @@ key_trigger {
   input: KEY_Y
   action: "spawn_fast"
 }
+key_trigger {
+  input: KEY_L
+  action: "toggle_light_mode"
+}
+key_trigger {
+  input: KEY_K
+  action: "toggle_ao"
+}

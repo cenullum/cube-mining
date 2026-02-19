@@ -101,11 +101,12 @@ function init(self)
         "Space/Ctrl: Up/Down",
         "Left Click: Break",
         "Right Click: Place",
-        "M: Toggle Metrics",
+        "M: Switch Metrics",
         "Q: Switch Item",
-        "P: Noclip",
         "T: Spawn mouse",
-        "Y: Spawn mouse rapidly"
+        "Y: Spawn mouse rapidly",
+        "P: Toggle Noclip",
+        "K: Toggle AO"
     }
 
     -- Cache window size for optimization

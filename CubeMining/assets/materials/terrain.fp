@@ -4,6 +4,7 @@
 in mediump vec2 var_texcoord0;     // Tiling coordinate (scaled by quad size)
 in mediump vec4 var_atlas_metadata; // Atlas bounds
 in mediump float var_light;        // Lighting factor
+in mediump float var_ao;           // Ambient Occlusion factor
 
 // --- Fragment Output ---
 out vec4 out_fragColor;
@@ -31,7 +32,9 @@ void main()
     
     // Sample texture with the calculated atlas UV
     vec4 color = texture(texture0, atlas_uv) * tint_pm;
-    color.rgb *= var_light;
+    
+    // Combine lighting: Diffuse/Ambient + AO
+    color.rgb *= var_light * var_ao;
 
     // Output final color (force alpha to 1.0 for solid blocks)
     out_fragColor = vec4(color.rgb, 1.0);
