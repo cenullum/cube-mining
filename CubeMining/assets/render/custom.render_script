@@ -1,114 +1,237 @@
 -- custom.render_script
--- A render script that handles 3D rendering with transparency
--- and an extra "hand" predicate that renders on top of everything.
+-- Advanced render script optimized with local variable access to eliminate table lookups in update().
+-- Transparency and the "hand" (voxelizer) layer are preserved.
 
+--------------------------------------------------------------------------------
+-- Localized Modules (Optimization: Upvalues)
+--------------------------------------------------------------------------------
 local render = render
-local vmath = vmath
-local sys = sys
-local hash = hash
+local vmath  = vmath
+local sys    = sys
+local math   = math
 
--- To support user's suggested snippet format
-local graphics = render
+-----------------------------------------
+---
+---------------------------------------
+-- Cached Message Hashes
+--------------------------------------------------------------------------------
+local MSG_CLEAR_COLOR        = hash("clear_color")
+local MSG_WINDOW_RESIZED     = hash("window_resized")
+local MSG_SET_VIEW_PROJ      = hash("set_view_projection")
+-- local MSG_SET_CAMERA_PROJ =     hash("use_camera_projection")
+local MSG_USE_STRETCH_PROJ   = hash("use_stretch_projection")
+local MSG_USE_FIXED_PROJ     = hash("use_fixed_projection")
+local MSG_USE_FIXED_FIT_PROJ = hash("use_fixed_fit_projection")
 
-local function create_predicates(self)
-    self.model_pred = render.predicate({ "model" })
-    self.transparent_pred = render.predicate({ "transparent" })
-    self.hand_pred = render.predicate({ "hand" })
-    self.gui_pred = render.predicate({ "gui" })
-    self.particle_pred = render.predicate({ "particle" })
-    self.debug_text_pred = render.predicate({ "debug_text" })
+--------------------------------------------------------------------------------
+-- Render State & Predicates (Local Scope for Performance)
+--------------------------------------------------------------------------------
+local model_pred
+local transparent_pred
+local hand_pred
+local gui_pred
+local particle_pred
+local debug_text_pred
+
+-- Camera objects
+local world_cam              = { view = vmath.matrix4(), proj = vmath.matrix4(), near = -1, far = 1, zoom = 1, proj_fn = nil }
+local gui_cam                = { view = vmath.matrix4(), proj = vmath.matrix4(), near = -1, far = 1, zoom = 1, proj_fn = nil }
+
+-- Active primary camera reference (defaults to world_cam)
+local primary_camera         = world_cam
+
+-- Global Render State
+local window_width           = 0
+local window_height          = 0
+local main_width             = 0
+local main_height            = 0
+local last_win_w             = 0
+local last_win_h             = 0
+local is_valid               = false
+
+local clear_buffers          = {
+    [render.BUFFER_COLOR_BIT] = vmath.vector4(0, 0, 0, 0),
+    [render.BUFFER_DEPTH_BIT] = 1,
+    [render.BUFFER_STENCIL_BIT] = 0
+}
+
+--------------------------------------------------------------------------------
+-- Performance Constants
+--------------------------------------------------------------------------------
+local DEFAULT_NEAR           = -1
+local DEFAULT_FAR            = 1
+local DEFAULT_ZOOM           = 1
+
+--------------------------------------------------------------------------------
+-- Projection Logic
+--------------------------------------------------------------------------------
+
+-- Helper: Update a specific camera's projection based on its assigned function
+local function update_camera_projection(camera)
+    if camera.proj_fn then
+        camera.proj = camera.proj_fn(camera)
+    end
 end
 
-function init(self)
-    create_predicates(self)
-    self.view = vmath.matrix4()
-    self.projection = vmath.matrix4()
+-- Fixed projection (centered, fixed zoom)
+local function calculate_fixed_projection(camera)
+    local zoom = camera.zoom or DEFAULT_ZOOM
+    local p_w = window_width / zoom
+    local p_h = window_height / zoom
+    local left = -(p_w - main_width) / 2
+    local bottom = -(p_h - main_height) / 2
+    return vmath.matrix4_orthographic(left, left + p_w, bottom, bottom + p_h, camera.near, camera.far)
+end
 
-    -- Clear colors from game.project are handled by render.clear
-    self.clear_color = vmath.vector4(
-        sys.get_config("render.clear_color_red", 0),
-        sys.get_config("render.clear_color_green", 0),
-        sys.get_config("render.clear_color_blue", 0),
-        sys.get_config("render.clear_color_alpha", 0)
+-- Fit projection (centers and fits to window)
+local function calculate_fit_projection(camera)
+    camera.zoom = math.min(window_width / main_width, window_height / main_height)
+    return calculate_fixed_projection(camera)
+end
+
+-- Stretched projection (fills entire window)
+local function calculate_stretched_projection(camera)
+    return vmath.matrix4_orthographic(0, main_width, 0, main_height, camera.near, camera.far)
+end
+
+-- GUI projection (matches window coordinates)
+local function calculate_gui_projection(camera)
+    return vmath.matrix4_orthographic(0, window_width, 0, window_height, camera.near, camera.far)
+end
+
+-- Refreshes window dimensions and updates all cameras
+local function refresh_render_state()
+    window_width = render.get_window_width()
+    window_height = render.get_window_height()
+
+    is_valid = window_width > 0 and window_height > 0
+    if not is_valid then return false end
+
+    -- Optimization: Skip if dimensions haven't changed
+    if window_width == last_win_w and window_height == last_win_h then
+        return true
+    end
+
+    last_win_w = window_width
+    last_win_h = window_height
+    main_width = render.get_width()
+    main_height = render.get_height()
+
+    -- Update both cameras
+    update_camera_projection(world_cam)
+    update_camera_projection(gui_cam)
+
+    return true
+end
+
+local function setup_camera_properties(camera, proj_fn, near, far, zoom)
+    camera.near    = near or DEFAULT_NEAR
+    camera.far     = far or DEFAULT_FAR
+    camera.zoom    = zoom or DEFAULT_ZOOM
+    camera.proj_fn = proj_fn
+end
+
+--------------------------------------------------------------------------------
+-- Engine Lifecycle
+--------------------------------------------------------------------------------
+
+function init(self)
+    -- Initialize predicates
+    model_pred                             = render.predicate({ "model" })
+    transparent_pred                       = render.predicate({ "transparent" })
+    hand_pred                              = render.predicate({ "hand" })
+    gui_pred                               = render.predicate({ "gui" })
+    particle_pred                          = render.predicate({ "particle" })
+    debug_text_pred                        = render.predicate({ "debug_text" })
+
+    -- Initial clear color from config
+    clear_buffers[render.BUFFER_COLOR_BIT] = vmath.vector4(
+        sys.get_config_number("render.clear_color_red", 0),
+        sys.get_config_number("render.clear_color_green", 0),
+        sys.get_config_number("render.clear_color_blue", 0),
+        sys.get_config_number("render.clear_color_alpha", 0)
     )
+
+    -- Setup initial camera states
+    setup_camera_properties(world_cam, calculate_stretched_projection)
+    setup_camera_properties(gui_cam, calculate_gui_projection)
+
+    refresh_render_state()
 end
 
 function update(self)
-    -- 1. Clear color and depth
+    if not is_valid then
+        if not refresh_render_state() then return end
+    end
+
+    -- 1. Preparation & Clear
     render.set_depth_mask(true)
     render.set_stencil_mask(0xff)
-    render.clear({
-        [render.BUFFER_COLOR_BIT] = self.clear_color,
-        [render.BUFFER_DEPTH_BIT] = 1,
-        [render.BUFFER_STENCIL_BIT] = 0
-    })
+    render.clear(clear_buffers)
 
-    render.set_viewport(0, 0, render.get_window_width(), render.get_window_height())
-    render.set_view(self.view)
-    render.set_projection(self.projection)
+    -- Viewport & Global Camera View
+    render.set_viewport(0, 0, window_width, window_height)
+    render.set_view(primary_camera.view)
+    render.set_projection(primary_camera.proj)
 
-    -- 2. Render Opaque Models & Tiles
+    -- 2. Opaque Pass
     render.enable_state(render.STATE_DEPTH_TEST)
     render.enable_state(render.STATE_CULL_FACE)
     render.set_cull_face(render.FACE_BACK)
-    render.set_depth_mask(true)
     render.disable_state(render.STATE_BLEND)
 
-    render.draw(self.model_pred)
+    render.draw(model_pred)
 
-    -- 3. Render Transparent Bits
-    -- This MUST have blending enabled to look transparent
-    --render.set_depth_mask(true) -- Don't write depth for transparent objects
+    -- 3. Transparent Pass
     render.enable_state(render.STATE_BLEND)
     render.set_blend_func(render.BLEND_SRC_ALPHA, render.BLEND_ONE_MINUS_SRC_ALPHA)
+    render.draw(transparent_pred)
 
-    render.draw(self.transparent_pred)
-    render.draw(self.particle_pred)
+    -- Particle Pass
+    render.draw(particle_pred)
+    render.disable_state(render.STATE_BLEND)
 
-
-
-    -- 4. Render Hand (VIEW MODEL) - Always on Top
-    -- Clear depth buffer so it draws over the world and transparent items
+    -- 4. Overlay Pass (Hand/Voxelizer)
+    -- Reset depth to ensure hand item is always on top
     render.set_depth_mask(true)
     render.clear({ [render.BUFFER_DEPTH_BIT] = 1 })
+    render.draw(hand_pred)
 
-    render.enable_state(render.STATE_DEPTH_TEST)
-
-    -- User's suggested code logic for the hand
-    render.enable_state(graphics.STATE_CULL_FACE)
-    render.set_cull_face(render.FACE_BACK)
-
-    render.draw(self.hand_pred)
-
-    render.set_depth_mask(false)
-    render.disable_state(graphics.STATE_CULL_FACE)
-
-
-    -- Draw debug lines on top (disable depth test)
+    -- Debug Lines
     render.disable_state(render.STATE_DEPTH_TEST)
     render.draw_debug3d()
 
-    -- 5. Render GUI and Debug
-    render.set_view(vmath.matrix4())
-    render.set_projection(vmath.matrix4_orthographic(0, render.get_window_width(), 0, render.get_window_height(), -1, 1))
-
-    render.enable_state(render.STATE_BLEND)
-    render.set_blend_func(render.BLEND_SRC_ALPHA, render.BLEND_ONE_MINUS_SRC_ALPHA)
-    render.disable_state(render.STATE_DEPTH_TEST)
-    render.disable_state(render.STATE_CULL_FACE)
+    -- 5. GUI & Debug Post-Process
+    render.set_view(gui_cam.view)
+    render.set_projection(gui_cam.proj)
     render.set_depth_mask(false)
+    render.disable_state(render.STATE_CULL_FACE)
 
-    render.draw(self.gui_pred)
-    render.draw(self.debug_text_pred)
+    -- UI Drawing (requires blend)
+    render.enable_state(render.STATE_BLEND)
+    render.draw(gui_pred)
 
-
-    local stats = render.draw(self.transparent_pred)
-    print("transparent draw calls:", stats and stats.draw_calls or "nil")
+    -- Debug Text (Blend disabled as requested)
+    render.disable_state(render.STATE_BLEND)
+    render.draw(debug_text_pred)
 end
 
 function on_message(self, message_id, message)
-    if message_id == hash("set_view_projection") then
-        self.view = message.view
-        self.projection = message.projection
+    if message_id == MSG_SET_VIEW_PROJ then
+        primary_camera.view = message.view
+        primary_camera.proj = message.projection
+    elseif message_id == MSG_WINDOW_RESIZED then
+        refresh_render_state()
+    elseif message_id == MSG_CLEAR_COLOR then
+        clear_buffers[render.BUFFER_COLOR_BIT] = message.color
+    elseif message_id == MSG_USE_STRETCH_PROJ then
+        setup_camera_properties(world_cam, calculate_stretched_projection, message.near, message.far)
+        update_camera_projection(world_cam)
+    elseif message_id == MSG_USE_FIXED_PROJ then
+        setup_camera_properties(world_cam, calculate_fixed_projection, message.near, message.far, message.zoom)
+        update_camera_projection(world_cam)
+    elseif message_id == MSG_USE_FIXED_FIT_PROJ then
+        setup_camera_properties(world_cam, calculate_fit_projection, message.near, message.far)
+        update_camera_projection(world_cam)
     end
 end

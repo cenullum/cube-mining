@@ -1,0 +1,81 @@
+local physics = require "main.scripts.physics"
+
+local vmath = vmath
+local msg = msg
+local go = go
+local math = math
+
+go.property("gravity", -25.0)
+go.property("radius", 3)
+go.property("friction", 2.0)
+
+function init(self)
+    self.velocity = vmath.vector3(0, 0, 0)
+    self.size = vmath.vector3(0.6, 0.6, 0.6)
+
+    go.set_scale(self.size)
+    self.base_scale = self.size
+
+    self.timer = 3.0
+    self.pulse_phase = 0
+end
+
+function update(self, dt)
+    local timer = self.timer - dt
+
+    if timer <= 0 then
+        local pos = go.get_position()
+        local grid_size = _G.grid_size or 5
+        local offset = -grid_size / 2 + 0.5
+        local OFFSET_X = offset
+        local OFFSET_Y = offset
+        local OFFSET_Z = 490
+
+        local gx = math.floor(pos.x - OFFSET_X + 0.5)
+        local gy = math.floor(pos.y - OFFSET_Y + 0.5)
+        local gz = math.floor(pos.z - OFFSET_Z + 0.5)
+
+        local radius = self.radius
+        msg.post("/root#main", "set_blocks_area", {
+            gx = gx, gy = gy, gz = gz, radius = radius, block_id = 0
+        })
+
+        msg.post("/camera#camera_script", "explosion", { position = pos, force = radius / 3.0 })
+
+        go.delete()
+        return
+    end
+    self.timer = timer
+
+    local vel = self.velocity
+    local size = self.size
+    local friction = self.friction
+
+    -- Calculate physics
+    vel.y = vel.y + self.gravity * dt
+    vel.x = vmath.lerp(friction * dt, vel.x, 0)
+    vel.z = vmath.lerp(friction * dt, vel.z, 0)
+
+    local pos = go.get_position()
+    local feet_pos = pos - vmath.vector3(0, size.y / 2, 0)
+
+    local new_feet_pos, new_vel, grounded = physics.move_and_slide(feet_pos, vel, size, dt)
+
+    self.velocity = new_vel
+    local new_pos = new_feet_pos + vmath.vector3(0, size.y / 2, 0)
+    go.set_position(new_pos)
+
+    -- Pulse animation
+    -- Frequency increases from 10 to ~40 as timer goes from 3 to 0
+    local freq = 10 + (3.0 - timer) * 10
+    local pulse_phase = self.pulse_phase + freq * dt
+    self.pulse_phase = pulse_phase
+    local pulse = 1.0 + math.sin(pulse_phase) * 0.4
+    go.set_scale(self.base_scale * pulse)
+end
+
+function on_message(self, message_id, message, sender)
+    if message_id == hash("set_velocity") then
+        self.velocity = message.velocity
+    end
+end

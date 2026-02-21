@@ -37,6 +37,8 @@ go.property("jump_force", 9.0) -- Tweaked for standard gravity
 go.property("sensitivity", 0.15)
 go.property("gravity", -25.0)
 go.property("mouse_factory", msg.url())
+go.property("bomb_factory", msg.url())
+
 
 local STATE_FREE_CAM = 1
 local STATE_WALK = 2
@@ -51,6 +53,9 @@ function init(self)
     self.velocity = vmath.vector3(0, 0, 0)
     self.pitch = 0
     self.yaw = 0
+
+    self.shake_intensity = 0
+    self.shake_duration = 0
 
     -- Inputs
     self.input = vmath.vector3()
@@ -136,8 +141,21 @@ local function get_targeted_cube(ray_start, ray_dir, max_dist)
 end
 
 local function update_camera(self)
-    -- Compute rotation
-    local rot = vmath.quat_rotation_y(math.rad(self.yaw)) * vmath.quat_rotation_x(math.rad(self.pitch))
+    -- Compute base rotation
+    local current_yaw = self.yaw
+    local current_pitch = self.pitch
+
+    -- Apply screen shake
+    local shake_duration = self.shake_duration
+    if shake_duration > 0 then
+        local intensity = self.shake_intensity
+        local shake_x = (math.random() - 0.5) * 2.0 * intensity
+        local shake_y = (math.random() - 0.5) * 2.0 * intensity
+        current_yaw = current_yaw + shake_x
+        current_pitch = current_pitch + shake_y
+    end
+
+    local rot = vmath.quat_rotation_y(math.rad(current_yaw)) * vmath.quat_rotation_x(math.rad(current_pitch))
     go.set_rotation(rot)
 
     -- GO is at eye level now, so no offset for camera view
@@ -177,6 +195,17 @@ local function update_camera(self)
 end
 
 function update(self, dt)
+    -- Screen shake decay
+    local shake_duration = self.shake_duration
+    if shake_duration > 0 then
+        shake_duration = shake_duration - dt
+        if shake_duration <= 0 then
+            shake_duration = 0
+            self.shake_intensity = 0
+        end
+        self.shake_duration = shake_duration
+    end
+
     -- Rotation Logic
     -- (Applied in update_camera directly from accumulated pitch/yaw)
 
@@ -425,8 +454,30 @@ function on_input(self, action_id, action)
         elseif action.released then
             self.spawn_fast = false
         end
+    elseif action_id == hash("throw_bomb") and action.released then
+        local cam_pos = go.get_world_position()
+        local cam_rot = go.get_world_rotation()
+        local cam_dir = vmath.rotate(cam_rot, vmath.vector3(0, 0, -1))
+        local spawn_pos = cam_pos + cam_dir * 1.5
+
+        local bomb_id = factory.create(self.bomb_factory, spawn_pos, vmath.quat())
+        msg.post(bomb_id, "set_velocity", { velocity = cam_dir * 12.5 + vmath.vector3(0, 0.75, 0) + self.velocity })
     elseif action_id == H_TOGGLE_AO and action.released then
         msg.post("/root#main", "toggle_ao")
         print("AO Toggle Request Sent")
+    end
+end
+
+function on_message(self, message_id, message, sender)
+    if message_id == hash("explosion") then
+        local dist = vmath.length(go.get_world_position() - message.position)
+        local max_dist = 12.0
+        if dist < max_dist then
+            -- Linear intensity falloff based on distance
+            local intensity_factor = 1.0 - (dist / max_dist)
+
+            self.shake_intensity = 5.0 * intensity_factor * message.force
+            self.shake_duration = 0.35 * intensity_factor
+        end
     end
 end

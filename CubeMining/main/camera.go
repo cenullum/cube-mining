@@ -6,6 +6,11 @@ components {
     value: "/camera#mouse_factory"
     type: PROPERTY_TYPE_URL
   }
+  properties {
+    id: "bomb_factory"
+    value: "/camera#bomb_factory"
+    type: PROPERTY_TYPE_URL
+  }
 }
 components {
   id: "voxelizer"
@@ -41,5 +46,11 @@ embedded_components {
   id: "mouse_factory"
   type: "factory"
   data: "prototype: \"/main/entity/mouse.go\"\n"
+  ""
+}
+embedded_components {
+  id: "bomb_factory"
+  type: "factory"
+  data: "prototype: \"/main/entity/bomb.go\"\n"
   ""
 }

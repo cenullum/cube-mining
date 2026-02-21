@@ -479,6 +479,69 @@ function on_message(self, message_id, message, sender)
                 end
             end
         end
+    elseif message_id == hash("set_blocks_area") then
+        local center_gx, center_gy, center_gz = message.gx, message.gy, message.gz
+        local radius = message.radius or 1
+        local target_id = message.block_id or 0
+        local modified = false
+
+        if center_gx and center_gy and center_gz and self.grid_size then
+            for gx = center_gx - radius, center_gx + radius do
+                for gy = center_gy - radius, center_gy + radius do
+                    for gz = center_gz - radius, center_gz + radius do
+                        -- Bound checking within grid and above unbreakable layer
+                        if gx >= 0 and gx < self.grid_size and
+                            gy > 0 and gy < self.grid_size and
+                            gz >= 0 and gz < self.grid_size then
+                            local current_id = world.get_block(gx, gy, gz)
+                            if current_id ~= target_id and current_id ~= 2 then -- Don't break unbreakable (2)
+                                world.set_block(gx, gy, gz, target_id)
+
+                                local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
+                                if target_id == 0 then
+                                    if current_id ~= 0 then self.total_cubes = (self.total_cubes or 1) - 1 end
+                                    if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = false end
+                                else
+                                    if current_id == 0 then self.total_cubes = (self.total_cubes or 0) + 1 end
+                                    if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = true end
+                                end
+                                modified = true
+                            end
+                        end
+                    end
+                end
+            end
+            if modified then update_mesh(self) end
+        end
+    elseif message_id == hash("set_blocks_list") then
+        local blocks = message.blocks
+        local modified = false
+        if blocks and self.grid_size then
+            for _, b in ipairs(blocks) do
+                local gx, gy, gz, target_id = b.gx, b.gy, b.gz, b.id or 0
+                if gx and gy and gz then
+                    if gx >= 0 and gx < self.grid_size and
+                        gy > 0 and gy < self.grid_size and
+                        gz >= 0 and gz < self.grid_size then
+                        local current_id = world.get_block(gx, gy, gz)
+                        if current_id ~= target_id and current_id ~= 2 then
+                            world.set_block(gx, gy, gz, target_id)
+
+                            local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
+                            if target_id == 0 then
+                                if current_id ~= 0 then self.total_cubes = (self.total_cubes or 1) - 1 end
+                                if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = false end
+                            else
+                                if current_id == 0 then self.total_cubes = (self.total_cubes or 0) + 1 end
+                                if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = true end
+                            end
+                            modified = true
+                        end
+                    end
+                end
+            end
+            if modified then update_mesh(self) end
+        end
     elseif message_id == H_TOGGLE_AO or message_id == hash("toggle_ao") then
         self.ao_enabled = not self.ao_enabled
         update_mesh(self)

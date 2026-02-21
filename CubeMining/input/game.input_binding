@@ -70,3 +70,7 @@ key_trigger {
   input: KEY_K
   action: "toggle_ao"
 }
+key_trigger {
+  input: KEY_E
+  action: "throw_bomb"
+}
