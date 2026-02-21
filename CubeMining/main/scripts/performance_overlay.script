@@ -61,7 +61,7 @@ end
 
 function init(self)
     msg.post(".", H_ACQUIRE_INPUT_FOCUS)
-    self.mode = 0 -- 0: Off, 1: Text, 2: Text + Graph
+    self.mode = 0 -- 0: Off, 1: Text, 2: Text + Graph + Edges
     _G.performance_mode = 0
 
     -- FPS Metrics (defold-metrics style)
@@ -103,10 +103,12 @@ function init(self)
         "Right Click: Place",
         "M: Switch Metrics",
         "Q: Switch Item",
-        "T: Spawn mouse",
-        "Y: Spawn mouse rapidly",
+        "T: Spawn Mouse",
+        "U: Spawn Torch",
+        "Y: Spawn Mouse Rapidly",
         "P: Toggle Noclip",
-        "K: Toggle AO"
+        "K: Toggle AO",
+        "L: Toggle Lighting"
     }
 
     -- Cache window size for optimization
@@ -133,6 +135,20 @@ function update(self, dt)
             color = self.color_green
         })
     end
+
+    -- Always show AO and Lighting status at the top center
+    local ao_str = (_G.ao_enabled ~= false) and "ON" or "OFF"
+    local light_modes = { [0] = "FLAT", [1] = "SMOOTH", [2] = "OFF" }
+    local light_str = light_modes[_G.light_mode or 0] or "FLAT"
+    local status_text = "Ambient Occlusion: " .. ao_str .. "   Lighting: " .. light_str
+
+    self.vec_offset.x = self.width / 2 - 150
+    self.vec_offset.y = self.height - 20
+    msg.post("@render:", H_DRAW_DEBUG_TEXT, {
+        text = status_text,
+        position = self.vec_offset,
+        color = self.color_green
+    })
 
     if self.mode == 0 then return end
 
@@ -281,6 +297,28 @@ function update(self, dt)
                 self.height, aspect),
             color = self.color_target
         })
+
+        -- Draw Terrain Wireframe Edges (color per face direction)
+        local edges = _G.cached_mesh_edges
+        if edges then
+            -- d=1: +Z (cyan), d=2: -Z (blue), d=3: +Y (green), d=4: -Y (yellow), d=5: +X (red), d=6: -X (magenta)
+            local dir_colors = {
+                vmath.vector4(0, 1, 1, 1),     -- +Z cyan
+                vmath.vector4(0.3, 0.3, 1, 1), -- -Z blue
+                vmath.vector4(0, 1, 0, 1),     -- +Y green
+                vmath.vector4(1, 1, 0, 1),     -- -Y yellow
+                vmath.vector4(1, 0.2, 0.2, 1), -- +X red
+                vmath.vector4(1, 0, 1, 1)      -- -X magenta
+            }
+            for i = 1, #edges do
+                local e = edges[i]
+                msg.post("@render:", H_DRAW_LINE, {
+                    start_point = e.start_point,
+                    end_point = e.end_point,
+                    color = dir_colors[e.d] or self.color_green
+                })
+            end
+        end
     end
 end
 
@@ -288,7 +326,7 @@ function on_input(self, action_id, action)
     if action_id == H_TOGGLE_PERFORMANCE and action.pressed then
         self.mode = (self.mode + 1) % 3
         _G.performance_mode = self.mode
-        local modes = { "Off", "Text", "Text + Graph" }
+        local modes = { "Off", "Text", "Text + Graph + Edges" }
         print("Performance overlay mode: " .. modes[self.mode + 1])
     end
 end

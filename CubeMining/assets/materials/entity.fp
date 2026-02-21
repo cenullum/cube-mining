@@ -17,10 +17,11 @@ uniform fs_uniforms
 
 void main()
 {
-    vec4 color = texture(tex0, var_texcoord0) * tint;
+    vec4 color = texture(tex0, var_texcoord0);
     if (color.a < 0.1) discard;
     
-    vec3 final_rgb = color.rgb * var_light;
+    // var_light contains diffuse directional light. tint contains block ambient light.
+    vec3 final_rgb = color.rgb * var_light * tint.xyz;
     
     float dist = length(var_view_pos);
     float fog_factor = clamp((fog_params.y - dist) / (fog_params.y - fog_params.x), 0.0, 1.0);

@@ -1,5 +1,6 @@
 -- npc.lua
 local physics = require "main.scripts.physics"
+local world = require "main.scripts.world"
 
 local vmath = vmath
 local msg = msg
@@ -162,6 +163,46 @@ function M.update(self, dt)
 
     self.velocity = new_vel
     go.set_position(new_pos)
+
+    -- Per-NPC block light sampling
+    local grid_size = _G.grid_size or 16
+    local grid_offset = -grid_size / 2 + 0.5
+    local npc_gx = math.floor(new_pos.x - grid_offset + 0.5)
+    local npc_gy = math.floor(new_pos.y - grid_offset + 0.5)
+    local npc_gz = math.floor(new_pos.z - 490 + 0.5)
+
+    -- 1. Check if we even need to recalculate (block changed or mode changed)
+    if npc_gx ~= self.last_npc_gx or npc_gy ~= self.last_npc_gy or npc_gz ~= self.last_npc_gz or _G.light_mode ~= self.last_light_mode then
+        self.last_npc_gx, self.last_npc_gy, self.last_npc_gz = npc_gx, npc_gy, npc_gz
+        self.last_light_mode = _G.light_mode
+
+        local npc_tint
+        if _G.light_mode == 2 then
+            npc_tint = vmath.vector4(1, 1, 1, 1)
+        else
+            local sun_l, source_l = world.get_lights(npc_gx, npc_gy, npc_gz)
+            local sun_f = sun_l / 15.0
+            local source_f = (source_l / 15.0) * 1.5
+            npc_tint = vmath.vector4(
+                math.max(0.02, sun_f + source_f * 1.0),
+                math.max(0.02, sun_f + source_f * 0.9),
+                math.max(0.02, sun_f + source_f * 0.6),
+                1.0
+            )
+        end
+
+        -- Only update shader if tint actually changed
+        if npc_tint ~= self.last_tint then
+            self.last_tint = npc_tint
+            pcall(function() go.set("#model", "tint", npc_tint) end)
+        end
+    end
+
+    -- 2. Fog color caching
+    if _G.fog_color and _G.fog_color ~= self.last_fog_color then
+        self.last_fog_color = _G.fog_color
+        pcall(function() go.set("#model", "fog_color", _G.fog_color) end)
+    end
 
     -- Debug Drawing
     if _G.performance_mode == 2 then

@@ -192,6 +192,7 @@ function build_voxel_mesh(self, item_index)
     if not self.held_mesh_url then
         local h_id = factory.create(self.mesh_prefab); self.held_mesh_url = msg.url(h_id); self.held_mesh_url.fragment =
             H_MESH
+        _G.voxelizer_mesh_url = self.held_mesh_url
         go.set(self.held_mesh_url, H_TEXTURE0, hash(meta.texture))
         go.set_position(vmath.vector3(0.4, -0.08, -0.8), h_id)
 

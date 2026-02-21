@@ -67,7 +67,8 @@ function M.init(atlas_res_id)
 
     for id, def in pairs(blocks.definitions) do
         if def.transparent then
-            block_cache[id] = { transparent = true, name = def.name, solid = false }
+            block_cache[id] = { transparent = true, name = def.name, solid = false, light_level = def.light_level or 0, light_color =
+            def.light_color }
         else
             local faces = def.faces
             local uv_map = {}
@@ -108,7 +109,9 @@ function M.init(atlas_res_id)
                 name = def.name,
                 uvs = uv_map,
                 transparent = false,
-                solid = is_solid
+                solid = is_solid,
+                light_level = def.light_level or 0,
+                light_color = def.light_color
             }
         end
     end

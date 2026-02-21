@@ -16,6 +16,7 @@ local hash = hash
 go.property("mesh_prefab", msg.url())
 go.property("game_atlas", resource.atlas())
 go.property("grid_size", 16)
+go.property("torch_factory", msg.url())
 
 local H_MESH = hash("mesh")
 local H_POSITION = hash("position")
@@ -27,6 +28,7 @@ local H_PLACE_CUBE = hash("place_cube")
 local H_TEXTURE0 = hash("texture0")
 local H_VERTICES = hash("vertices")
 local H_TOGGLE_AO = hash("toggle_ao")
+local H_TOGGLE_LIGHT_MODE = hash("toggle_light_mode")
 
 local PATCH_BUFFER = "/assets/models/patch_%s.bufferc"
 
@@ -158,6 +160,44 @@ local function calculate_ao(self, x, y, z, face_dir, cache)
     return vals
 end
 
+local function calculate_light_smooth(self, face_dir, p1_x, p1_y, p1_z, p2_x, p2_y, p2_z, p3_x, p3_y, p3_z, p4_x, p4_y,
+                                      p4_z, channel)
+    local vals = { 0, 0, 0, 0 }
+
+    local function get_l(tx, ty, tz)
+        local l = world.get_light(tx, ty, tz, channel)
+        if channel == 1 and not l then return 15 end
+        if channel == 0 and not l then return 0 end
+        return l
+    end
+
+    local function avg_light(x, y, z, dx1, dy1, dz1, dx2, dy2, dz2, dx3, dy3, dz3)
+        -- To smooth light at a vertex, we average the light value of the 4 blocks sharing that vertex that are outside the solid mesh
+        -- Since this is blocky, we simply average the lights
+        local l1 = get_l(x, y, z)
+        local l2 = get_l(x + dx1, y + dy1, z + dz1)
+        local l3 = get_l(x + dx2, y + dy2, z + dz2)
+        local l4 = get_l(x + dx3, y + dy3, z + dz3)
+        return (l1 + l2 + l3 + l4) / 4.0
+    end
+
+    -- We pass the normal of the block face (nx, ny, nz) to know which adjacent blocks to average
+    -- For greedy meshing, P1..P4 are corners. Since greedy meshing can make large faces, smooth lighting
+    -- at the vertices of a large face will NOT BE PERFECT unless we partition it, but we can do a simple average at the 4 extrema points.
+
+    -- NOTE: Due to greedy meshing creating arbitrary sized quads, true per-vertex smooth lighting
+    -- requires writing a custom chunk mesher that interpolates over the whole face, OR
+    -- we disable greedy meshing when smooth lighting is on.
+    -- For now, we take the light of the block directly above the face.
+
+    return {
+        get_l(p1_x, p1_y, p1_z),
+        get_l(p2_x, p2_y, p2_z),
+        get_l(p3_x, p3_y, p3_z),
+        get_l(p4_x, p4_y, p4_z)
+    }
+end
+
 local H_NORMAL = hash("normal")
 
 -- Visibility scan and greedy merge...
@@ -176,11 +216,14 @@ local function update_mesh(self)
     local greedy_faces = 0
     local quad_idx = 0
 
+    local offset = -self.grid_size / 2 + 0.5
+    local mesh_edges = {}
+
     -- Opacity Cache for this frame
     local opaque_cache = {}
 
     local function add_quad(p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z, p4x, p4y, p4z, uv_data, w, h, nx, ny, nz,
-                            ao_vals)
+                            ao_vals, light_vals, face_dir)
         local base = quad_idx * 18
         local uv_base = quad_idx * 12
         local offset_base = quad_idx * 24
@@ -196,38 +239,55 @@ local function update_mesh(self)
         local ao3 = ao_f(ao_vals[3])
         local ao4 = ao_f(ao_vals[4])
 
+        local sun1, sun2, sun3, sun4
+        local source1, source2, source3, source4
+
+        -- If smooth light mode, light_vals contains array of 4 values each
+        if type(light_vals[1]) == "table" then
+            sun1, sun2, sun3, sun4 = light_vals[1][1] / 15.0, light_vals[1][2] / 15.0, light_vals[1][3] / 15.0,
+                light_vals[1][4] / 15.0
+            source1, source2, source3, source4 = light_vals[2][1] / 15.0, light_vals[2][2] / 15.0,
+                light_vals[2][3] / 15.0,
+                light_vals[2][4] / 15.0
+        else
+            sun1, sun2, sun3, sun4 = light_vals[1] / 15.0, light_vals[1] / 15.0, light_vals[1] / 15.0,
+                light_vals[1] / 15.0
+            source1, source2, source3, source4 = light_vals[2] / 15.0, light_vals[2] / 15.0, light_vals[2] / 15.0,
+                light_vals[2] / 15.0
+        end
+
         local uw, uh = uv_data.w, uv_data.h
         local wuh, huh = w * uw, h * uh
 
         -- V1 (P1)
         positions[base + 1] = p1x; positions[base + 2] = p1y; positions[base + 3] = p1z
         texcoord0[uv_base + 1] = 0; texcoord0[uv_base + 2] = huh
-        colors[offset_base + 1] = ao1; colors[offset_base + 2] = ao1; colors[offset_base + 3] = ao1; colors[offset_base + 4] = 1
+        colors[offset_base + 1] = ao1; colors[offset_base + 2] = source1; colors[offset_base + 3] = sun1; colors[offset_base + 4] = 1
 
         -- V2 (P2)
         positions[base + 4] = p2x; positions[base + 5] = p2y; positions[base + 6] = p2z
         texcoord0[uv_base + 3] = wuh; texcoord0[uv_base + 4] = huh
-        colors[offset_base + 5] = ao2; colors[offset_base + 6] = ao2; colors[offset_base + 7] = ao2; colors[offset_base + 8] = 1
+        colors[offset_base + 5] = ao2; colors[offset_base + 6] = source2; colors[offset_base + 7] = sun2; colors[offset_base + 8] = 1
 
         -- V3 (P3)
         positions[base + 7] = p3x; positions[base + 8] = p3y; positions[base + 9] = p3z
         texcoord0[uv_base + 5] = wuh; texcoord0[uv_base + 6] = 0
-        colors[offset_base + 9] = ao3; colors[offset_base + 10] = ao3; colors[offset_base + 11] = ao3; colors[offset_base + 12] = 1
+        colors[offset_base + 9] = ao3; colors[offset_base + 10] = source3; colors[offset_base + 11] = sun3; colors[offset_base + 12] = 1
 
         -- V4 (Same as V1/P1)
         positions[base + 10] = p1x; positions[base + 11] = p1y; positions[base + 12] = p1z
         texcoord0[uv_base + 7] = 0; texcoord0[uv_base + 8] = huh
-        colors[offset_base + 13] = ao1; colors[offset_base + 14] = ao1; colors[offset_base + 15] = ao1; colors[offset_base + 16] = 1
+        colors[offset_base + 13] = ao1; colors[offset_base + 14] = source1; colors[offset_base + 15] = sun1; colors[offset_base + 16] = 1
 
         -- V5 (Same as V3/P3)
         positions[base + 13] = p3x; positions[base + 14] = p3y; positions[base + 15] = p3z
         texcoord0[uv_base + 9] = wuh; texcoord0[uv_base + 10] = 0
-        colors[offset_base + 17] = ao3; colors[offset_base + 18] = ao3; colors[offset_base + 19] = ao3; colors[offset_base + 20] = 1
+        colors[offset_base + 17] = ao3; colors[offset_base + 18] = source3; colors[offset_base + 19] = sun3; colors[offset_base + 20] = 1
 
         -- V6 (P4)
         positions[base + 16] = p4x; positions[base + 17] = p4y; positions[base + 18] = p4z
         texcoord0[uv_base + 11] = 0; texcoord0[uv_base + 12] = 0
-        colors[offset_base + 21] = ao4; colors[offset_base + 22] = ao4; colors[offset_base + 23] = ao4; colors[offset_base + 24] = 1
+        colors[offset_base + 21] = ao4; colors[offset_base + 22] = source4; colors[offset_base + 23] = sun4; colors[offset_base + 24] = 1
 
         -- Normals
         for i = 0, 5 do
@@ -245,6 +305,16 @@ local function update_mesh(self)
             texcoord1[off + 3] = uh
         end
         quad_idx = quad_idx + 1
+
+        -- Build physical world edges for debug rendering (always cache, overlay decides when to draw)
+        local wp1 = vmath.vector3(p1x + offset, p1y + offset, p1z + 490)
+        local wp2 = vmath.vector3(p2x + offset, p2y + offset, p2z + 490)
+        local wp3 = vmath.vector3(p3x + offset, p3y + offset, p3z + 490)
+        local wp4 = vmath.vector3(p4x + offset, p4y + offset, p4z + 490)
+        mesh_edges[#mesh_edges + 1] = { start_point = wp1, end_point = wp2, d = face_dir }
+        mesh_edges[#mesh_edges + 1] = { start_point = wp2, end_point = wp3, d = face_dir }
+        mesh_edges[#mesh_edges + 1] = { start_point = wp3, end_point = wp4, d = face_dir }
+        mesh_edges[#mesh_edges + 1] = { start_point = wp4, end_point = wp1, d = face_dir }
     end
 
     for d = 1, 6 do
@@ -279,9 +349,16 @@ local function update_mesh(self)
                             local ao_vals = calculate_ao(self, x, y, z, d, opaque_cache)
                             local a0, a1, a2, a3 = ao_vals[1], ao_vals[2], ao_vals[3], ao_vals[4]
 
+                            -- Light Encoding
+                            local sun_l, source_l = 15, 0
+                            if self.light_mode == 0 or self.light_mode == 1 then -- Flat / Fake Smooth
+                                sun_l, source_l = world.get_lights(nx, ny, nz)
+                            end
+                            local light_hash = sun_l + source_l * 16
+
                             -- Encode AO into mask.
                             local ao_hash = a0 + a1 * 4 + a2 * 16 + a3 * 64
-                            mask[j * grid_size + k + 1] = b_id + ao_hash * 100000
+                            mask[j * grid_size + k + 1] = b_id + ao_hash * 100000 + light_hash * 100000000
                         end
                     end
                 end
@@ -293,14 +370,22 @@ local function update_mesh(self)
                 for k = 0, grid_size - 1 do
                     local val = mask[row_offset + k + 1]
                     if val then
-                        local b_id = val % 100000
-                        local ao_hash = math.floor(val / 100000)
+                        local lv = val % 100000000
+                        local b_id = lv % 100000
+                        local ao_hash = math.floor(lv / 100000)
+                        local light_hash = math.floor(val / 100000000)
+
+                        local sun_l = light_hash % 16
+                        local source_l = math.floor(light_hash / 16)
+                        local light_vals = { sun_l, source_l }
+
                         local a0 = ao_hash % 4
                         local a1 = math.floor(ao_hash / 4) % 4
                         local a2 = math.floor(ao_hash / 16) % 4
                         local a3 = math.floor(ao_hash / 64)
 
                         local w, h = 1, 1
+
                         while k + w < grid_size and mask[row_offset + k + w + 1] == val do w = w + 1 end
                         local can_expand_h = true
                         while j + h < grid_size do
@@ -318,25 +403,109 @@ local function update_mesh(self)
                         local b_def = block_data.get_block(b_id)
                         local uv_data = b_def and b_def.uvs and b_def.uvs[d]
                         if uv_data then
+                            local s_vals = { sun_l, source_l }
+
+                            if self.light_mode == 1 then
+                                -- SMOOTH LIGHTING calculations for the 4 corners (P1, P2, P3, P4)
+                                -- Calculate exact averaged corner lighting here (since greedy is disabled)
+                                local cx, cy, cz = 0, 0, 0
+                                if d == 1 then
+                                    cx, cy, cz = k, j, i + 1
+                                elseif d == 2 then
+                                    cx, cy, cz = k, j, i - 1
+                                elseif d == 3 then
+                                    cx, cy, cz = k, i + 1, j
+                                elseif d == 4 then
+                                    cx, cy, cz = k, i - 1, j
+                                elseif d == 5 then
+                                    cx, cy, cz = i + 1, k, j
+                                elseif d == 6 then
+                                    cx, cy, cz = i - 1, k, j
+                                end
+
+                                local function get_smooth_l(px, py, pz, dx1, dy1, dz1, dx2, dy2, dz2, dx3, dy3, dz3)
+                                    local l1_sun, l1_source = world.get_lights(px, py, pz)
+                                    local l2_sun, l2_source = world.get_lights(px + dx1, py + dy1, pz + dz1)
+                                    local l3_sun, l3_source = world.get_lights(px + dx2, py + dy2, pz + dz2)
+                                    local l4_sun, l4_source = world.get_lights(px + dx3, py + dy3, pz + dz3)
+                                    return (l1_sun + l2_sun + l3_sun + l4_sun) / 4.0,
+                                        (l1_source + l2_source + l3_source + l4_source) / 4.0
+                                end
+
+                                local s_sun, s_source = { 0, 0, 0, 0 }, { 0, 0, 0, 0 }
+
+                                -- To support greedy meshing corners, we use w and h dynamically to grab the far edges
+                                if d == 1 then
+                                    s_sun[1], s_source[1] = get_smooth_l(cx, cy, cz, 0, -1, 0, -1, 0, 0, -1, -1, 0)
+                                    s_sun[2], s_source[2] = get_smooth_l(cx + w - 1, cy, cz, 1, 0, 0, 0, -1, 0, 1, -1, 0)
+                                    s_sun[3], s_source[3] = get_smooth_l(cx + w - 1, cy + h - 1, cz, 1, 0, 0, 0, 1, 0, 1,
+                                        1,
+                                        0)
+                                    s_sun[4], s_source[4] = get_smooth_l(cx, cy + h - 1, cz, -1, 0, 0, 0, 1, 0, -1, 1, 0)
+                                elseif d == 2 then
+                                    s_sun[1], s_source[1] = get_smooth_l(cx + w - 1, cy, cz, 1, 0, 0, 0, -1, 0, 1, -1, 0)
+                                    s_sun[2], s_source[2] = get_smooth_l(cx, cy, cz, -1, 0, 0, 0, -1, 0, -1, -1, 0)
+                                    s_sun[3], s_source[3] = get_smooth_l(cx, cy + h - 1, cz, -1, 0, 0, 0, 1, 0, -1, 1, 0)
+                                    s_sun[4], s_source[4] = get_smooth_l(cx + w - 1, cy + h - 1, cz, 1, 0, 0, 0, 1, 0, 1,
+                                        1,
+                                        0)
+                                elseif d == 3 then
+                                    s_sun[1], s_source[1] = get_smooth_l(cx, cy, cz + h - 1, -1, 0, 0, 0, 0, 1, -1, 0, 1)
+                                    s_sun[2], s_source[2] = get_smooth_l(cx + w - 1, cy, cz + h - 1, 1, 0, 0, 0, 0, 1, 1,
+                                        0,
+                                        1)
+                                    s_sun[3], s_source[3] = get_smooth_l(cx + w - 1, cy, cz, 1, 0, 0, 0, 0, -1, 1, 0, -1)
+                                    s_sun[4], s_source[4] = get_smooth_l(cx, cy, cz, -1, 0, 0, 0, 0, -1, -1, 0, -1)
+                                elseif d == 4 then
+                                    s_sun[1], s_source[1] = get_smooth_l(cx, cy, cz, -1, 0, 0, 0, 0, -1, -1, 0, -1)
+                                    s_sun[2], s_source[2] = get_smooth_l(cx + w - 1, cy, cz, 1, 0, 0, 0, 0, -1, 1, 0, -1)
+                                    s_sun[3], s_source[3] = get_smooth_l(cx + w - 1, cy, cz + h - 1, 1, 0, 0, 0, 0, 1, 1,
+                                        0,
+                                        1)
+                                    s_sun[4], s_source[4] = get_smooth_l(cx, cy, cz + h - 1, -1, 0, 0, 0, 0, 1, -1, 0, 1)
+                                elseif d == 5 then
+                                    s_sun[1], s_source[1] = get_smooth_l(cx, cy, cz, 0, -1, 0, 0, 0, -1, 0, -1, -1)
+                                    s_sun[2], s_source[2] = get_smooth_l(cx, cy + w - 1, cz, 0, 1, 0, 0, 0, -1, 0, 1, -1)
+                                    s_sun[3], s_source[3] = get_smooth_l(cx, cy + w - 1, cz + h - 1, 0, 1, 0, 0, 0, 1, 0,
+                                        1,
+                                        1)
+                                    s_sun[4], s_source[4] = get_smooth_l(cx, cy, cz + h - 1, 0, -1, 0, 0, 0, 1, 0, -1, 1)
+                                elseif d == 6 then
+                                    s_sun[1], s_source[1] = get_smooth_l(cx, cy + w - 1, cz, 0, 1, 0, 0, 0, -1, 0, 1, -1)
+                                    s_sun[2], s_source[2] = get_smooth_l(cx, cy, cz, 0, -1, 0, 0, 0, -1, 0, -1, -1)
+                                    s_sun[3], s_source[3] = get_smooth_l(cx, cy, cz + h - 1, 0, -1, 0, 0, 0, 1, 0, -1, 1)
+                                    s_sun[4], s_source[4] = get_smooth_l(cx, cy + w - 1, cz + h - 1, 0, 1, 0, 0, 0, 1, 0,
+                                        1,
+                                        1)
+                                end
+                                s_vals = { s_sun, s_source }
+                            end
+
                             if d == 1 then
                                 -- P1, P2, P3, P4 matches calc_aoD1
                                 add_quad(k - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j + h -
-                                    0.5, i + 0.5, k - 0.5, j + h - 0.5, i + 0.5, uv_data, w, h, 0, 0, 1, ao_vals)
+                                    0.5, i + 0.5, k - 0.5, j + h - 0.5, i + 0.5, uv_data, w, h, 0, 0, 1, ao_vals,
+                                    s_vals, d)
                             elseif d == 2 then
                                 add_quad(k + w - 0.5, j - 0.5, i - 0.5, k - 0.5, j - 0.5, i - 0.5, k - 0.5, j + h - 0.5,
-                                    i - 0.5, k + w - 0.5, j + h - 0.5, i - 0.5, uv_data, w, h, 0, 0, -1, ao_vals)
+                                    i - 0.5, k + w - 0.5, j + h - 0.5, i - 0.5, uv_data, w, h, 0, 0, -1, ao_vals,
+                                    s_vals, d)
                             elseif d == 3 then
                                 add_quad(k - 0.5, i + 0.5, j + h - 0.5, k + w - 0.5, i + 0.5, j + h - 0.5, k + w - 0.5,
-                                    i + 0.5, j - 0.5, k - 0.5, i + 0.5, j - 0.5, uv_data, w, h, 0, 1, 0, ao_vals)
+                                    i + 0.5, j - 0.5, k - 0.5, i + 0.5, j - 0.5, uv_data, w, h, 0, 1, 0, ao_vals,
+                                    s_vals, d)
                             elseif d == 4 then
                                 add_quad(k - 0.5, i - 0.5, j - 0.5, k + w - 0.5, i - 0.5, j - 0.5, k + w - 0.5, i - 0.5,
-                                    j + h - 0.5, k - 0.5, i - 0.5, j + h - 0.5, uv_data, w, h, 0, -1, 0, ao_vals)
+                                    j + h - 0.5, k - 0.5, i - 0.5, j + h - 0.5, uv_data, w, h, 0, -1, 0, ao_vals,
+                                    s_vals, d)
                             elseif d == 5 then
                                 add_quad(i + 0.5, k - 0.5, j - 0.5, i + 0.5, k + w - 0.5, j - 0.5, i + 0.5, k + w - 0.5,
-                                    j + h - 0.5, i + 0.5, k - 0.5, j + h - 0.5, uv_data, w, h, 1, 0, 0, ao_vals)
+                                    j + h - 0.5, i + 0.5, k - 0.5, j + h - 0.5, uv_data, w, h, 1, 0, 0, ao_vals,
+                                    s_vals, d)
                             elseif d == 6 then
                                 add_quad(i - 0.5, k + w - 0.5, j - 0.5, i - 0.5, k - 0.5, j - 0.5, i - 0.5, k - 0.5,
-                                    j + h - 0.5, i - 0.5, k + w - 0.5, j + h - 0.5, uv_data, w, h, -1, 0, 0, ao_vals)
+                                    j + h - 0.5, i - 0.5, k + w - 0.5, j + h - 0.5, uv_data, w, h, -1, 0, 0, ao_vals,
+                                    s_vals, d)
                             end
                             greedy_faces = greedy_faces + 1
                         end
@@ -361,6 +530,10 @@ local function update_mesh(self)
     _G.stats_vertices = quad_idx * 4
     resource.set_buffer(self.buffer_resource, self.buf)
     go.set(self.mesh_url, H_VERTICES, self.buffer_resource)
+
+    -- Cache edges globally for the performance overlay to read directly
+    _G.cached_mesh_edges = mesh_edges
+
     _G.stats_mesh_build_time = (os.clock() - start_time) * 1000
 end
 
@@ -410,6 +583,7 @@ local function create_chunk(self)
     end
 
     self.mesh_url = mesh_go.mesh_url
+    _G.terrain_mesh_url = mesh_go.mesh_url
     self.buffer_resource = resource.create_buffer(string.format(PATCH_BUFFER, 7), { buffer = buf })
 
     update_mesh(self)
@@ -422,6 +596,10 @@ function init(self)
     local grid_size = self.grid_size
 
     self.ao_enabled = true -- Default On
+    self.light_mode = 0    -- 0: Flat, 1: Smooth, 2: Off
+    _G.ao_enabled = true
+    _G.light_mode = 0
+    self.block_entities = {} -- Generic map: "gx_gy_gz" -> go_id (torches, etc.)
 
     -- Initialize global world
     world.init(grid_size)
@@ -460,21 +638,40 @@ function on_message(self, message_id, message, sender)
             local b_id = world.get_block(gx, gy, gz)
             if b_id ~= 0 and b_id ~= 2 then -- Not air and not unbreakable
                 world.set_block(gx, gy, gz, 0)
+
+                -- Remove any attached entity (torch, etc.)
+                local e_key = gx .. "_" .. gy .. "_" .. gz
+                if self.block_entities[e_key] then
+                    go.delete(self.block_entities[e_key])
+                    self.block_entities[e_key] = nil
+                end
+
                 self.total_cubes = (self.total_cubes or 1) - 1
                 local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
                 if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = false end
+                world.recalculate_lighting()
                 update_mesh(self)
             end
         end
     elseif message_id == H_PLACE_CUBE then
         local gx, gy, gz = message.gx, message.gy, message.gz
+        local target_id = message.block_id or 1
         if gx and gy and gz and self.grid_size then
             if gx >= 0 and gx < self.grid_size and gy >= 0 and gy < self.grid_size and gz >= 0 and gz < self.grid_size then
                 if world.get_block(gx, gy, gz) == 0 then
-                    world.set_block(gx, gy, gz, 1)
+                    world.set_block(gx, gy, gz, target_id)
+
+                    if target_id == 4 and self.torch_factory then
+                        local offset = -self.grid_size / 2 + 0.5
+                        local pos = vmath.vector3(offset + gx, offset + gy, 490 + gz)
+                        local t_id = factory.create(self.torch_factory, pos)
+                        self.block_entities[gx .. "_" .. gy .. "_" .. gz] = t_id
+                    end
+
                     self.total_cubes = (self.total_cubes or 0) + 1
                     local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
                     if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = true end
+                    world.recalculate_lighting()
                     update_mesh(self)
                 end
             end
@@ -501,6 +698,13 @@ function on_message(self, message_id, message, sender)
                                 if target_id == 0 then
                                     if current_id ~= 0 then self.total_cubes = (self.total_cubes or 1) - 1 end
                                     if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = false end
+                                    -- Remove any attached entity at this position
+                                    local e_key = gx .. "_" .. gy .. "_" .. gz
+                                    if self.block_entities[e_key] then
+                                        print("Deleting entity at " .. e_key)
+                                        pcall(go.delete, self.block_entities[e_key])
+                                        self.block_entities[e_key] = nil
+                                    end
                                 else
                                     if current_id == 0 then self.total_cubes = (self.total_cubes or 0) + 1 end
                                     if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = true end
@@ -511,7 +715,10 @@ function on_message(self, message_id, message, sender)
                     end
                 end
             end
-            if modified then update_mesh(self) end
+            if modified then
+                world.recalculate_lighting()
+                update_mesh(self)
+            end
         end
     elseif message_id == hash("set_blocks_list") then
         local blocks = message.blocks
@@ -531,6 +738,12 @@ function on_message(self, message_id, message, sender)
                             if target_id == 0 then
                                 if current_id ~= 0 then self.total_cubes = (self.total_cubes or 1) - 1 end
                                 if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = false end
+                                -- Remove any attached entity at this position
+                                local e_key = gx .. "_" .. gy .. "_" .. gz
+                                if self.block_entities[e_key] then
+                                    go.delete(self.block_entities[e_key])
+                                    self.block_entities[e_key] = nil
+                                end
                             else
                                 if current_id == 0 then self.total_cubes = (self.total_cubes or 0) + 1 end
                                 if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = true end
@@ -540,12 +753,22 @@ function on_message(self, message_id, message, sender)
                     end
                 end
             end
-            if modified then update_mesh(self) end
+            if modified then
+                world.recalculate_lighting()
+                update_mesh(self)
+            end
         end
-    elseif message_id == H_TOGGLE_AO or message_id == hash("toggle_ao") then
+    elseif message_id == H_TOGGLE_AO then
         self.ao_enabled = not self.ao_enabled
+        _G.ao_enabled = self.ao_enabled
         update_mesh(self)
         print("AO Enabled: " .. tostring(self.ao_enabled))
+    elseif message_id == H_TOGGLE_LIGHT_MODE then
+        self.light_mode = (self.light_mode + 1) % 3
+        _G.light_mode = self.light_mode
+        update_mesh(self)
+        local modes = { "Flat", "Smooth", "Off" }
+        print("Lighting Mode: " .. modes[self.light_mode + 1])
     end
 end
 

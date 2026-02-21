@@ -18,6 +18,11 @@ function init(self)
 
     self.timer = 3.0
     self.pulse_phase = 0
+
+    -- Grab ambient light from player so we don't glow in the dark
+    if _G.player_ambient_light then
+        pcall(function() go.set("#model", "tint", _G.player_ambient_light) end)
+    end
 end
 
 function update(self, dt)

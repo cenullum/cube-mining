@@ -23,12 +23,12 @@ void main()
     // Linear sub-region sampling: maps 0..1 quad coordinates to the atlas region.
     // This avoids "bleeding" or "wrapping" artifacts from neighboring atlas tiles.
     vec2 atlas_uv = var_texcoord0 * var_atlas_metadata.zw + var_atlas_metadata.xy;
-    vec4 color = texture(texture0, atlas_uv) * tint;
+    vec4 color = texture(texture0, atlas_uv);
     
     // Hard discard for pixel art transparency
     if (color.a < 0.1) discard;
     
-    vec3 final_rgb = color.rgb * var_light;
+    vec3 final_rgb = color.rgb * var_light * tint.xyz;
     
     float dist = length(var_view_pos);
     float fog_factor = clamp((fog_params.y - dist) / (fog_params.y - fog_params.x), 0.0, 1.0);

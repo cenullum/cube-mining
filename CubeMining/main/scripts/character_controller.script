@@ -9,6 +9,7 @@ local window = window
 local factory = factory
 local hash = hash
 local math = math
+local world = require "main.scripts.world"
 
 -- Pre-hashed strings for optimization
 local H_CAMERA = hash("camera")
@@ -29,7 +30,9 @@ local H_DRAW_LINE = hash("draw_line")
 local H_EULER = hash("euler")
 local H_SET_PERFORMANCE_MODE = hash("set_performance_mode")
 local H_SPAWN_MOUSE = hash("spawn_mouse")
+local H_SPAWN_TORCH = hash("spawn_torch")
 local H_SPAWN_FAST = hash("spawn_fast")
+local H_TOGGLE_LIGHT_MODE = hash("toggle_light_mode")
 local H_TOGGLE_AO = hash("toggle_ao")
 
 go.property("speed", 5)
@@ -380,6 +383,71 @@ function update(self, dt)
             })
     end
 
+    -- Update Hand Item Light
+    local eye_pos = go.get_position()
+    local grid_size = _G.grid_size or 16
+    local offset = -grid_size / 2 + 0.5
+    local px = math.floor(eye_pos.x - offset + 0.5)
+    local py = math.floor(eye_pos.y - offset + 0.5)
+    local pz = math.floor(eye_pos.z - 490 + 0.5)
+
+    -- 1. Lighting calculation with caching
+    if px ~= self.last_px or py ~= self.last_py or pz ~= self.last_pz then
+        self.last_px, self.last_py, self.last_pz = px, py, pz
+
+        local sun_l, source_l = world.get_lights(px, py, pz)
+        local sun_f = sun_l / 15.0
+        local source_f = (source_l / 15.0) * 1.5
+
+        local ambient_light = vmath.vector4(
+            math.max(0.02, sun_f + source_f * 1.0),
+            math.max(0.02, sun_f + source_f * 0.9),
+            math.max(0.02, sun_f + source_f * 0.6),
+            1.0
+        )
+        _G.player_ambient_light = ambient_light
+
+        -- Only update shader if ambient light actually changed
+        if ambient_light ~= self.last_ambient_light then
+            self.last_ambient_light = ambient_light
+            if _G.voxelizer_mesh_url then
+                pcall(function() go.set(_G.voxelizer_mesh_url, "tint", ambient_light) end)
+            end
+        end
+    end
+
+    -- Depth-based fog and clear color
+    -- Surface is at grid top (grid_size-1 in grid coords).
+    -- Player Y in grid coords: py (already calculated above)
+    -- At surface (py >= grid_size-1): full sky blue
+    -- 5 blocks below surface: full black
+    local surface_y = grid_size - 1
+    -- Calculate vertical position in grid units using the precise world Y
+    local player_grid_y = (eye_pos.y - offset)
+    local depth_below_surface = surface_y - player_grid_y
+    local depth_factor = math.max(0, math.min(1, depth_below_surface / 5.0))
+
+    -- Sky blue color
+    local sky_r, sky_g, sky_b = 0.67, 0.79, 0.98
+    local fog_r = sky_r * (1.0 - depth_factor)
+    local fog_g = sky_g * (1.0 - depth_factor)
+    local fog_b = sky_b * (1.0 - depth_factor)
+
+    msg.post("@render:", "clear_color", { color = vmath.vector4(fog_r, fog_g, fog_b, 1.0) })
+
+    -- Update fog color on entity and voxelizer materials
+    local fog_vec = vmath.vector4(fog_r, fog_g, fog_b, 1.0)
+    _G.fog_color = fog_vec
+    if fog_vec ~= self.last_fog_vec then
+        self.last_fog_vec = fog_vec
+        if _G.voxelizer_mesh_url then
+            pcall(function() go.set(_G.voxelizer_mesh_url, "fog_color", fog_vec) end)
+        end
+        if _G.terrain_mesh_url then
+            pcall(function() go.set(_G.terrain_mesh_url, "fog_color", fog_vec) end)
+        end
+    end
+
     update_camera(self)
 end
 
@@ -430,24 +498,39 @@ function on_input(self, action_id, action)
             print("Switched to FREE CAM mode")
         end
     elseif action_id == H_SPAWN_MOUSE and action.released then
-        -- Spawn mouse at looked-at block
+        -- Spawn one mouse at looked-at block surface
         local cam_pos = go.get_world_position()
         local cam_rot = go.get_world_rotation()
         local cam_dir = vmath.rotate(cam_rot, vmath.vector3(0, 0, -1))
 
         local target, gx, gy, gz, normal = get_targeted_cube(cam_pos, cam_dir, 100)
         if target then
-            -- Position in the center of the air block adjacent to the clicked face
-            -- Using grid logic to ensure perfect alignment
             local grid_size = _G.grid_size or 5
             local offset = -grid_size / 2 + 0.5
             local spawn_gx = gx + normal.x
             local spawn_gy = gy + normal.y
             local spawn_gz = gz + normal.z
-
             local spawn_pos = vmath.vector3(offset + spawn_gx, offset + spawn_gy, 490 + spawn_gz)
             factory.create(self.mouse_factory, spawn_pos, vmath.quat())
         end
+    elseif action_id == H_SPAWN_TORCH and action.released then
+        -- Spawn torch at looked-at block surface
+        local cam_pos = go.get_world_position()
+        local cam_rot = go.get_world_rotation()
+        local cam_dir = vmath.rotate(cam_rot, vmath.vector3(0, 0, -1))
+
+        local target, gx, gy, gz, normal = get_targeted_cube(cam_pos, cam_dir, 100)
+        if target then
+            local spawn_gx = gx + normal.x
+            local spawn_gy = gy + normal.y
+            local spawn_gz = gz + normal.z
+
+            -- Send message to generation script to place the torch (block_id = 4)
+            msg.post("/root#main", "place_cube", { gx = spawn_gx, gy = spawn_gy, gz = spawn_gz, block_id = 4 })
+        end
+    elseif action_id == H_TOGGLE_LIGHT_MODE and action.released then
+        msg.post("/root#main", "toggle_light_mode")
+        print("Light Mode Toggle Request Sent")
     elseif action_id == H_SPAWN_FAST then
         if action.pressed then
             self.spawn_fast = true

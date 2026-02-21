@@ -2,6 +2,7 @@
 -- Centralized block definitions.
 -- format: [ID] = { name, faces = { top, bottom, side } } or { name, faces = { all } }
 
+local vmath = vmath
 local M = {}
 
 M.definitions = {
@@ -30,6 +31,12 @@ M.definitions = {
             bottom = "golden_top",
             side = "golden_side"
         }
+    },
+    [4] = {
+        name = "torch",
+        transparent = true,
+        light_level = 15,
+        light_color = vmath.vector3(1.0, 0.9, 0.6)
     }
 }
 

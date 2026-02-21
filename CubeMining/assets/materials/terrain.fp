@@ -3,8 +3,10 @@
 // --- Inputs from Vertex Shader ---
 in mediump vec2 var_texcoord0;     // Tiling coordinate (scaled by quad size)
 in mediump vec4 var_atlas_metadata; // Atlas bounds
-in mediump float var_light;        // Lighting factor
+in mediump float var_light;        // Directional Lighting factor
 in mediump float var_ao;           // Ambient Occlusion factor
+in mediump float var_torch_light;
+in mediump float var_sun_light;
 in mediump vec3 var_view_pos;       // View-space position
 
 // --- Fragment Output ---
@@ -36,8 +38,17 @@ void main()
     // Sample texture with the calculated atlas UV
     vec4 color = texture(texture0, atlas_uv) * tint_pm;
     
-    // Combine lighting: Diffuse/Ambient + AO
-    color.rgb *= var_light * var_ao;
+    // Light calculation
+    // Torch color is yellowish: vmath.vector3(1.0, 0.9, 0.6)
+    vec3 torch_color = vec3(1.0, 0.9, 0.6) * var_torch_light * 1.5; // Slightly boosted
+    
+    // Sun color is slightly warm white, affected by directional light `var_light`
+    vec3 sun_color = vec3(1.0, 1.0, 1.0) * var_sun_light * var_light;
+    
+    // Combine lighting: (Sun + Torch) * AO
+    // max prevents going completely black, though sun_light/torch_light handle darkness.
+    vec3 final_light = max(vec3(0.02), sun_color + torch_color) * var_ao;
+    color.rgb *= final_light;
 
     // Apply Fog (Per-fragment)
     float dist = length(var_view_pos);
