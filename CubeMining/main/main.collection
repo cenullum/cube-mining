@@ -25,6 +25,10 @@ instances {
   id: "cursor"
   prototype: "/main/cursor.go"
 }
+instances {
+  id: "sounds"
+  prototype: "/main/sounds.go"
+}
 scale_along_z: 1
 embedded_instances {
   id: "root"

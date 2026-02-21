@@ -1,4 +1,5 @@
 local physics = require "main.scripts.physics"
+local sm = require "main.scripts.sound_manager"
 
 local vmath = vmath
 local msg = msg
@@ -46,6 +47,7 @@ function update(self, dt)
         })
 
         msg.post("/camera#camera_script", "explosion", { position = pos, force = radius / 3.0 })
+        sm.play(sm.HASHES.bomb, 1.0, pos)
 
         go.delete()
         return

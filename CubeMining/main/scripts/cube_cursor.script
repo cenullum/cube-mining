@@ -4,6 +4,9 @@ local go = go
 local resource = resource
 local buffer = buffer
 local hash = hash
+local sm = require "main.scripts.sound_manager"
+local block_data = require "main.scripts.block_data"
+local world = require "main.scripts.world"
 
 local H_POSITION = hash("position")
 local H_ACQUIRE_INPUT_FOCUS = hash("acquire_input_focus")
@@ -175,6 +178,19 @@ function on_input(self, action_id, action)
         if action_id == H_CLICK then
             if self.visible and self.target_grid then
                 msg.post("root#main", H_DESTROY_CUBE, self.target_grid)
+
+                -- Play hit sound
+                local b_id = world.get_block(self.target_grid.gx, self.target_grid.gy, self.target_grid.gz)
+                local b_def = block_data.get_block(b_id)
+
+                -- Reuse cursor position for positional audio
+                -- We use the cursor's world position which is already updated
+                local hit_pos = go.get_position()
+                if b_def and b_def.hit_sound then
+                    sm.play(b_def.hit_sound, 1.0, hit_pos)
+                else
+                    sm.play(sm.HASHES.hit, 1.0, hit_pos)
+                end
             end
         elseif action_id == H_CLICK_RIGHT then
             if self.visible and self.target_grid and self.target_normal then

@@ -4,6 +4,7 @@
 
 local block_data = require "main.scripts.block_data"
 local world = require "main.scripts.world"
+local sm = require "main.scripts.sound_manager"
 
 local vmath = vmath
 local resource = resource
@@ -17,6 +18,8 @@ go.property("mesh_prefab", msg.url())
 go.property("game_atlas", resource.atlas())
 go.property("grid_size", 16)
 go.property("torch_factory", msg.url())
+
+local TEMP_POS = vmath.vector3()
 
 local H_MESH = hash("mesh")
 local H_POSITION = hash("position")
@@ -637,6 +640,19 @@ function on_message(self, message_id, message, sender)
         if gx and gy and gz and self.grid_size then
             local b_id = world.get_block(gx, gy, gz)
             if b_id ~= 0 and b_id ~= 2 then -- Not air and not unbreakable
+                -- Optimized sound trigger with reused vector
+                local offset = -self.grid_size / 2 + 0.5
+                TEMP_POS.x = offset + gx
+                TEMP_POS.y = offset + gy
+                TEMP_POS.z = 490 + gz
+
+                local b_def = block_data.get_block(b_id)
+                if b_def and b_def.break_sound then
+                    sm.play(b_def.break_sound, 1.0, TEMP_POS)
+                else
+                    sm.play(sm.HASHES.stone_debris, 1.0, TEMP_POS)
+                end
+
                 world.set_block(gx, gy, gz, 0)
 
                 -- Remove any attached entity (torch, etc.)
@@ -683,6 +699,7 @@ function on_message(self, message_id, message, sender)
         local modified = false
 
         if center_gx and center_gy and center_gz and self.grid_size then
+            local offset = -self.grid_size / 2 + 0.5
             for gx = center_gx - radius, center_gx + radius do
                 for gy = center_gy - radius, center_gy + radius do
                     for gz = center_gz - radius, center_gz + radius do
@@ -705,6 +722,12 @@ function on_message(self, message_id, message, sender)
                                         pcall(go.delete, self.block_entities[e_key])
                                         self.block_entities[e_key] = nil
                                     end
+
+                                    -- Play debris sound (Throttled by Sound Manager)
+                                    TEMP_POS.x = offset + gx
+                                    TEMP_POS.y = offset + gy
+                                    TEMP_POS.z = 490 + gz
+                                    sm.play(sm.HASHES.stone_debris, 1.0, TEMP_POS)
                                 else
                                     if current_id == 0 then self.total_cubes = (self.total_cubes or 0) + 1 end
                                     if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = true end
@@ -724,6 +747,7 @@ function on_message(self, message_id, message, sender)
         local blocks = message.blocks
         local modified = false
         if blocks and self.grid_size then
+            local offset = -self.grid_size / 2 + 0.5
             for _, b in ipairs(blocks) do
                 local gx, gy, gz, target_id = b.gx, b.gy, b.gz, b.id or 0
                 if gx and gy and gz then
@@ -744,6 +768,12 @@ function on_message(self, message_id, message, sender)
                                     go.delete(self.block_entities[e_key])
                                     self.block_entities[e_key] = nil
                                 end
+
+                                -- Play debris sound (Throttled by Sound Manager)
+                                TEMP_POS.x = offset + gx
+                                TEMP_POS.y = offset + gy
+                                TEMP_POS.z = 490 + gz
+                                sm.play(sm.HASHES.stone_debris, 1.0, TEMP_POS)
                             else
                                 if current_id == 0 then self.total_cubes = (self.total_cubes or 0) + 1 end
                                 if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = true end

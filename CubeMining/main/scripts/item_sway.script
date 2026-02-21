@@ -1,5 +1,5 @@
--- item_sway.script
 -- Handles smooth mouse sway and a click-triggered "attack" animation.
+local sm = require "main.scripts.sound_manager"
 
 local go = go
 local msg = msg
@@ -63,6 +63,9 @@ function on_input(self, action_id, action)
             self.is_attacking = false
         end)
         go.animate("#", H_ATTACK_ROLL, go.PLAYBACK_ONCE_PINGPONG, 15, go.EASING_INOUTQUAD, 0.2)
+
+        -- Play swing sound
+        sm.play(sm.HASHES.swing)
     end
 
     -- Mouse Sway

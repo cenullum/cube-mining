@@ -1,5 +1,6 @@
 -- npc.script
 local npc = require "main.scripts.npc"
+local sm = require "main.scripts.sound_manager"
 
 go.property("gravity", -25.0)
 go.property("jump_force", 8.0)
@@ -8,6 +9,7 @@ go.property("rotation_offset_y", 0.0)
 
 function init(self)
     npc.init(self)
+    sm.play(sm.HASHES.swing, 1.0, go.get_position())
 end
 
 function update(self, dt)
