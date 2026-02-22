@@ -262,35 +262,54 @@ local function update_mesh(self)
         local uw, uh = uv_data.w, uv_data.h
         local wuh, huh = w * uw, h * uh
 
+        local u1, v1, u2, v2, u3, v3, u4, v4
+        if face_dir == 5 then
+            u1, v1 = h * uw, 0
+            u2, v2 = h * uw, w * uh
+            u3, v3 = 0, w * uh
+            u4, v4 = 0, 0
+        elseif face_dir == 6 then
+            u1, v1 = 0, w * uh
+            u2, v2 = 0, 0
+            u3, v3 = h * uw, 0
+            u4, v4 = h * uw, w * uh
+        else
+            u1, v1 = 0, 0
+            u2, v2 = wuh, 0
+            u3, v3 = wuh, huh
+            u4, v4 = 0, huh
+        end
+
         -- V1 (P1)
         positions[base + 1] = p1x; positions[base + 2] = p1y; positions[base + 3] = p1z
-        texcoord0[uv_base + 1] = 0; texcoord0[uv_base + 2] = huh
+        texcoord0[uv_base + 1] = u1; texcoord0[uv_base + 2] = v1
         colors[offset_base + 1] = ao1; colors[offset_base + 2] = source1; colors[offset_base + 3] = sun1; colors[offset_base + 4] = 1
 
         -- V2 (P2)
         positions[base + 4] = p2x; positions[base + 5] = p2y; positions[base + 6] = p2z
-        texcoord0[uv_base + 3] = wuh; texcoord0[uv_base + 4] = huh
+        texcoord0[uv_base + 3] = u2; texcoord0[uv_base + 4] = v2
         colors[offset_base + 5] = ao2; colors[offset_base + 6] = source2; colors[offset_base + 7] = sun2; colors[offset_base + 8] = 1
 
         -- V3 (P3)
         positions[base + 7] = p3x; positions[base + 8] = p3y; positions[base + 9] = p3z
-        texcoord0[uv_base + 5] = wuh; texcoord0[uv_base + 6] = 0
+        texcoord0[uv_base + 5] = u3; texcoord0[uv_base + 6] = v3
         colors[offset_base + 9] = ao3; colors[offset_base + 10] = source3; colors[offset_base + 11] = sun3; colors[offset_base + 12] = 1
 
         -- V4 (Same as V1/P1)
         positions[base + 10] = p1x; positions[base + 11] = p1y; positions[base + 12] = p1z
-        texcoord0[uv_base + 7] = 0; texcoord0[uv_base + 8] = huh
+        texcoord0[uv_base + 7] = u1; texcoord0[uv_base + 8] = v1
         colors[offset_base + 13] = ao1; colors[offset_base + 14] = source1; colors[offset_base + 15] = sun1; colors[offset_base + 16] = 1
 
         -- V5 (Same as V3/P3)
         positions[base + 13] = p3x; positions[base + 14] = p3y; positions[base + 15] = p3z
-        texcoord0[uv_base + 9] = wuh; texcoord0[uv_base + 10] = 0
+        texcoord0[uv_base + 9] = u3; texcoord0[uv_base + 10] = v3
         colors[offset_base + 17] = ao3; colors[offset_base + 18] = source3; colors[offset_base + 19] = sun3; colors[offset_base + 20] = 1
 
         -- V6 (P4)
         positions[base + 16] = p4x; positions[base + 17] = p4y; positions[base + 18] = p4z
-        texcoord0[uv_base + 11] = 0; texcoord0[uv_base + 12] = 0
+        texcoord0[uv_base + 11] = u4; texcoord0[uv_base + 12] = v4
         colors[offset_base + 21] = ao4; colors[offset_base + 22] = source4; colors[offset_base + 23] = sun4; colors[offset_base + 24] = 1
+
 
         -- Normals
         for i = 0, 5 do
@@ -599,9 +618,9 @@ function init(self)
     local grid_size = self.grid_size
 
     self.ao_enabled = true -- Default On
-    self.light_mode = 0    -- 0: Flat, 1: Smooth, 2: Off
+    self.light_mode = 1    -- 0: Flat, 1: Smooth, 2: Off
     _G.ao_enabled = true
-    _G.light_mode = 0
+    _G.light_mode = 1
     self.block_entities = {} -- Generic map: "gx_gy_gz" -> go_id (torches, etc.)
 
     -- Initialize global world
@@ -615,6 +634,10 @@ function init(self)
                 local block_id = 0
                 if cy == 0 then
                     block_id = 2 -- Unbreakable layer
+                elseif cy == grid_size - 1 then
+                    block_id = 5 -- Grass
+                elseif cy >= grid_size - 4 then
+                    block_id = 6 -- Dirt
                 else
                     if math.random() < 0.3 then
                         block_id = 3 -- Golden Ore

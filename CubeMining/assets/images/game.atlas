@@ -1,8 +1,8 @@
 images {
-  image: "/assets/images/tile_texture/side.png"
+  image: "/assets/images/tile_texture/stone_side.png"
 }
 images {
-  image: "/assets/images/tile_texture/top.png"
+  image: "/assets/images/tile_texture/stone_top.png"
 }
 images {
   image: "/assets/images/tile_texture/unbreakable.png"
@@ -20,12 +20,21 @@ images {
   image: "/assets/images/items/pickaxe.png"
 }
 images {
-  image: "/assets/images/items/sword.png"
+  image: "/assets/images/items/diamond_sword.png"
 }
 images {
-  image: "/assets/images/items/16x16.png"
+  image: "/assets/images/tile_texture/dirt.png"
 }
 images {
-  image: "/assets/images/items/64x64.png"
+  image: "/assets/images/tile_texture/grass_side.png"
+}
+images {
+  image: "/assets/images/tile_texture/grass_top.png"
+}
+images {
+  image: "/assets/images/items/golden_sword.png"
+}
+images {
+  image: "/assets/images/items/iron_sword.png"
 }
 extrude_borders: 2

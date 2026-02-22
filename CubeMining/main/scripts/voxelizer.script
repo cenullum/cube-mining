@@ -1,8 +1,6 @@
--- voxelizer.script
--- Optimized runtime 2D-to-3D voxelization system.
--- Uses direct buffer stream writing and metadata caching for performance.
+-- voxelizer.script (Hand Slot Mesh Renderer)
+-- Purpose: Receives messages to render voxel meshes for items or blocks attached to the hand slot. Converts 2D sprites to 3D voxel meshes at runtime and caches them for performance.
 
--- Cache engine modules for faster access
 local vmath = vmath
 local resource = resource
 local buffer = buffer
@@ -13,26 +11,29 @@ local sys = sys
 local image = image
 local hash = hash
 
+local block_data = require "main.scripts.block_data"
+local items_data = require "main.scripts.items"
+local sm = require "main.scripts.sound_manager"
+local world = require "main.scripts.world"
+local blocks = require "main.scripts.blocks"
+
 local H_POSITION = hash("position")
 local H_TEXCOORD0 = hash("texcoord0")
 local H_TEXCOORD1 = hash("texcoord1")
 local H_NORMAL = hash("normal")
 local H_TEXTURE0 = hash("texture0")
 local H_VERTICES = hash("vertices")
-local H_BUILD_ITEM = hash("build_item")
-local H_SWITCH_ITEM = hash("switch_item")
 local H_ACQUIRE_INPUT_FOCUS = hash("acquire_input_focus")
 local H_MESH = hash("mesh")
 
-local ITEMS = {
-    { id = hash("gun"),     path = "/assets/images/items/gun.png" },
-    { id = hash("pickaxe"), path = "/assets/images/items/pickaxe.png" },
-    { id = hash("sword"),   path = "/assets/images/items/sword.png" },
-    { id = hash("16x16"),   path = "/assets/images/items/16x16.png" },
-    { id = hash("64x64"),   path = "/assets/images/items/64x64.png" }
-}
+local H_CLICK = hash("click")
+local H_CLICK_RIGHT = hash("click_right")
+local H_KEY_1 = hash("key_1")
+local H_KEY_2 = hash("key_2")
 
 go.property("mesh_prefab", msg.url())
+go.property("torch_prefab", msg.url())
+go.property("bomb_prefab", msg.url())
 go.property("game_atlas", resource.atlas())
 go.property("depth", 0.5)
 go.property("sway_pivot", msg.url())
@@ -55,16 +56,14 @@ local function write_face(p, t0, t1, n, idx,
     local k = idx * 24 + 1
     local l = idx * 18 + 1
 
-    -- Triangle 1 (CCW)
     p[i], p[i + 1], p[i + 2] = v1.x, v1.y, v1.z
     p[i + 3], p[i + 4], p[i + 5] = v2.x, v2.y, v2.z
     p[i + 6], p[i + 7], p[i + 8] = v3.x, v3.y, v3.z
-    -- Triangle 2
+
     p[i + 9], p[i + 10], p[i + 11] = v1.x, v1.y, v1.z
     p[i + 12], p[i + 13], p[i + 14] = v3.x, v3.y, v3.z
     p[i + 15], p[i + 16], p[i + 17] = v4.x, v4.y, v4.z
 
-    -- Texcoord0 (Normalized 0..1)
     t0[j], t0[j + 1] = u1, v1_uv
     t0[j + 2], t0[j + 3] = u2, v2_uv
     t0[j + 4], t0[j + 5] = u3, v3_uv
@@ -72,12 +71,10 @@ local function write_face(p, t0, t1, n, idx,
     t0[j + 8], t0[j + 9] = u3, v3_uv
     t0[j + 10], t0[j + 11] = u4, v4_uv
 
-    -- Texcoord1 (Atlas Metadata)
     local mu, mv, mw, mh = metadata.u, metadata.v, metadata.w, metadata.h
     for m = 0, 5 do
         local ki = k + m * 4
         t1[ki], t1[ki + 1], t1[ki + 2], t1[ki + 3] = mu, mv, mw, mh
-
         local li = l + m * 3
         n[li], n[li + 1], n[li + 2] = norm.x, norm.y, norm.z
     end
@@ -85,89 +82,8 @@ local function write_face(p, t0, t1, n, idx,
     return idx + 1
 end
 
-function build_voxel_mesh(self, item_index)
-    local start_time = os.clock()
-    local item = ITEMS[item_index]
-    local meta = self.item_meta[item.id]
-    if not meta then return end
-
-    local img = meta.image
-    local width, height = img.width, img.height
-    local depth = self.depth
-    local buf_data = img.buffer
-    local ox, oy = -width * 0.5, -height * 0.5
-
-    -- Maximum possible faces: 2 (front/back) + (width*height*4 sides)
-    -- We'll use a dynamic allocation but with direct streaming
-    local faces = {}
-    local face_count = 0
-
-    -- Helper for face data collection
-    local function collect_face(v1, v2, v3, v4, m, norm, u1, v1_uv, u2, v2_uv, u3, v3_uv, u4, v4_uv)
-        face_count = face_count + 1
-        faces[face_count] = {
-            v1 = v1,
-            v2 = v2,
-            v3 = v3,
-            v4 = v4,
-            m = m,
-            norm = norm,
-            u1 = u1,
-            v1_uv = v1_uv,
-            u2 = u2,
-            v2_uv = v2_uv,
-            u3 = u3,
-            v3_uv = v3_uv,
-            u4 = u4,
-            v4_uv = v4_uv
-        }
-    end
-
-    -- FRONT/BACK
-    collect_face(vmath.vector3(ox, oy, depth), vmath.vector3(ox + width, oy, depth),
-        vmath.vector3(ox + width, oy + height, depth), vmath.vector3(ox, oy + height, depth), meta,
-        vmath.vector3(0, 0, 1), 0, 0, 1, 0, 1, 1, 0,
-        1)
-    collect_face(vmath.vector3(ox + width, oy, 0), vmath.vector3(ox, oy, 0), vmath.vector3(ox, oy + height, 0),
-        vmath.vector3(ox + width, oy + height, 0), meta, vmath.vector3(0, 0, -1), 1, 0, 0, 0, 0, 1, 1, 1)
-
-    -- SIDES
-    for x = 0, width - 1 do
-        for y = 0, height - 1 do
-            if get_alpha(buf_data, width, height, x, y) > 128 then
-                local pu, pv = (x + 0.5) / width, (height - 1 - y + 0.5) / height
-                local pm = { u = meta.u + pu * meta.w, v = meta.v + pv * meta.h, w = 0.0001, h = 0.0001 }
-
-                local h_y = height - 1 - y
-                if get_alpha(buf_data, width, height, x - 1, y) < 128 then -- Left
-                    collect_face(vmath.vector3(ox + x, oy + h_y, 0), vmath.vector3(ox + x, oy + h_y, depth),
-                        vmath.vector3(ox + x, oy + h_y + 1, depth), vmath.vector3(ox + x, oy + h_y + 1, 0), pm,
-                        vmath.vector3(-1, 0, 0), 0, 0, 0,
-                        0, 0, 0, 0, 0)
-                end
-                if get_alpha(buf_data, width, height, x + 1, y) < 128 then -- Right
-                    collect_face(vmath.vector3(ox + x + 1, oy + h_y, depth), vmath.vector3(ox + x + 1, oy + h_y, 0),
-                        vmath.vector3(ox + x + 1, oy + h_y + 1, 0), vmath.vector3(ox + x + 1, oy + h_y + 1, depth), pm,
-                        vmath.vector3(1, 0, 0), 0,
-                        0, 0, 0, 0, 0, 0, 0)
-                end
-                if get_alpha(buf_data, width, height, x, y - 1) < 128 then -- Top
-                    collect_face(vmath.vector3(ox + x, oy + h_y + 1, depth), vmath.vector3(ox + x + 1, oy + h_y + 1,
-                            depth), vmath.vector3(ox + x + 1, oy + h_y + 1, 0), vmath.vector3(ox + x, oy + h_y + 1, 0),
-                        pm, vmath.vector3(0, 1, 0), 0,
-                        0, 0, 0, 0, 0, 0, 0)
-                end
-                if get_alpha(buf_data, width, height, x, y + 1) < 128 then -- Bottom
-                    collect_face(vmath.vector3(ox + x, oy + h_y, 0), vmath.vector3(ox + x + 1, oy + h_y, 0),
-                        vmath.vector3(ox + x + 1, oy + h_y, depth), vmath.vector3(ox + x, oy + h_y, depth), pm,
-                        vmath.vector3(0, -1, 0), 0, 0, 0,
-                        0, 0, 0, 0, 0)
-                end
-            end
-        end
-    end
-
-    -- Create target buffer
+local function generate_model_from_faces(self, faces)
+    local face_count = #faces
     local buf = buffer.create(face_count * 6, {
         { name = H_POSITION,  type = buffer.VALUE_TYPE_FLOAT32, count = 3 },
         { name = H_TEXCOORD0, type = buffer.VALUE_TYPE_FLOAT32, count = 2 },
@@ -179,106 +95,304 @@ function build_voxel_mesh(self, item_index)
     local u1 = buffer.get_stream(buf, H_TEXCOORD1)
     local ns = buffer.get_stream(buf, H_NORMAL)
 
-    -- Streaming write
     local current_idx = 0
     for f = 1, face_count do
         local face = faces[f]
         current_idx = write_face(ps, u0, u1, ns, current_idx, face.v1, face.v2, face.v3, face.v4, face.m, face.norm,
-            face.u1, face
-            .v1_uv, face.u2, face.v2_uv, face.u3, face.v3_uv, face.u4, face.v4_uv)
+            face.u1, face.v1_uv, face.u2, face.v2_uv, face.u3, face.v3_uv, face.u4, face.v4_uv)
+    end
+    return buf
+end
+
+local function build_voxel_mesh(self, item_index, item_name, meta)
+    local img = meta.image
+    local width, height = img.width, img.height
+    local depth = self.depth
+    local buf_data = img.buffer
+    local ox, oy = -width * 0.5, -height * 0.5
+
+    local faces = {}
+    local function collect_face(v1, v2, v3, v4, m, norm, u1, v1_uv, u2, v2_uv, u3, v3_uv, u4, v4_uv)
+        faces[#faces + 1] = {
+            v1 = v1,
+            v2 = v2,
+            v3 = v3,
+            v4 = v4,
+            m = m,
+            norm = norm,
+            u1 = u1,
+            v1_uv = v1_uv,
+            u2 = u2,
+            v2_uv =
+                v2_uv,
+            u3 = u3,
+            v3_uv = v3_uv,
+            u4 = u4,
+            v4_uv = v4_uv
+        }
     end
 
-    -- Mesh update
-    if not self.held_mesh_url then
-        local h_id = factory.create(self.mesh_prefab); self.held_mesh_url = msg.url(h_id); self.held_mesh_url.fragment =
-            H_MESH
-        _G.voxelizer_mesh_url = self.held_mesh_url
-        go.set(self.held_mesh_url, H_TEXTURE0, hash(meta.texture))
-        go.set_position(vmath.vector3(0.4, -0.08, -0.8), h_id)
+    collect_face(vmath.vector3(ox, oy, depth), vmath.vector3(ox + width, oy, depth),
+        vmath.vector3(ox + width, oy + height, depth), vmath.vector3(ox, oy + height, depth), meta,
+        vmath.vector3(0, 0, 1), 0, 0, 1, 0, 1, 1, 0, 1)
+    collect_face(vmath.vector3(ox + width, oy, 0), vmath.vector3(ox, oy, 0), vmath.vector3(ox, oy + height, 0),
+        vmath.vector3(ox + width, oy + height, 0), meta, vmath.vector3(0, 0, -1), 1, 0, 0, 0, 0, 1, 1, 1)
 
-        local qx = vmath.quat_rotation_x(math.rad(1))
-        local qy = vmath.quat_rotation_y(math.rad(-65))
+    for x = 0, width - 1 do
+        for y = 0, height - 1 do
+            if get_alpha(buf_data, width, height, x, y) > 128 then
+                local pu, pv = (x + 0.5) / width, (height - 1 - y + 0.5) / height
+                local pm = { u = meta.u + pu * meta.w, v = meta.v + pv * meta.h, w = 0.0001, h = 0.0001 }
 
-        local rot = qy * qx
-
-        go.set_rotation(rot, h_id)
-
-
-        go.set_scale(vmath.vector3(0.017, 0.017, 0.017), h_id)
-
-        local pivot = self.sway_pivot
-        if pivot.path == hash("") then pivot = go.get_id() end
-        go.set_parent(h_id, pivot)
-
-        local w_id = factory.create(self.mesh_prefab); self.world_mesh_url = msg.url(w_id); self.world_mesh_url.fragment =
-            H_MESH
-        go.set(self.world_mesh_url, H_TEXTURE0, hash(meta.texture))
-        go.set_position(vmath.vector3(0, 10, 500), w_id); go.set_scale(vmath.vector3(0.05, 0.05, 0.05), w_id)
-
-        self.item_buffers = {}
+                local h_y = height - 1 - y
+                if get_alpha(buf_data, width, height, x - 1, y) < 128 then -- Left
+                    collect_face(vmath.vector3(ox + x, oy + h_y, 0), vmath.vector3(ox + x, oy + h_y, depth),
+                        vmath.vector3(ox + x, oy + h_y + 1, depth), vmath.vector3(ox + x, oy + h_y + 1, 0), pm,
+                        vmath.vector3(-1, 0, 0), 0, 0, 0, 0, 0, 0, 0, 0)
+                end
+                if get_alpha(buf_data, width, height, x + 1, y) < 128 then -- Right
+                    collect_face(vmath.vector3(ox + x + 1, oy + h_y, depth), vmath.vector3(ox + x + 1, oy + h_y, 0),
+                        vmath.vector3(ox + x + 1, oy + h_y + 1, 0), vmath.vector3(ox + x + 1, oy + h_y + 1, depth), pm,
+                        vmath.vector3(1, 0, 0), 0, 0, 0, 0, 0, 0, 0, 0)
+                end
+                if get_alpha(buf_data, width, height, x, y - 1) < 128 then -- Top
+                    collect_face(vmath.vector3(ox + x, oy + h_y + 1, depth),
+                        vmath.vector3(ox + x + 1, oy + h_y + 1, depth),
+                        vmath.vector3(ox + x + 1, oy + h_y + 1, 0), vmath.vector3(ox + x, oy + h_y + 1, 0), pm,
+                        vmath.vector3(0, 1, 0), 0, 0, 0, 0, 0, 0, 0, 0)
+                end
+                if get_alpha(buf_data, width, height, x, y + 1) < 128 then -- Bottom
+                    collect_face(vmath.vector3(ox + x, oy + h_y, 0), vmath.vector3(ox + x + 1, oy + h_y, 0),
+                        vmath.vector3(ox + x + 1, oy + h_y, depth), vmath.vector3(ox + x, oy + h_y, depth), pm,
+                        vmath.vector3(0, -1, 0), 0, 0, 0, 0, 0, 0, 0, 0)
+                end
+            end
+        end
     end
 
-    local path = "/item_" .. item_index .. ".bufferc"
-    local res = self.item_buffers[item_index]
-    if not res then
-        res = resource.create_buffer(path, { buffer = buf })
-        self.item_buffers[item_index] = res
-    else
-        resource.set_buffer(res, buf)
+    local buf = generate_model_from_faces(self, faces)
+    self.item_buffers[item_index] = resource.create_buffer("/item_" .. item_name .. ".bufferc", { buffer = buf })
+end
+
+local function build_block_mesh(self, block_index, def)
+    if not def.uvs then return end
+    local faces = {}
+    local function collect_face(v1, v2, v3, v4, m, norm, u1, v1_uv, u2, v2_uv, u3, v3_uv, u4, v4_uv)
+        if m then
+            faces[#faces + 1] = {
+                v1 = v1,
+                v2 = v2,
+                v3 = v3,
+                v4 = v4,
+                m = m,
+                norm = norm,
+                u1 = u1,
+                v1_uv = v1_uv,
+                u2 =
+                    u2,
+                v2_uv = v2_uv,
+                u3 = u3,
+                v3_uv = v3_uv,
+                u4 = u4,
+                v4_uv = v4_uv
+            }
+        end
     end
 
-    go.set(self.held_mesh_url, H_VERTICES, res); go.set(self.world_mesh_url, H_VERTICES, res)
-    _G.item_mesh_build_time = (os.clock() - start_time) * 1000
+    local ox, oy, oz = -8, -8, -8
+    local w = 16
+
+    -- Same UV mappings as voxel mesh standard: 0,0 1,0 1,1 0,1
+    -- Front (+Z)
+    collect_face(vmath.vector3(ox, oy, oz + w), vmath.vector3(ox + w, oy, oz + w), vmath.vector3(ox + w, oy + w, oz + w),
+        vmath.vector3(ox, oy + w, oz + w), def.uvs[1], vmath.vector3(0, 0, 1), 0, 0, 1, 0, 1, 1, 0, 1)
+    -- Back (-Z)
+    collect_face(vmath.vector3(ox + w, oy, oz), vmath.vector3(ox, oy, oz), vmath.vector3(ox, oy + w, oz),
+        vmath.vector3(ox + w, oy + w, oz), def.uvs[2], vmath.vector3(0, 0, -1), 0, 0, 1, 0, 1, 1, 0, 1)
+    -- Top (+Y)
+    collect_face(vmath.vector3(ox, oy + w, oz + w), vmath.vector3(ox + w, oy + w, oz + w),
+        vmath.vector3(ox + w, oy + w, oz), vmath.vector3(ox, oy + w, oz), def.uvs[3], vmath.vector3(0, 1, 0), 0, 0, 1, 0,
+        1, 1, 0, 1)
+    -- Bottom (-Y)
+    collect_face(vmath.vector3(ox, oy, oz), vmath.vector3(ox + w, oy, oz), vmath.vector3(ox + w, oy, oz + w),
+        vmath.vector3(ox, oy, oz + w), def.uvs[4], vmath.vector3(0, -1, 0), 0, 0, 1, 0, 1, 1, 0, 1)
+    -- Right (+X)
+    collect_face(vmath.vector3(ox + w, oy, oz + w), vmath.vector3(ox + w, oy, oz), vmath.vector3(ox + w, oy + w, oz),
+        vmath.vector3(ox + w, oy + w, oz + w), def.uvs[5], vmath.vector3(1, 0, 0), 0, 0, 1, 0, 1, 1, 0, 1)
+    -- Left (-X)
+    collect_face(vmath.vector3(ox, oy, oz), vmath.vector3(ox, oy, oz + w), vmath.vector3(ox, oy + w, oz + w),
+        vmath.vector3(ox, oy + w, oz), def.uvs[6], vmath.vector3(-1, 0, 0), 0, 0, 1, 0, 1, 1, 0, 1)
+
+    local buf = generate_model_from_faces(self, faces)
+    self.block_buffers[block_index] = resource.create_buffer("/block_" .. block_index .. ".bufferc", { buffer = buf })
+end
+
+local function update_hand_model(self)
+    -- Reset: Disable all visuals first to avoid "sticking"
+    if self.held_mesh_url then msg.post(self.held_mesh_url, "disable") end
+    for _, url in pairs(self.model_urls) do msg.post(url, "disable") end
+
+    if self.active_mode == "item" then
+        local item = items_data.definitions[self.current_item]
+        if not item then return end
+
+        if item.type == "voxel" then
+            if self.held_mesh_url then msg.post(self.held_mesh_url, "enable") end
+            local res = self.item_buffers[self.current_item]
+            if res and self.held_mesh_id then go.set(self.held_mesh_url, H_VERTICES, res) end
+            if self.held_mesh_id then go.set_rotation(self.cam_rot, self.held_mesh_id) end
+        elseif item.type == "model" then
+            local model_url = self.model_urls[self.current_item]
+            if model_url then msg.post(model_url, "enable") end
+        end
+    elseif self.active_mode == "block" then
+        local b_def = block_data.get_block(self.current_block)
+        if not b_def then return end
+
+        -- 1. Try Voxel Mesh
+        if b_def.uvs then
+            if self.held_mesh_url then msg.post(self.held_mesh_url, "enable") end
+            if not self.block_buffers[self.current_block] then
+                build_block_mesh(self, self.current_block, b_def)
+            end
+            local res = self.block_buffers[self.current_block]
+            if res and self.held_mesh_id then go.set(self.held_mesh_url, H_VERTICES, res) end
+
+            local qx = vmath.quat_rotation_x(math.rad(15))
+            local qy = vmath.quat_rotation_y(math.rad(-45))
+            if self.held_mesh_id then go.set_rotation(qy * qx, self.held_mesh_id) end
+        else
+            -- 2. Try 3D Model mapping (dynamic name lookup)
+            local model_url = self.name_to_model and self.name_to_model[b_def.name]
+            if model_url then
+                msg.post(model_url, "enable")
+            end
+        end
+    end
 end
 
 function init(self)
     msg.post(".", H_ACQUIRE_INPUT_FOCUS)
+    self.active_mode = "item"
     self.current_item = 1
-    self.item_meta = {}
+    self.current_block = 1
+
+    self.item_buffers = {}
+    self.block_buffers = {}
+    self.model_urls = {}
+    self.name_to_model = {}
 
     local atlas_res = resource.get_atlas(self.game_atlas)
     local tex_info = resource.get_texture_info(atlas_res.texture)
 
-    -- Pre-calculate and cache metadata for all items at startup
-    for _, item in ipairs(ITEMS) do
-        local img_data = sys.load_resource(item.path)
-        if not img_data then img_data = sys.load_resource(string.sub(item.path, 2)) end
+    -- Retrieve item images
+    for id, item in pairs(items_data.definitions) do
+        if item.type == "voxel" then
+            local path = "/assets/images/items/" .. item.name .. ".png"
+            local img_data = sys.load_resource(path)
+            if img_data then
+                local img = image.load(img_data)
+                local meta = { image = img, texture = atlas_res.texture, u = 0, v = 0, w = 1, h = 1 }
 
-        if img_data then
-            local img = image.load(img_data)
-            local item_meta = { image = img, texture = atlas_res.texture, u = 0, v = 0, w = 1, h = 1 }
-
-            for i, anim in ipairs(atlas_res.animations) do
-                local anim_id = type(anim.id) == "string" and hash(anim.id) or anim.id
-                if anim_id == item.id then
-                    local geom = atlas_res.geometries[anim.frame_start]
-                    local min_u, max_u, min_v, max_v = math.huge, -math.huge, math.huge, -math.huge
-                    for j = 1, #geom.uvs, 2 do
-                        local u, v = geom.uvs[j], geom.uvs[j + 1]
-                        min_u = math.min(min_u, u); max_u = math.max(max_u, u)
-                        min_v = math.min(min_v, v); max_v = math.max(max_v, v)
+                for i, anim in ipairs(atlas_res.animations) do
+                    local anim_id = type(anim.id) == "string" and hash(anim.id) or anim.id
+                    if anim_id == hash(item.name) then
+                        local geom = atlas_res.geometries[anim.frame_start]
+                        local min_u, max_u, min_v, max_v = math.huge, -math.huge, math.huge, -math.huge
+                        for j = 1, #geom.uvs, 2 do
+                            local u, v = geom.uvs[j], geom.uvs[j + 1]
+                            min_u = math.min(min_u, u); max_u = math.max(max_u, u)
+                            min_v = math.min(min_v, v); max_v = math.max(max_v, v)
+                        end
+                        meta.u = min_u / tex_info.width
+                        meta.v = (tex_info.height - max_v) / tex_info.height
+                        meta.w = (max_u - min_u) / tex_info.width
+                        meta.h = (max_v - min_v) / tex_info.height
+                        break
                     end
-                    item_meta.u = min_u / tex_info.width
-                    item_meta.v = (tex_info.height - max_v) / tex_info.height
-                    item_meta.w = (max_u - min_u) / tex_info.width
-                    item_meta.h = (max_v - min_v) / tex_info.height
-                    break
                 end
+                build_voxel_mesh(self, id, item.name, meta)
             end
-            self.item_meta[item.id] = item_meta
+        elseif item.type == "model" then
+            if item.name == "torch" and self.torch_prefab then
+                local mid = factory.create(self.torch_prefab, nil, nil, { is_held = true })
+                local pivot = self.sway_pivot; if pivot.path == hash("") then pivot = go.get_id() end
+                go.set_parent(mid, pivot)
+                go.set_position(vmath.vector3(0.4, -0.3, -0.8), mid)
+                self.model_urls[id] = msg.url(mid)
+                self.name_to_model[item.name] = self.model_urls[id]
+                msg.post(mid, "disable")
+            elseif item.name == "bomb" and self.bomb_prefab then
+                local mid = factory.create(self.bomb_prefab, nil, nil, { is_held = true })
+                local pivot = self.sway_pivot; if pivot.path == hash("") then pivot = go.get_id() end
+                go.set_parent(mid, pivot)
+                go.set_position(vmath.vector3(0.4, -0.2, -0.8), mid)
+                self.model_urls[id] = msg.url(mid)
+                self.name_to_model[item.name] = self.model_urls[id]
+                msg.post(mid, "disable")
+            end
         end
     end
 
-    msg.post(".", H_BUILD_ITEM)
+    -- Pre-calculate block meshes removed from here. They are generated dynamically on selection.
+
+    local h_id = factory.create(self.mesh_prefab)
+    self.held_mesh_id = h_id
+    self.held_mesh_url = msg.url(h_id); self.held_mesh_url.fragment = H_MESH
+    _G.voxelizer_mesh_url = self.held_mesh_url
+    go.set(self.held_mesh_url, H_TEXTURE0, hash(atlas_res.texture))
+    go.set_position(vmath.vector3(0.4, -0.08, -0.8), h_id)
+    go.set_scale(vmath.vector3(0.017, 0.017, 0.017), h_id)
+
+    local qx = vmath.quat_rotation_x(math.rad(1))
+    local qy = vmath.quat_rotation_y(math.rad(-65))
+    self.cam_rot = qy * qx
+
+    local pivot = self.sway_pivot
+    if pivot.path == hash("") then pivot = go.get_id() end
+    go.set_parent(h_id, pivot)
+
+    update_hand_model(self)
+
+    self.mining_target = nil
+    self.mining_progress = 0
+    self.ads_active = false
 end
 
 function on_message(self, message_id, message, sender)
-    if message_id == H_BUILD_ITEM then build_voxel_mesh(self, self.current_item) end
-end
-
-function on_input(self, action_id, action)
-    if action_id == H_SWITCH_ITEM and action.pressed then
-        self.current_item = (self.current_item % #ITEMS) + 1
-        build_voxel_mesh(self, self.current_item)
+    if message_id == hash("set_hand_state") then
+        self.active_mode = message.mode
+        if message.mode == "item" then
+            self.current_item = message.id
+        else
+            self.current_block = message.id
+        end
+        update_hand_model(self)
+    elseif message_id == hash("play_swing") then
+        local pivot = self.sway_pivot
+        if pivot.path == hash("") then pivot = go.get_id() end
+        go.animate(pivot, "rotation", go.PLAYBACK_ONCE_PINGPONG, vmath.quat_rotation_z(math.rad(-45)), go.EASING_OUTQUAD,
+            0.15)
+    elseif message_id == hash("set_ads") then
+        local target_pos
+        if message.active then
+            target_pos = vmath.vector3(0, -0.15, -0.6)
+            _G.camera_fov = 20
+        else
+            target_pos = vmath.vector3(0.4, -0.08, -0.8)
+            _G.camera_fov = 60
+        end
+        if self.held_mesh_id then
+            go.animate(self.held_mesh_id, "position", go.PLAYBACK_ONCE_FORWARD, target_pos, go.EASING_OUTQUAD, 0.15)
+        end
+    elseif message_id == hash("set_gun_vertical") then
+        if self.held_mesh_id then
+            go.animate(self.held_mesh_id, "rotation", go.PLAYBACK_ONCE_FORWARD,
+                self.cam_rot * vmath.quat_rotation_x(math.rad(90)), go.EASING_OUTQUAD, 0.15)
+        end
+    elseif message_id == hash("reset_gun_vertical") then
+        if self.held_mesh_id then
+            go.animate(self.held_mesh_id, "rotation", go.PLAYBACK_ONCE_FORWARD, self.cam_rot, go.EASING_OUTQUAD, 0.15)
+        end
     end
 end

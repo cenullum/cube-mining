@@ -69,7 +69,7 @@ embedded_instances {
   "embedded_components {\n"
   "  id: \"torch_factory\"\n"
   "  type: \"factory\"\n"
-  "  data: \"prototype: \\\"/assets/model/torch.go\\\"\\n"
+  "  data: \"prototype: \\\"/main/entity/torch.go\\\"\\n"
   "\"\n"
   "}\n"
   ""

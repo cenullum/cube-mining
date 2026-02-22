@@ -10,6 +10,8 @@ go.property("gravity", -25.0)
 go.property("radius", 3)
 go.property("friction", 2.0)
 
+go.property("is_held", false)
+
 function init(self)
     self.velocity = vmath.vector3(0, 0, 0)
     self.size = vmath.vector3(0.6, 0.6, 0.6)
@@ -24,9 +26,18 @@ function init(self)
     if _G.player_ambient_light then
         pcall(function() go.set("#model", "tint", _G.player_ambient_light) end)
     end
+
+    if self.is_held then
+        print("bbbbbbbbbbb")
+        msg.post(".", "disable")
+    end
 end
 
 function update(self, dt)
+    if self.is_held then
+        return
+    end
+
     local timer = self.timer - dt
 
     if timer <= 0 then

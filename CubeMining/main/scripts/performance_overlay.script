@@ -98,16 +98,16 @@ function init(self)
     self.controls = {
         "WASD: Move",
         "Shift: Sprint",
-        "Space/Ctrl: Up/Down",
+        "Space: Jump",
+        "P: Toggle Fly",
+        "1: Select Item",
+        "2: Select Block",
         "Left Click: Break",
-        "Right Click: Place",
-        "M: Switch Metrics",
-        "Q: Switch Item",
+        "Right Click: Place/Use",
         "T: Spawn Mouse",
-        "U: Spawn Torch",
-        "Y: Spawn Mouse Rapidly",
-        "P: Toggle Noclip",
-        "K: Toggle AO",
+        "Y: Spawn Mouse (Hold)",
+        "M: Switch Metrics",
+        "O: Toggle AO",
         "L: Toggle Lighting"
     }
 
@@ -140,7 +140,8 @@ function update(self, dt)
     local ao_str = (_G.ao_enabled ~= false) and "ON" or "OFF"
     local light_modes = { [0] = "FLAT", [1] = "SMOOTH", [2] = "OFF" }
     local light_str = light_modes[_G.light_mode or 0] or "FLAT"
-    local status_text = "Ambient Occlusion: " .. ao_str .. "   Lighting: " .. light_str
+    local item_name = _G.held_item_name or "pickaxe"
+    local status_text = "Held Item: " .. item_name .. "   AO: " .. ao_str .. "   Lighting: " .. light_str
 
     self.vec_offset.x = self.width / 2 - 150
     self.vec_offset.y = self.height - 20

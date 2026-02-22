@@ -51,18 +51,6 @@ key_trigger {
   action: "spawn_mouse"
 }
 key_trigger {
-  input: KEY_U
-  action: "spawn_torch"
-}
-mouse_trigger {
-  input: MOUSE_BUTTON_1
-  action: "click"
-}
-mouse_trigger {
-  input: MOUSE_BUTTON_3
-  action: "click_right"
-}
-key_trigger {
   input: KEY_Y
   action: "spawn_fast"
 }
@@ -71,10 +59,22 @@ key_trigger {
   action: "toggle_light_mode"
 }
 key_trigger {
-  input: KEY_K
+  input: KEY_O
   action: "toggle_ao"
 }
 key_trigger {
-  input: KEY_E
-  action: "throw_bomb"
+  input: KEY_1
+  action: "key_1"
+}
+key_trigger {
+  input: KEY_2
+  action: "key_2"
+}
+mouse_trigger {
+  input: MOUSE_BUTTON_1
+  action: "click"
+}
+mouse_trigger {
+  input: MOUSE_BUTTON_3
+  action: "click_right"
 }

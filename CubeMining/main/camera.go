@@ -13,11 +13,35 @@ components {
   }
 }
 components {
+  id: "hand_slot_manager"
+  component: "/main/scripts/hand_slot_manager.script"
+  properties {
+    id: "bomb_factory"
+    value: "/camera#bomb_factory"
+    type: PROPERTY_TYPE_URL
+  }
+  properties {
+    id: "mouse_factory"
+    value: "/camera#mouse_factory"
+    type: PROPERTY_TYPE_URL
+  }
+}
+components {
   id: "voxelizer"
   component: "/main/scripts/voxelizer.script"
   properties {
     id: "mesh_prefab"
     value: "/camera#voxel_mesh_factory"
+    type: PROPERTY_TYPE_URL
+  }
+  properties {
+    id: "torch_prefab"
+    value: "/camera#torch_hand_factory"
+    type: PROPERTY_TYPE_URL
+  }
+  properties {
+    id: "bomb_prefab"
+    value: "/camera#bomb_factory"
     type: PROPERTY_TYPE_URL
   }
   properties {
@@ -52,5 +76,11 @@ embedded_components {
   id: "bomb_factory"
   type: "factory"
   data: "prototype: \"/main/entity/bomb.go\"\n"
+  ""
+}
+embedded_components {
+  id: "torch_hand_factory"
+  type: "factory"
+  data: "prototype: \"/main/entity/torch.go\"\n"
   ""
 }

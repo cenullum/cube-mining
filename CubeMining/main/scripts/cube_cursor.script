@@ -130,8 +130,9 @@ function update(self, dt)
     local cam_rot = go.get_world_rotation("camera")
     local cam_dir = vmath.rotate(cam_rot, vmath.vector3(0, 0, -1))
 
-    local target, gx, gy, gz, normal = get_targeted_cube(cam_pos, cam_dir, 100)
+    local target, gx, gy, gz, normal = get_targeted_cube(cam_pos, cam_dir, 4.5)
     if target then
+        _G.targeted_cube = { target = target, gx = gx, gy = gy, gz = gz, normal = normal }
         if not self.visible then
             msg.post("#mesh", H_ENABLE)
             self.visible = true
@@ -159,48 +160,12 @@ function update(self, dt)
         self.target_grid = { gx = gx, gy = gy, gz = gz }
         self.target_normal = normal
     else
+        _G.targeted_cube = nil
         if self.visible then
             msg.post("#mesh", H_DISABLE)
             self.visible = false
         end
         self.target_grid = nil
         self.target_normal = nil
-    end
-end
-
-function on_input(self, action_id, action)
-    if action.pressed then
-        -- Ensure mouse is locked on click if it's not already
-        if (action_id == H_CLICK or action_id == H_CLICK_RIGHT) and not window.get_mouse_lock() then
-            window.set_mouse_lock(true)
-        end
-
-        if action_id == H_CLICK then
-            if self.visible and self.target_grid then
-                msg.post("root#main", H_DESTROY_CUBE, self.target_grid)
-
-                -- Play hit sound
-                local b_id = world.get_block(self.target_grid.gx, self.target_grid.gy, self.target_grid.gz)
-                local b_def = block_data.get_block(b_id)
-
-                -- Reuse cursor position for positional audio
-                -- We use the cursor's world position which is already updated
-                local hit_pos = go.get_position()
-                if b_def and b_def.hit_sound then
-                    sm.play(b_def.hit_sound, 1.0, hit_pos)
-                else
-                    sm.play(sm.HASHES.hit, 1.0, hit_pos)
-                end
-            end
-        elseif action_id == H_CLICK_RIGHT then
-            if self.visible and self.target_grid and self.target_normal then
-                local place_grid = {
-                    gx = self.target_grid.gx + self.target_normal.x,
-                    gy = self.target_grid.gy + self.target_normal.y,
-                    gz = self.target_grid.gz + self.target_normal.z
-                }
-                msg.post("root#main", H_PLACE_CUBE, place_grid)
-            end
-        end
     end
 end

@@ -5,10 +5,10 @@
 --------------------------------------------------------------------------------
 -- Localized Modules (Optimization: Upvalues)
 --------------------------------------------------------------------------------
-local render = render
-local vmath  = vmath
-local sys    = sys
-local math   = math
+local render                 = render
+local vmath                  = vmath
+local sys                    = sys
+local math                   = math
 
 -----------------------------------------
 ---
