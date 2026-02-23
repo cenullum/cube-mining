@@ -20,7 +20,10 @@ A 3D voxel mining example built with the **Defold Game Engine**. This project in
 - **Runtime Sprite-to-Mesh Voxelization**: Converts 2D pixel art sprites into 3D voxel meshes at runtime.
 - **Vertex-based Ambient Occlusion**: Calculated per-vertex to darken corners and edges. Toggleable with 'K'.
 - **Distance-based Fog**: Distance-based fog applied to terrain and voxelized items.
-- **Golden Ore & Unbreakable Layers**: Block types including golden ore and bedrock at the bottom of the world.
+- **Dynamic Item System**: A variety of holdable items including blocks, tools (pickaxes, swords), and guns (pistol, submachine gun with ammo/reload mechanics).
+- **Block Health & Mining Power**: Blocks have varying durability, and tools have distinct mining/damage power.
+- **Sound System**: Spatial and triggered sound effects for interactions, placing, breaking, and weapon mechanics.
+- **Throwables**: Physics-based items like throwable bombs with screen shake effects.
 - **Voxel Interaction**: Block destruction and placement with mesh updates.
 - **Performance Monitoring**: Overlay showing FPS, 1% low frames, RAM usage, mesh statistics, and player position.
 - **Shader-based UV Mapping**: Texture tiling and atlas-based UV wrapping for voxel surfaces.
@@ -63,12 +66,30 @@ This project was inspired by the [Meshes-In-Defold](https://github.com/mozok/Mes
 - **[voxelizer.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/voxelizer.script)**: Converts 2D sprite data into 3D meshes at runtime.
 - **[physics.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/physics.lua)**: Shared physics module implementing AABB collision detection and resolution.
 - **[character_controller.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/character_controller.script)**: Manages player movement, input handling, and camera logic.
+- **[hand_slot_manager.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/hand_slot_manager.script)**: Manages the player's active hand item, inventory, and dynamic switching.
 - **[item_sway.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/item_sway.script)**: Manages animations for held items, including swaying and click-triggered movements.
 - **[performance_overlay.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/performance_overlay.script)**: Provides a visual debugger for FPS, RAM usage, and camera state.
 - **[cube_cursor.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/cube_cursor.script)**: Manages 3D cursor interaction for targeting and modifying the voxel world.
+- **[sound_manager.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/sound_manager.lua)**: Optimizes and handles audio playback, throttling, and spatial sounds.
+- **[bomb.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/bomb.script)**: Handles the physics, timer, and explosion mechanics of throwable bombs.
+- **[items.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/items.lua)**: Defines available blocks, tools, and weapons with their properties (health, sound, damage).
 - **[world.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/world.lua)**: Centralized world data management, providing shared access to the voxel grid and dimensions.
 - **[block_data.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/block_data.lua)**: Extensible system for defining block properties, transparency, and UV metadata.
 - **[npc.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/npc.lua)**: Base module for NPC logic and AI movement within the voxel world.
+
+## Credits & Assets
+
+- **Textures & Models**: All textures and models are made by **cenullum** and are licensed under **CC0** (Public Domain).
+- **Sound Effects** (Sourced from Pixabay):
+  - [Stone Hit](https://pixabay.com/sound-effects/film-special-effects-hit-rock-03-266305/)
+  - [Bomb / Rock Break](https://pixabay.com/sound-effects/film-special-effects-rock-break-hard-184891/)
+  - [Stone Falling / Debris](https://pixabay.com/sound-effects/film-special-effects-stones-falling-6375/)
+  - [Sword Swing](https://pixabay.com/sound-effects/film-special-effects-sword-air-swing-2-437695/)
+  - [Gun Holster](https://pixabay.com/sound-effects/film-special-effects-holster-pistol-7132/)
+  - [Submachine Gun Shot / Reload](https://pixabay.com/sound-effects/film-special-effects-mp5-168858/)
+  - [Pistol Reload](https://pixabay.com/sound-effects/film-special-effects-9mm-pistol-load-and-chamber-98830/)
+  - [Pistol Shot](https://pixabay.com/sound-effects/film-special-effects-usp-pistol-sfx-80490/)
+  - [Put Cube](https://pixabay.com/sound-effects/film-special-effects-put-item-83043/)
 
 ## Contributing
 
