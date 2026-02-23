@@ -18,6 +18,7 @@ go.property("mesh_prefab", msg.url())
 go.property("game_atlas", resource.atlas())
 go.property("grid_size", 16)
 go.property("torch_factory", msg.url())
+go.property("breaking_texture", resource.texture("/assets/images/effects/breaking.png"))
 
 local TEMP_POS = vmath.vector3()
 
@@ -567,6 +568,7 @@ local function create_chunk(self)
 
     local atlas = resource.get_atlas(self.game_atlas)
     go.set(mesh_go.mesh_url, H_TEXTURE0, hash(atlas.texture))
+    go.set(mesh_go.mesh_url, hash("texture1"), self.breaking_texture)
 
     block_data.init(self.game_atlas)
 

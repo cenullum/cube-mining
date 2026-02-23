@@ -19,24 +19,52 @@ local H_CLICK = hash("click")
 local H_CLICK_RIGHT = hash("click_right")
 
 -- Ordered list of available items and blocks for switching
-local SWITCH_CYCLE = { 1, 2, 3, 5, 6, 10, 11, 12, 13, 14 }
+local SWITCH_CYCLE = {}
 
 go.property("bomb_factory", msg.url())
 go.property("mouse_factory", msg.url())
 
+-- Format item name for display (e.g., diamond_sword -> Diamond Sword)
+local function format_item_name(name)
+    if not name then return "Unknown" end
+    -- Replace underscores with spaces
+    local display_name = name:gsub("_", " ")
+    -- Capitalize first letter of each word
+    display_name = display_name:gsub("(%a)([%w]*)", function(first, rest)
+        return first:upper() .. rest:lower()
+    end)
+    return display_name
+end
+
 local function update_global_item_name(self)
     local def = items_data.definitions[self.current_id]
-    _G.held_item_name = def and def.name or "unknown"
+    _G.held_item_name = def and format_item_name(def.name) or "Unknown"
 end
 
 function init(self)
     msg.post(".", H_ACQUIRE_INPUT_FOCUS)
-    self.cycle_index = 6 -- Start with pickaxe (index 6 is ID 10)
+
+    -- Dynamic initialization of SWITCH_CYCLE
+    -- We want blocks first (IDs 1-6) then items (ID 10+)
+    local keys = {}
+    for k, _ in pairs(items_data.definitions) do
+        if k ~= 0 then -- Skip air
+            table.insert(keys, k)
+        end
+    end
+    table.sort(keys)
+    SWITCH_CYCLE = keys
+
+    self.cycle_index = 1 -- Start with first item in the list
     self.current_id = SWITCH_CYCLE[self.cycle_index]
-    self.active_mode = items_data.definitions[self.current_id].type == "block" and "block" or "item"
+    local def = items_data.definitions[self.current_id]
+    self.active_mode = def.type == "block" and "block" or "item"
     self.mining_target = nil
     self.mining_progress = 0
     self.ads_active = false
+
+    -- Synchronize mesh with voxelizer on start
+    msg.post("camera#voxelizer", "set_hand_state", { mode = self.active_mode, id = self.current_id })
     update_global_item_name(self)
 end
 
@@ -58,10 +86,10 @@ function on_input(self, action_id, action)
             local damage = 1
             if self.active_mode == "item" then
                 local item = items_data.definitions[self.current_id]
-                if item.name == "diamond_sword" then
+                if item.name:find("sword") then
                     msg.post("camera#voxelizer", "play_swing")
                 end
-                damage = item.power or 1
+                damage = item.mining_power or 1
             else
                 damage = 1
             end
@@ -80,10 +108,45 @@ function on_input(self, action_id, action)
                     if self.mining_progress >= health then
                         msg.post("root#main", "destroy_cube", { gx = gx, gy = gy, gz = gz })
                         self.mining_target = nil
+                        -- Reset breaking effect
+                        if _G.terrain_mesh_url then
+                            go.set(_G.terrain_mesh_url, "break_info", vmath.vector4(0, 0, 8, 0))
+                        end
                     else
+                        -- Update breaking effect
+                        if _G.terrain_mesh_url then
+                            local frame = math.floor((self.mining_progress / health) * 8)
+                            go.set(_G.terrain_mesh_url, "break_pos", vmath.vector4(gx, gy, gz, 0))
+                            go.set(_G.terrain_mesh_url, "break_info", vmath.vector4(frame, 1, 8, 0))
+                        end
+
                         local hit_pos = go.get_position()
                         sm.play(b_def.hit_sound or sm.HASHES.hit, 1.0, hit_pos)
                     end
+                else
+                    -- Reset breaking effect if we hit an unknown block or something went wrong
+                    if self.mining_target then
+                        self.mining_target = nil
+                        if _G.terrain_mesh_url then
+                            go.set(_G.terrain_mesh_url, "break_info", vmath.vector4(0, 0, 8, 0))
+                        end
+                    end
+                end
+            else
+                -- Target is air or unbreakable, clear breaking effect
+                if self.mining_target then
+                    self.mining_target = nil
+                    if _G.terrain_mesh_url then
+                        go.set(_G.terrain_mesh_url, "break_info", vmath.vector4(0, 0, 8, 0))
+                    end
+                end
+            end
+        else
+            -- No targeted cube, clear breaking effect
+            if self.mining_target then
+                self.mining_target = nil
+                if _G.terrain_mesh_url then
+                    go.set(_G.terrain_mesh_url, "break_info", vmath.vector4(0, 0, 8, 0))
                 end
             end
         end

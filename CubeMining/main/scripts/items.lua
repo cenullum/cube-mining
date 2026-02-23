@@ -32,7 +32,7 @@ M.definitions = {
             bottom = "stone_top",
             side = "stone_side"
         },
-        health = 1,
+        health = 10,
         hit_sound = "hit",
         break_sound = "stone_debris"
     },
@@ -55,7 +55,7 @@ M.definitions = {
             bottom = "golden_top",
             side = "golden_side"
         },
-        health = 2,
+        health = 15,
         hit_sound = "hit",
         break_sound = "stone_debris"
     },
@@ -68,7 +68,7 @@ M.definitions = {
             bottom = "dirt",
             side = "grass_side"
         },
-        health = 1,
+        health = 5,
         hit_sound = "hit",
         break_sound = "stone_debris"
     },
@@ -79,27 +79,21 @@ M.definitions = {
         faces = {
             all = "dirt"
         },
-        health = 1,
+        health = 5,
         hit_sound = "hit",
         break_sound = "stone_debris"
     },
 
     -- Items (remapped to 10+ to avoid collision)
-    -- power: Mining damage dealt per hit
+    -- mining_power: Damage dealt to blocks per hit
+    -- damage_power: Damage dealt to entities (future-proofing)
     -- id: Hashed name for internal system lookup (animations/prefabs)
 
-    [10] = {
-        name = "pickaxe",
-        type = "voxel",
-        power = 1,
-        id = hash("pickaxe"),
-        is_placeable = false
-    },
     [11] = {
         name = "torch",
         type = "model",
-        power = 1,
-        id = hash("torch"),
+        mining_power = 1,
+        damage_power = 1,
         is_placeable = true,
         transparent = true,
         light_level = 15,
@@ -111,24 +105,67 @@ M.definitions = {
     [12] = {
         name = "bomb",
         type = "model",
-        power = 1,
-        id = hash("bomb"),
+        mining_power = 1,
+        damage_power = 1,
         is_placeable = false
     },
     [13] = {
         name = "gun",
         type = "voxel",
-        power = 1,
-        id = hash("gun"),
+        mining_power = 1,
+        damage_power = 1,
         is_placeable = false
     },
     [14] = {
         name = "diamond_sword",
         type = "voxel",
-        power = 2,
-        id = hash("diamond_sword"),
+        mining_power = 2,
+        damage_power = 7,
+        is_placeable = false
+    },
+    [15] = {
+        name = "stone_pickaxe",
+        type = "voxel",
+        mining_power = 2,
+        damage_power = 2,
+        is_placeable = false
+    },
+    [16] = {
+        name = "golden_pickaxe",
+        type = "voxel",
+        mining_power = 3,
+        damage_power = 2,
+        is_placeable = false
+    },
+    [17] = {
+        name = "diamond_pickaxe",
+        type = "voxel",
+        mining_power = 5,
+        damage_power = 3,
+        is_placeable = false
+    },
+    [18] = {
+        name = "iron_sword",
+        type = "voxel",
+        mining_power = 1,
+        damage_power = 4,
+        is_placeable = false
+    },
+    [19] = {
+        name = "golden_sword",
+        type = "voxel",
+        mining_power = 1,
+        damage_power = 5,
         is_placeable = false
     }
 }
+
+-- Post-process definitions to ensure 'id' (hash) and 'name' are properly handled
+-- Users can use either ID or hashed name for lookups
+for id, def in pairs(M.definitions) do
+    if not def.id then
+        def.id = hash(def.name)
+    end
+end
 
 return M

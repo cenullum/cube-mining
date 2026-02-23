@@ -14,6 +14,8 @@ out mediump float var_ao;           // Ambient Occlusion factor
 out mediump float var_torch_light;  // Torch Light
 out mediump float var_sun_light;    // Sun Light
 out mediump vec3 var_view_pos;      // Position in view space
+out mediump vec3 var_pos;           // Position for block breaking
+out mediump vec3 var_normal;        // Normal for block breaking
 
 // --- Uniforms ---
 uniform vs_uniforms
@@ -44,6 +46,8 @@ void main()
     
     // Pass view-space position for fog
     var_view_pos = p.xyz;
+    var_pos = position.xyz;
+    var_normal = normal;
 
     // Final clip space position
     gl_Position = mtx_proj * p;
