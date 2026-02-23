@@ -675,7 +675,7 @@ function on_message(self, message_id, message, sender)
                 if b_def and b_def.break_sound then
                     sm.play(b_def.break_sound, 1.0, TEMP_POS)
                 else
-                    sm.play(sm.HASHES.stone_debris, 1.0, TEMP_POS)
+                    sm.play(sm.stone_debris, 1.0, TEMP_POS)
                 end
 
                 world.set_block(gx, gy, gz, 0)
@@ -702,11 +702,18 @@ function on_message(self, message_id, message, sender)
                 if world.get_block(gx, gy, gz) == 0 then
                     world.set_block(gx, gy, gz, target_id)
 
-                    if target_id == 11 and self.torch_factory then
+                    if target_id == 12 and self.torch_factory then
                         local offset = -self.grid_size / 2 + 0.5
                         local pos = vmath.vector3(offset + gx, offset + gy, 490 + gz)
                         local t_id = factory.create(self.torch_factory, pos)
                         self.block_entities[gx .. "_" .. gy .. "_" .. gz] = t_id
+                        -- Explicitly set tint to white so the torch is fully visible/bright as a light source
+                        pcall(function() go.set(msg.url(nil, t_id, "model"), "tint", vmath.vector4(1, 1, 1, 1)) end)
+                        sm.play(sm.place, 1.0, pos)
+                    else
+                        local offset = -self.grid_size / 2 + 0.5
+                        local pos = vmath.vector3(offset + gx, offset + gy, 490 + gz)
+                        sm.play(sm.place, 1.0, pos)
                     end
 
                     self.total_cubes = (self.total_cubes or 0) + 1
@@ -752,7 +759,7 @@ function on_message(self, message_id, message, sender)
                                     TEMP_POS.x = offset + gx
                                     TEMP_POS.y = offset + gy
                                     TEMP_POS.z = 490 + gz
-                                    sm.play(sm.HASHES.stone_debris, 1.0, TEMP_POS)
+                                    sm.play(sm.stone_debris, 1.0, TEMP_POS)
                                 else
                                     if current_id == 0 then self.total_cubes = (self.total_cubes or 0) + 1 end
                                     if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = true end
@@ -798,7 +805,7 @@ function on_message(self, message_id, message, sender)
                                 TEMP_POS.x = offset + gx
                                 TEMP_POS.y = offset + gy
                                 TEMP_POS.z = 490 + gz
-                                sm.play(sm.HASHES.stone_debris, 1.0, TEMP_POS)
+                                sm.play(sm.stone_debris, 1.0, TEMP_POS)
                             else
                                 if current_id == 0 then self.total_cubes = (self.total_cubes or 0) + 1 end
                                 if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = true end

@@ -117,7 +117,7 @@ local function update_camera(self)
         local cam_dir = vmath.rotate(rot, vmath.vector3(0, 0, -1))
         local spawn_pos = eye_pos + cam_dir * 2.0
         factory.create(self.mouse_factory, spawn_pos, vmath.quat())
-        sm.play(sm.HASHES.swing)
+        sm.play(sm.swing)
     end
 
     -- Camera View Matrix
@@ -170,7 +170,9 @@ function update(self, dt)
         go.set_position(p + move_dir * speed * dt)
 
         self.velocity = vmath.vector3(0) -- Reset velocity for when we switch back
+        _G.is_freecam = true
     elseif self.state == STATE_WALK then
+        _G.is_freecam = false
         -- Character Controller Logic
         local rot_y = vmath.quat_rotation_y(math.rad(self.yaw))
         local forward = vmath.rotate(rot_y, vmath.vector3(0, 0, -1))
@@ -219,6 +221,11 @@ function update(self, dt)
 
         -- Reset jump constraints if falling too fast
         if not grounded and self.velocity.y < -30 then self.velocity.y = -30 end
+
+        -- Expose movement state for head bob (hand_slot_manager)
+        local hvel = math.sqrt(self.velocity.x * self.velocity.x + self.velocity.z * self.velocity.z)
+        _G.player_speed = hvel
+        _G.player_sprinting = self.sprinting
     end
 
     -- Debug Drawing
@@ -447,7 +454,7 @@ function on_input(self, action_id, action)
         local cam_dir = vmath.rotate(cam_rot, vmath.vector3(0, 0, -1))
         local spawn_pos = cam_pos + cam_dir * 2.0
         factory.create(self.mouse_factory, spawn_pos, vmath.quat())
-        sm.play(sm.HASHES.swing)
+        sm.play(sm.swing)
     elseif action_id == H_TOGGLE_LIGHT_MODE and action.released then
         msg.post("/root#main", "toggle_light_mode")
         print("Light Mode Toggle Request Sent")

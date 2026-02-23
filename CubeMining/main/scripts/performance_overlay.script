@@ -141,7 +141,9 @@ function update(self, dt)
     local light_modes = { [0] = "FLAT", [1] = "SMOOTH", [2] = "OFF" }
     local light_str = light_modes[_G.light_mode or 0] or "FLAT"
     local item_name = _G.held_item_name or "pickaxe"
-    local status_text = "Held Item: " .. item_name .. "   AO: " .. ao_str .. "   Lighting: " .. light_str
+    local ammo_text = _G.held_item_ammo or ""
+    local status_text = "Held Item: " ..
+        item_name .. " " .. ammo_text .. "   AO: " .. ao_str .. "   Lighting: " .. light_str
 
     self.vec_offset.x = self.width / 2 - 150
     self.vec_offset.y = self.height - 20
@@ -193,7 +195,7 @@ function update(self, dt)
     local vertices = _G.stats_vertices or 0
     local build_time = _G.stats_mesh_build_time or 0
 
-    local x_start = 20
+    local x_start = self.width - 180
     local y_start = 200
 
     local lines = {
@@ -203,7 +205,7 @@ function update(self, dt)
         string.format("Vertices: %d", vertices),
         string.format("World Build: %.2f ms", build_time),
         string.format("Item Build: %.2f ms", _G.item_mesh_build_time or 0),
-        string.format("RAM: %s", format_mem(ram)),
+        string.format("RAM: %s", format_mem(ram or 0)),
         string.format("Mouse: %d", _G.mouse_count or 0)
     }
 

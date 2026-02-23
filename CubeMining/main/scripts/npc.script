@@ -9,7 +9,7 @@ go.property("rotation_offset_y", 0.0)
 
 function init(self)
     npc.init(self)
-    sm.play(sm.HASHES.swing, 1.0, go.get_position())
+    sm.play(sm.swing, 1.0, go.get_position())
 end
 
 function update(self, dt)

@@ -1,0 +1,10 @@
+local sound = sound
+local go = go
+
+function init(self)
+    -- Start playback immediately
+    -- Note: This requires the sound component to be named "sound"
+    sound.play("#sound", nil, function()
+        go.delete()
+    end)
+end

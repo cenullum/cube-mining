@@ -4,19 +4,12 @@ local go = go
 local resource = resource
 local buffer = buffer
 local hash = hash
-local sm = require "main.scripts.sound_manager"
-local block_data = require "main.scripts.block_data"
-local world = require "main.scripts.world"
 
 local H_POSITION = hash("position")
 local H_ACQUIRE_INPUT_FOCUS = hash("acquire_input_focus")
 local H_ENABLE = hash("enable")
 local H_DISABLE = hash("disable")
-local H_CLICK = hash("click")
-local H_CLICK_RIGHT = hash("click_right")
-local H_DESTROY_CUBE = hash("destroy_cube")
-local H_PLACE_CUBE = hash("place_cube")
-local H_MESH = hash("mesh")
+
 
 local function get_targeted_cube(ray_start, ray_dir, max_dist)
     local step = 0.05 -- Adjusted for scale 1
@@ -130,7 +123,8 @@ function update(self, dt)
     local cam_rot = go.get_world_rotation("camera")
     local cam_dir = vmath.rotate(cam_rot, vmath.vector3(0, 0, -1))
 
-    local target, gx, gy, gz, normal = get_targeted_cube(cam_pos, cam_dir, 4.5)
+    local reach = _G.is_freecam and 100 or 4.5
+    local target, gx, gy, gz, normal = get_targeted_cube(cam_pos, cam_dir, reach)
     if target then
         _G.targeted_cube = { target = target, gx = gx, gy = gy, gz = gz, normal = normal }
         if not self.visible then

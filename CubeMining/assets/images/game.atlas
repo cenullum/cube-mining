@@ -14,7 +14,7 @@ images {
   image: "/assets/images/tile_texture/golden_top.png"
 }
 images {
-  image: "/assets/images/items/gun.png"
+  image: "/assets/images/items/pistol.png"
 }
 images {
   image: "/assets/images/items/pickaxe.png"
@@ -38,12 +38,15 @@ images {
   image: "/assets/images/items/iron_sword.png"
 }
 images {
-  image: "/assets/images/items/stone_pickaxe.png"
+  image: "/assets/images/items/iron_pickaxe.png"
 }
 images {
   image: "/assets/images/items/golden_pickaxe.png"
 }
 images {
   image: "/assets/images/items/diamond_pickaxe.png"
+}
+images {
+  image: "/assets/images/items/submachine_gun.png"
 }
 extrude_borders: 2

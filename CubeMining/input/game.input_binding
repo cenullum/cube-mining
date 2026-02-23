@@ -78,3 +78,7 @@ mouse_trigger {
   input: MOUSE_BUTTON_3
   action: "click_right"
 }
+key_trigger {
+  input: KEY_R
+  action: "reload"
+}

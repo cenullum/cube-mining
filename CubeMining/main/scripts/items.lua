@@ -7,7 +7,8 @@ M.definitions = {
     -- Blocks (kept IDs 0-6 for voxel engine compatibility)
     -- id: Unique numeric identifier for the item/block
     -- name: Display name of the item
-    -- type: "block" (voxel mesh), "voxel" (2D to 3D item), or "model" (3D prefab)
+    -- type: "block", "tool", "gun" (logical type)
+    -- visual: "block" (voxel mesh), "voxel" (2D to 3D item), or "model" (3D prefab)
     -- is_placeable: Boolean, if true, the item can be placed into the world grid as a voxel
     -- faces: UV mapping for voxel faces (top, bottom, side) or {all}
     -- transparent: Boolean, if true, the block is considered non-opaque
@@ -19,12 +20,14 @@ M.definitions = {
 
     [0] = {
         name = "air",
+        visual = "block",
         type = "block",
         transparent = true,
         is_placeable = false
     },
     [1] = {
         name = "stone",
+        visual = "block",
         type = "block",
         is_placeable = true,
         faces = {
@@ -38,6 +41,7 @@ M.definitions = {
     },
     [2] = {
         name = "unbreakable",
+        visual = "block",
         type = "block",
         is_placeable = true,
         faces = {
@@ -48,6 +52,7 @@ M.definitions = {
     },
     [3] = {
         name = "golden_ore",
+        visual = "block",
         type = "block",
         is_placeable = true,
         faces = {
@@ -61,6 +66,7 @@ M.definitions = {
     },
     [5] = {
         name = "grass",
+        visual = "block",
         type = "block",
         is_placeable = true,
         faces = {
@@ -74,6 +80,7 @@ M.definitions = {
     },
     [6] = {
         name = "dirt",
+        visual = "block",
         type = "block",
         is_placeable = true,
         faces = {
@@ -89,9 +96,10 @@ M.definitions = {
     -- damage_power: Damage dealt to entities (future-proofing)
     -- id: Hashed name for internal system lookup (animations/prefabs)
 
-    [11] = {
+    [12] = {
         name = "torch",
-        type = "model",
+        visual = "model",
+        type = "tool",
         mining_power = 1,
         damage_power = 1,
         is_placeable = true,
@@ -102,61 +110,90 @@ M.definitions = {
         hit_sound = "hit",
         break_sound = "stone_debris"
     },
-    [12] = {
-        name = "bomb",
-        type = "model",
-        mining_power = 1,
-        damage_power = 1,
-        is_placeable = false
-    },
     [13] = {
-        name = "gun",
-        type = "voxel",
+        name = "bomb",
+        visual = "model",
+        type = "tool",
         mining_power = 1,
         damage_power = 1,
         is_placeable = false
     },
     [14] = {
-        name = "diamond_sword",
-        type = "voxel",
-        mining_power = 2,
-        damage_power = 7,
-        is_placeable = false
+        name = "pistol",
+        visual = "voxel",
+        type = "gun",
+        mining_power = 1,
+        damage_power = 1,
+        is_placeable = false,
+        ammo_max = 7,
+        fire_rate = 0.2,
+        reload_duration = 1.0,
+        shot_sound = "pistol_shot",
+        reload_sound = "pistol_reload",
+        holster_sound = "gun_holster"
     },
     [15] = {
-        name = "stone_pickaxe",
-        type = "voxel",
+        name = "iron_pickaxe",
+        visual = "voxel",
+        type = "tool",
         mining_power = 2,
         damage_power = 2,
         is_placeable = false
     },
     [16] = {
         name = "golden_pickaxe",
-        type = "voxel",
+        visual = "voxel",
+        type = "tool",
         mining_power = 3,
         damage_power = 2,
         is_placeable = false
     },
     [17] = {
         name = "diamond_pickaxe",
-        type = "voxel",
+        visual = "voxel",
+        type = "tool",
         mining_power = 5,
         damage_power = 3,
         is_placeable = false
     },
     [18] = {
         name = "iron_sword",
-        type = "voxel",
+        visual = "voxel",
+        type = "tool",
         mining_power = 1,
         damage_power = 4,
         is_placeable = false
     },
     [19] = {
         name = "golden_sword",
-        type = "voxel",
+        visual = "voxel",
+        type = "tool",
         mining_power = 1,
         damage_power = 5,
         is_placeable = false
+    },
+    [20] = {
+        name = "diamond_sword",
+        visual = "voxel",
+        type = "tool",
+        mining_power = 2,
+        damage_power = 7,
+        is_placeable = false
+    },
+    [21] = {
+        name = "submachine_gun",
+        visual = "voxel",
+        type = "gun",
+        mining_power = 1,
+        damage_power = 2,
+        is_placeable = false,
+        ammo_max = 30,
+        fire_rate = 0.1,
+        is_automatic = true,
+        reload_duration = 2.0,
+        shot_sound = "submachine_gun_shot",
+        reload_sound = "submachine_gun_reload",
+        holster_sound = "gun_holster"
     }
 }
 

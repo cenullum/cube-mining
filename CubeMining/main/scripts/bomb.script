@@ -53,7 +53,7 @@ function update(self, dt)
         })
 
         msg.post("/camera#camera_script", "explosion", { position = pos, force = radius / 3.0 })
-        sm.play(sm.HASHES.bomb, 1.0, pos)
+        sm.play(sm.bomb, 1.0, pos)
 
         go.delete()
         return

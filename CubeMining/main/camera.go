@@ -25,6 +25,16 @@ components {
     value: "/camera#mouse_factory"
     type: PROPERTY_TYPE_URL
   }
+  properties {
+    id: "pistol_shot_factory"
+    value: "/camera#pistol_shot_factory"
+    type: PROPERTY_TYPE_URL
+  }
+  properties {
+    id: "submachine_gun_shot_factory"
+    value: "/camera#smg_shot_factory"
+    type: PROPERTY_TYPE_URL
+  }
 }
 components {
   id: "voxelizer"
@@ -82,5 +92,17 @@ embedded_components {
   id: "torch_hand_factory"
   type: "factory"
   data: "prototype: \"/main/entity/torch.go\"\n"
+  ""
+}
+embedded_components {
+  id: "pistol_shot_factory"
+  type: "factory"
+  data: "prototype: \"/main/pistol_shot_emitter.go\"\n"
+  ""
+}
+embedded_components {
+  id: "smg_shot_factory"
+  type: "factory"
+  data: "prototype: \"/main/smg_shot_emitter.go\"\n"
   ""
 }

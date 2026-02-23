@@ -1,182 +1,472 @@
 -- hand_slot_manager.script
--- Purpose: Manages the player's held item/block slot, handles interactions like mining, placing blocks, throwing bombs, and aiming down sights.
+-- Manages held item/block, shooting, mining, placing, reloading, head bob, and mouse sway.
+-- All actions guarded by state: reloading > shooting > mining.
+-- Optimized: item data cached on switch, hashes pre-cached.
+-- Animations: Hand-calculated additive system using proxy properties.
 
-local vmath = vmath
-local msg = msg
-local go = go
-local factory = factory
-local hash = hash
-local math = math
+local vmath         = vmath
+local msg           = msg
+local go            = go
+local factory       = factory
+local hash          = hash
+local math          = math
+local string        = string
+local window        = _G.window
 
-local world = require "main.scripts.world"
-local sm = require "main.scripts.sound_manager"
-local items_data = require "main.scripts.items"
-local block_data = require "main.scripts.block_data"
+local world         = require "main.scripts.world"
+local sm            = require "main.scripts.sound_manager"
+local items_data    = require "main.scripts.items"
+local block_data    = require "main.scripts.block_data"
 
-local H_ACQUIRE_INPUT_FOCUS = hash("acquire_input_focus")
-local H_KEY_1 = hash("key_1")
-local H_CLICK = hash("click")
+-- ============================================================================
+-- PRE-CACHED HASHES & CONSTANTS
+-- ============================================================================
+local H_ACQUIRE     = hash("acquire_input_focus")
+local H_KEY_1       = hash("key_1")
+local H_CLICK       = hash("click")
 local H_CLICK_RIGHT = hash("click_right")
+local H_RELOAD      = hash("reload")
 
--- Ordered list of available items and blocks for switching
-local SWITCH_CYCLE = {}
+-- Voxelizer message hashes
+local H_SET_HAND    = hash("set_hand_state")
 
+-- Component properties for additive animation proxies
+go.property("anim_pos", vmath.vector3())
+go.property("anim_rot", vmath.quat())
+go.property("ads_pos", vmath.vector3())
+go.property("ads_rot", vmath.quat())
+go.property("recoil_pos", vmath.vector3())
+go.property("recoil_rot", vmath.quat())
+go.property("reload_pos", vmath.vector3())
+go.property("swing_pos", vmath.vector3())
+go.property("swing_rot", vmath.quat())
+
+-- Component properties
 go.property("bomb_factory", msg.url())
 go.property("mouse_factory", msg.url())
+go.property("pistol_shot_factory", msg.url())
+go.property("submachine_gun_shot_factory", msg.url())
 
--- Format item name for display (e.g., diamond_sword -> Diamond Sword)
-local function format_item_name(name)
+-- ============================================================================
+-- HELPERS
+-- ============================================================================
+
+-- Format "diamond_sword" -> "Diamond Sword"
+local function format_name(name)
     if not name then return "Unknown" end
-    -- Replace underscores with spaces
-    local display_name = name:gsub("_", " ")
-    -- Capitalize first letter of each word
-    display_name = display_name:gsub("(%a)([%w]*)", function(first, rest)
-        return first:upper() .. rest:lower()
+    return name:gsub("_", " "):gsub("(%a)([%w]*)", function(a, b)
+        return a:upper() .. b:lower()
     end)
-    return display_name
 end
 
-local function update_global_item_name(self)
-    local def = items_data.definitions[self.current_id]
-    _G.held_item_name = def and format_item_name(def.name) or "Unknown"
+-- Sync the HUD globals with current cached item
+local function sync_hud(self)
+    local item = self.cached_item
+    _G.held_item_name = item and format_name(item.name) or "Unknown"
+    if item and item.type == "gun" then
+        _G.held_item_ammo = string.format("AMMO %d/%d", self.ammo[self.current_id] or 0, item.ammo_max or 0)
+    else
+        _G.held_item_ammo = ""
+    end
 end
+
+-- Clear the block-breaking overlay
+local function clear_break_effect(self)
+    self.mining_target = nil
+    self.mining_progress = 0
+    if _G.terrain_mesh_url then
+        go.set(_G.terrain_mesh_url, "break_info", vmath.vector4(0, 0, 8, 0))
+    end
+end
+
+-- Cache item definition on switch
+local function cache_item(self)
+    self.cached_item = items_data.definitions[self.current_id]
+end
+
+-- ============================================================================
+-- GUN ACTIONS
+-- ============================================================================
+
+-- Fire one shot. Returns true if a bullet was consumed.
+local function fire_one_shot(self)
+    local item = self.cached_item
+    local cur = self.ammo[self.current_id] or 0
+    if cur <= 0 then return false end
+
+    self.ammo[self.current_id] = cur - 1
+
+    -- Sound per bullet (Pooled/Dynamic)
+    if item.shot_sound then
+        local f_url = nil
+        if item.shot_sound == "pistol_shot" then
+            f_url = self.pistol_shot_factory
+        elseif item.shot_sound == "submachine_gun_shot" then
+            f_url = self.submachine_gun_shot_factory
+        end
+
+        -- Fallback to standard if no factory, otherwise use pooled play
+        if f_url and f_url.path ~= hash("") then
+            sm.play_pooled(hash(item.shot_sound), f_url)
+        else
+            sm.play(hash(item.shot_sound))
+        end
+    end
+
+    -- Recoil animation (additive)
+    local power = item.damage_power or 1
+    go.cancel_animations("#", "recoil_pos")
+    go.cancel_animations("#", "recoil_rot")
+    self.recoil_pos = vmath.vector3()
+    self.recoil_rot = vmath.quat()
+
+    go.animate("#", "recoil_pos", go.PLAYBACK_ONCE_PINGPONG, vmath.vector3(0, 0, 0.1 * power), go.EASING_OUTQUAD,
+        0.1)
+    go.animate("#", "recoil_rot", go.PLAYBACK_ONCE_PINGPONG, vmath.quat_rotation_z(math.rad(-5 * power)),
+        go.EASING_OUTQUAD, 0.1)
+
+    sync_hud(self)
+    return true
+end
+
+-- Start the reload sequence
+local function start_reload(self)
+    local item = self.cached_item
+    if self.reloading then return end
+    local cur = self.ammo[self.current_id] or 0
+    if cur >= (item.ammo_max or 0) then return end
+
+    self.reloading = true
+    self.is_shooting = false
+
+    -- Visual: weapon goes down (additive)
+    go.animate("#", "reload_pos", go.PLAYBACK_ONCE_FORWARD, vmath.vector3(0, -0.6, 0), go.EASING_INOUTQUAD, 0.3)
+
+    -- Finish reload callback
+    local current_id = self.current_id
+    local function finish_reload()
+        if not self.reloading then return end
+        self.ammo[current_id] = item.ammo_max
+        self.reloading = false
+        go.animate("#", "reload_pos", go.PLAYBACK_ONCE_FORWARD, vmath.vector3(), go.EASING_INOUTQUAD, 0.3)
+        sync_hud(self)
+    end
+
+    -- Play reload sound
+    if item.reload_sound then
+        sm.play(hash(item.reload_sound), 1.0, nil, finish_reload, 0)
+    else
+        finish_reload()
+    end
+end
+
+-- ============================================================================
+-- MINING ACTION
+-- ============================================================================
+
+local function try_mine(self)
+    if self.reloading then return end
+
+    local targeted = _G.targeted_cube
+    if not targeted or not targeted.gx then return end
+
+    local gx, gy, gz = targeted.gx, targeted.gy, targeted.gz
+    local item = self.cached_item
+
+    -- Swing animation (additive)
+    go.cancel_animations("#", "swing_pos")
+    go.cancel_animations("#", "swing_rot")
+    self.swing_pos = vmath.vector3()
+    self.swing_rot = vmath.quat()
+
+    go.animate("#", "swing_pos", go.PLAYBACK_ONCE_PINGPONG, vmath.vector3(0, -0.1, -0.8), go.EASING_LINEAR, 0.2)
+    go.animate("#", "swing_rot", go.PLAYBACK_ONCE_PINGPONG, vmath.quat_rotation_z(math.rad(90)),
+        go.EASING_LINEAR, 0.2)
+
+    -- Calculate damage
+    local damage = 1
+    if self.active_mode == "item" then
+        damage = item.mining_power or 1
+    end
+
+    if _G.is_freecam then
+        damage = 9999 -- Instant breaking in freecam
+    end
+
+    local b_id = world.get_block(gx, gy, gz)
+    if b_id == 0 or b_id == 2 then
+        clear_break_effect(self)
+        return
+    end
+
+    local b_def = block_data.get_block(b_id)
+    local base_def = items_data.definitions[b_id]
+    if not b_def or not base_def then
+        clear_break_effect(self)
+        return
+    end
+
+    local block_key = gx .. "_" .. gy .. "_" .. gz
+    if self.mining_target ~= block_key then
+        self.mining_target = block_key
+        self.mining_progress = 0
+    end
+
+    self.mining_progress = self.mining_progress + damage
+    local health = base_def.health or 1
+
+    if self.mining_progress >= health then
+        msg.post("root#main", "destroy_cube", { gx = gx, gy = gy, gz = gz })
+        clear_break_effect(self)
+    else
+        if _G.terrain_mesh_url then
+            local frame = math.floor((self.mining_progress / health) * 8)
+            go.set(_G.terrain_mesh_url, "break_pos", vmath.vector4(gx, gy, gz, 0))
+            go.set(_G.terrain_mesh_url, "break_info", vmath.vector4(frame, 1, 8, 0))
+        end
+        sm.play(b_def.hit_sound or sm.hit, 1.0, go.get_position())
+    end
+end
+
+-- ============================================================================
+-- LIFECYCLE
+-- ============================================================================
 
 function init(self)
-    msg.post(".", H_ACQUIRE_INPUT_FOCUS)
+    msg.post(".", H_ACQUIRE)
 
-    -- Dynamic initialization of SWITCH_CYCLE
-    -- We want blocks first (IDs 1-6) then items (ID 10+)
+    -- Build sorted switch cycle
     local keys = {}
     for k, _ in pairs(items_data.definitions) do
-        if k ~= 0 then -- Skip air
-            table.insert(keys, k)
-        end
+        if k ~= 0 then keys[#keys + 1] = k end
     end
     table.sort(keys)
     SWITCH_CYCLE = keys
 
-    self.cycle_index = 1 -- Start with first item in the list
-    self.current_id = SWITCH_CYCLE[self.cycle_index]
-    local def = items_data.definitions[self.current_id]
-    self.active_mode = def.type == "block" and "block" or "item"
+    -- Starting state
+    self.cycle_index = 1
+    self.current_id = SWITCH_CYCLE[1]
+    cache_item(self)
+    self.active_mode = (self.cached_item.type == "block") and "block" or "item"
+
     self.mining_target = nil
     self.mining_progress = 0
     self.ads_active = false
+    self.reloading = false
+    self.is_shooting = false
+    self.fire_timer = 0
 
-    -- Synchronize mesh with voxelizer on start
-    msg.post("camera#voxelizer", "set_hand_state", { mode = self.active_mode, id = self.current_id })
-    update_global_item_name(self)
+    -- Head bob state
+    self.bob_time = 0
+    self.bob_offset = vmath.vector3()
+
+    -- Mouse sway state
+    self.sway_target = vmath.vector3()
+    self.sway_current = vmath.vector3()
+
+    -- Pre-fill ammo
+    self.ammo = {}
+    for id, d in pairs(items_data.definitions) do
+        if d.ammo_max then self.ammo[id] = d.ammo_max end
+    end
+
+    -- Cache window size for UI positioning
+    self.width, self.height = window.get_size()
+    window.set_listener(function(self, event, data)
+        if event == window.WINDOW_EVENT_RESIZED then
+            self.width = data.width
+            self.height = data.height
+        end
+    end)
+
+    msg.post("camera#voxelizer", H_SET_HAND, { mode = self.active_mode, id = self.current_id })
+    sync_hud(self)
+end
+
+function update(self, dt)
+    if self.fire_timer > 0 then
+        self.fire_timer = self.fire_timer - dt
+    end
+
+    if self.is_shooting and not self.reloading then
+        local item = self.cached_item
+        if item and item.type == "gun" and item.is_automatic and self.fire_timer <= 0 then
+            if not fire_one_shot(self) then
+                self.is_shooting = false
+            end
+            self.fire_timer = item.fire_rate or 0.1
+        end
+    end
+
+    -- ── Head bob ──────────────────────
+    local speed = _G.player_speed or 0
+    local sprinting = _G.player_sprinting or false
+
+    if speed > 0.5 then
+        local bob_freq = sprinting and 14.0 or 9.0
+        local bob_amp_x = (sprinting and 0.025 or 0.015) * (self.ads_active and 0.2 or 1.0)
+        local bob_amp_y = (sprinting and 0.020 or 0.012) * (self.ads_active and 0.2 or 1.0)
+
+        self.bob_time = self.bob_time + dt * bob_freq
+        self.bob_offset.x = math.sin(self.bob_time) * bob_amp_x
+        self.bob_offset.y = math.sin(self.bob_time * 2) * bob_amp_y
+    else
+        self.bob_time = 0
+        self.bob_offset.x = self.bob_offset.x * 0.9
+        self.bob_offset.y = self.bob_offset.y * 0.9
+    end
+
+    -- ── Mouse sway ──────────────
+    local lerp_t = math.min(dt * 15.0, 1.0)
+    self.sway_current.x = vmath.lerp(lerp_t, self.sway_current.x, self.sway_target.x)
+    self.sway_current.y = vmath.lerp(lerp_t, self.sway_current.y, self.sway_target.y)
+    local decay_t = math.min(dt * 7.0, 1.0)
+    self.sway_target.x = vmath.lerp(decay_t, self.sway_target.x, 0)
+    self.sway_target.y = vmath.lerp(decay_t, self.sway_target.y, 0)
+
+    -- ── COMPOSITE POSITION & ROTATION ────────────────────────────────────
+    if _G.held_mesh_id and _G.hand_base_pos and _G.hand_base_rot then
+        -- Position = base + ads + recoil + reload + bob + sway
+        local final_pos = vmath.vector3(_G.hand_base_pos)
+        final_pos = final_pos + self.ads_pos
+        final_pos = final_pos + self.recoil_pos
+        final_pos = final_pos + self.reload_pos
+        final_pos = final_pos + self.swing_pos
+        final_pos.x = final_pos.x + self.bob_offset.x + self.sway_current.x
+        final_pos.y = final_pos.y + self.bob_offset.y + self.sway_current.y
+
+        go.set_position(final_pos, _G.held_mesh_id)
+
+        -- Rotation = base * ads * swing * recoil
+        local final_rot = _G.hand_base_rot * self.ads_rot * self.swing_rot * self.recoil_rot
+        go.set_rotation(final_rot, _G.held_mesh_id)
+    end
+
+    -- Debug overlay
+    local item = self.cached_item
+    local dbg = string.format(
+        "ID:%d  Type:%s  Mode:%s\nShooting:%s  Reloading:%s\nADS:%s  Bob:%.3f,%.3f",
+        self.current_id or 0, item and item.type or "?", self.active_mode or "?",
+        tostring(self.is_shooting), tostring(self.reloading), tostring(self.ads_active),
+        self.bob_offset.x, self.bob_offset.y
+    )
+    msg.post("@render:", "draw_debug_text",
+        { text = dbg, position = vmath.vector3(10, 120, 0), color = vmath.vector4(1, 1, 0, 1) })
 end
 
 function on_input(self, action_id, action)
-    if not action_id then return end
+    if not action_id then
+        local dx = action.dx or 0
+        local dy = action.dy or 0
+        local max_d = 80
+        dx = math.max(-max_d, math.min(max_d, dx))
+        dy = math.max(-max_d, math.min(max_d, dy))
+        local sway_mul = self.ads_active and 0.0002 or 0.0009
+        self.sway_target.x = -dx * sway_mul
+        self.sway_target.y = -dy * sway_mul
+        return
+    end
+
+    local item = self.cached_item
 
     if action_id == H_KEY_1 and action.pressed then
+        if self.reloading then return end
         self.cycle_index = (self.cycle_index % #SWITCH_CYCLE) + 1
         self.current_id = SWITCH_CYCLE[self.cycle_index]
-        local def = items_data.definitions[self.current_id]
-        self.active_mode = def.type == "block" and "block" or "item"
+        cache_item(self)
+        item = self.cached_item
+        self.active_mode = (item.type == "block") and "block" or "item"
+        self.is_shooting = false
+        msg.post("camera#voxelizer", H_SET_HAND, { mode = self.active_mode, id = self.current_id })
 
-        msg.post("camera#voxelizer", "set_hand_state", { mode = self.active_mode, id = self.current_id })
-        update_global_item_name(self)
-    elseif action_id == H_CLICK and action.pressed then
-        local targeted = _G.targeted_cube
-        if targeted then
-            local target, gx, gy, gz, normal = targeted.target, targeted.gx, targeted.gy, targeted.gz, targeted.normal
-            local damage = 1
-            if self.active_mode == "item" then
-                local item = items_data.definitions[self.current_id]
-                if item.name:find("sword") then
-                    msg.post("camera#voxelizer", "play_swing")
-                end
-                damage = item.mining_power or 1
-            else
-                damage = 1
-            end
+        if self.ads_active then
+            self.ads_active = false
+            go.cancel_animations("#", "ads_pos")
+            go.cancel_animations("#", "ads_rot")
+            self.ads_pos = vmath.vector3()
+            self.ads_rot = vmath.quat()
+            _G.camera_fov = 60
+        end
 
-            local b_id = world.get_block(gx, gy, gz)
-            if b_id ~= 0 and b_id ~= 2 then
-                local b_def, base_def = block_data.get_block(b_id), items_data.definitions[b_id]
-                if b_def and base_def then
-                    local block_key = gx .. "_" .. gy .. "_" .. gz
-                    if self.mining_target ~= block_key then
-                        self.mining_target = block_key
-                        self.mining_progress = 0
-                    end
-                    self.mining_progress = self.mining_progress + damage
-                    local health = base_def.health or 1
-                    if self.mining_progress >= health then
-                        msg.post("root#main", "destroy_cube", { gx = gx, gy = gy, gz = gz })
-                        self.mining_target = nil
-                        -- Reset breaking effect
-                        if _G.terrain_mesh_url then
-                            go.set(_G.terrain_mesh_url, "break_info", vmath.vector4(0, 0, 8, 0))
+        if item.type == "gun" and item.holster_sound then sm.play(hash(item.holster_sound)) end
+        sync_hud(self)
+        return
+    end
+
+    if action_id == H_CLICK then
+        if self.reloading then
+            if action.released then self.is_shooting = false end
+            return
+        end
+        if item.type == "gun" then
+            if action.pressed then
+                local has_ammo = (self.ammo[self.current_id] or 0) > 0
+                if has_ammo then
+                    if item.is_automatic then
+                        self.is_shooting = true
+                        if self.fire_timer <= 0 then
+                            fire_one_shot(self)
+                            self.fire_timer = item.fire_rate or 0.1
                         end
                     else
-                        -- Update breaking effect
-                        if _G.terrain_mesh_url then
-                            local frame = math.floor((self.mining_progress / health) * 8)
-                            go.set(_G.terrain_mesh_url, "break_pos", vmath.vector4(gx, gy, gz, 0))
-                            go.set(_G.terrain_mesh_url, "break_info", vmath.vector4(frame, 1, 8, 0))
+                        if self.fire_timer <= 0 then
+                            fire_one_shot(self)
+                            self.fire_timer = item.fire_rate or 0.2
                         end
-
-                        local hit_pos = go.get_position()
-                        sm.play(b_def.hit_sound or sm.HASHES.hit, 1.0, hit_pos)
                     end
                 else
-                    -- Reset breaking effect if we hit an unknown block or something went wrong
-                    if self.mining_target then
-                        self.mining_target = nil
-                        if _G.terrain_mesh_url then
-                            go.set(_G.terrain_mesh_url, "break_info", vmath.vector4(0, 0, 8, 0))
-                        end
-                    end
+                    try_mine(self)
                 end
-            else
-                -- Target is air or unbreakable, clear breaking effect
-                if self.mining_target then
-                    self.mining_target = nil
-                    if _G.terrain_mesh_url then
-                        go.set(_G.terrain_mesh_url, "break_info", vmath.vector4(0, 0, 8, 0))
-                    end
-                end
+            elseif action.released then
+                self.is_shooting = false
             end
         else
-            -- No targeted cube, clear breaking effect
-            if self.mining_target then
-                self.mining_target = nil
-                if _G.terrain_mesh_url then
-                    go.set(_G.terrain_mesh_url, "break_info", vmath.vector4(0, 0, 8, 0))
-                end
-            end
+            if action.pressed then try_mine(self) end
         end
-    elseif action_id == H_CLICK_RIGHT and action.pressed then
-        local item = items_data.definitions[self.current_id]
+        return
+    end
+
+    if action_id == H_CLICK_RIGHT and action.pressed then
+        if self.reloading then return end
         if item.is_placeable then
             local targeted = _G.targeted_cube
-            if targeted then
-                local gx, gy, gz, normal = targeted.gx, targeted.gy, targeted.gz, targeted.normal
+            if targeted and targeted.gx and targeted.normal then
+                local n = targeted.normal
                 msg.post("root#main", "place_cube",
-                    { gx = gx + normal.x, gy = gy + normal.y, gz = gz + normal.z, block_id = self.current_id })
+                    { gx = targeted.gx + n.x, gy = targeted.gy + n.y, gz = targeted.gz + n.z, block_id = self.current_id })
             end
-        elseif self.active_mode == "item" then
-            if item.name == "bomb" then
-                local cam_pos = go.get_world_position()
-                local cam_rot = go.get_world_rotation()
-                local cam_dir = vmath.rotate(cam_rot, vmath.vector3(0, 0, -1))
-                local spawn_pos = cam_pos + cam_dir * 1.5
-                local bomb_id = factory.create(self.bomb_factory, spawn_pos, vmath.quat())
-                msg.post(bomb_id, "set_velocity", { velocity = cam_dir * 12.5 + vmath.vector3(0, 0.75, 0) })
-                sm.play(sm.HASHES.swing)
-            elseif item.name == "gun" then
-                self.ads_active = not self.ads_active
-                msg.post("camera#voxelizer", "set_ads", { active = self.ads_active })
-                if self.ads_active then
-                    msg.post("camera#voxelizer", "set_gun_vertical")
-                else
-                    msg.post("camera#voxelizer", "reset_gun_vertical")
-                end
+        elseif item.name == "bomb" then
+            local cam_pos = go.get_world_position()
+            local cam_rot = go.get_world_rotation()
+            local cam_dir = vmath.rotate(cam_rot, vmath.vector3(0, 0, -1))
+            local bomb_id = factory.create(self.bomb_factory, cam_pos + cam_dir * 1.5, vmath.quat())
+            msg.post(bomb_id, "set_velocity", { velocity = cam_dir * 12.5 + vmath.vector3(0, 0.75, 0) })
+            sm.play(sm.swing)
+        elseif item.type == "gun" then
+            self.ads_active = not self.ads_active
+            go.cancel_animations("#", "ads_pos")
+            go.cancel_animations("#", "ads_rot")
+            if self.ads_active then
+                -- ADS offset (additive to base)
+                local ads_pos_target = vmath.vector3(-0.4, -0.07, 0.2)
+                -- We want final rotation to be 90y.
+                -- Base * ADS = 90y  =>  ADS = inv(Base) * 90y
+                local target_rot = vmath.quat_rotation_y(math.rad(-90))
+                local ads_rot_target = vmath.conj(_G.hand_base_rot) * target_rot
+                go.animate("#", "ads_pos", go.PLAYBACK_ONCE_FORWARD, ads_pos_target, go.EASING_OUTQUAD, 0.15)
+                go.animate("#", "ads_rot", go.PLAYBACK_ONCE_FORWARD, ads_rot_target, go.EASING_OUTQUAD, 0.15)
+                _G.camera_fov = 20
+            else
+                go.animate("#", "ads_pos", go.PLAYBACK_ONCE_FORWARD, vmath.vector3(), go.EASING_OUTQUAD, 0.15)
+                go.animate("#", "ads_rot", go.PLAYBACK_ONCE_FORWARD, vmath.quat(), go.EASING_OUTQUAD, 0.15)
+                _G.camera_fov = 60
             end
         end
+        return
+    end
+
+    if action_id == H_RELOAD and action.pressed then
+        if item.type == "gun" then start_reload(self) end
+        return
     end
 end
