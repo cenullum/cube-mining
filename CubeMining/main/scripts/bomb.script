@@ -26,11 +26,6 @@ function init(self)
     if _G.player_ambient_light then
         pcall(function() go.set("#model", "tint", _G.player_ambient_light) end)
     end
-
-    if self.is_held then
-        print("bbbbbbbbbbb")
-        msg.post(".", "disable")
-    end
 end
 
 function update(self, dt)

@@ -2,7 +2,7 @@
 -- Utility module to manage and validate block data.
 -- Pre-calculates UVs for optimized runtime access.
 
-local blocks = require "main.scripts.blocks"
+local items = require "main.scripts.items"
 
 local hash = hash
 local resource = resource
@@ -65,63 +65,66 @@ function M.init(atlas_res_id)
 
     block_cache = {}
 
-    for id, def in pairs(blocks.definitions) do
-        if def.transparent then
-            block_cache[id] = {
-                transparent = true,
-                name = def.name,
-                solid = false,
-                light_level = def.light_level or 0,
-                light_color = def.light_color,
-                hit_sound = def.hit_sound and hash(def.hit_sound),
-                break_sound = def.break_sound and hash(def.break_sound)
-            }
-        else
-            local faces = def.faces
-            local uv_map = {}
-            local is_solid = true -- Default solid for non-transparent blocks as per user request
-
-            local function assign_face(dir, tex_name)
-                local uv = get_uv_data(atlas, texture_info, tex_name)
-                if not uv then
-                    print("ERROR: Block '" .. def.name .. "' (ID " .. id .. ") missing texture: " .. tex_name)
-                    uv = { u = 0, v = 0, w = 0, h = 0 }
-                end
-                uv_map[dir] = uv
-            end
-
-            if faces.all then
-                for d = 1, 6 do assign_face(d, faces.all) end
+    for id, def in pairs(items.definitions) do
+        if def.is_placeable then
+            if def.transparent then
+                block_cache[id] = {
+                    transparent = true,
+                    name = def.name,
+                    solid = false,
+                    light_level = def.light_level or 0,
+                    light_color = def.light_color,
+                    hit_sound = def.hit_sound and hash(def.hit_sound),
+                    break_sound = def.break_sound and hash(def.break_sound)
+                }
             else
-                -- Check for missing face definitions
-                local required = { "top", "bottom", "side" }
-                for _, r in ipairs(required) do
-                    if not faces[r] then
-                        print("WARNING: Block '" .. def.name .. "' (ID " .. id .. ") missing face definition for: " .. r)
+                local faces = def.faces
+                local uv_map = {}
+                local is_solid = true -- Default solid for non-transparent blocks as per user request
+
+                local function assign_face(dir, tex_name)
+                    local uv = get_uv_data(atlas, texture_info, tex_name)
+                    if not uv then
+                        print("ERROR: Block '" .. def.name .. "' (ID " .. id .. ") missing texture: " .. tex_name)
+                        uv = { u = 0, v = 0, w = 0, h = 0 }
                     end
+                    uv_map[dir] = uv
                 end
 
-                assign_face(D_Y_POS, faces.top or "top")
-                assign_face(D_Y_NEG, faces.bottom or "top")
+                if faces.all then
+                    for d = 1, 6 do assign_face(d, faces.all) end
+                else
+                    -- Check for missing face definitions
+                    local required = { "top", "bottom", "side" }
+                    for _, r in ipairs(required) do
+                        if not faces[r] then
+                            print("WARNING: Block '" ..
+                                def.name .. "' (ID " .. id .. ") missing face definition for: " .. r)
+                        end
+                    end
 
-                -- Sides
-                local side_tex = faces.side or "side"
-                assign_face(D_Z_POS, side_tex)
-                assign_face(D_Z_NEG, side_tex)
-                assign_face(D_X_POS, side_tex)
-                assign_face(D_X_NEG, side_tex)
+                    assign_face(D_Y_POS, faces.top or "top")
+                    assign_face(D_Y_NEG, faces.bottom or "top")
+
+                    -- Sides
+                    local side_tex = faces.side or "side"
+                    assign_face(D_Z_POS, side_tex)
+                    assign_face(D_Z_NEG, side_tex)
+                    assign_face(D_X_POS, side_tex)
+                    assign_face(D_X_NEG, side_tex)
+                end
+
+                block_cache[id] = {
+                    name = def.name,
+                    uvs = uv_map,
+                    transparent = false,
+                    solid = is_solid,
+                    light_level = def.light_level or 0,
+                    light_color = def.light_color,
+                    hit_sound = def.hit_sound and hash(def.hit_sound),
+                    break_sound = def.break_sound and hash(def.break_sound)
+                }
             end
-
-            block_cache[id] = {
-                name = def.name,
-                uvs = uv_map,
-                transparent = false,
-                solid = is_solid,
-                light_level = def.light_level or 0,
-                light_color = def.light_color,
-                hit_sound = def.hit_sound and hash(def.hit_sound),
-                break_sound = def.break_sound and hash(def.break_sound)
-            }
         end
     end
 end

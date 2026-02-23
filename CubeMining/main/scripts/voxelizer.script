@@ -15,7 +15,6 @@ local block_data = require "main.scripts.block_data"
 local items_data = require "main.scripts.items"
 local sm = require "main.scripts.sound_manager"
 local world = require "main.scripts.world"
-local blocks = require "main.scripts.blocks"
 
 local H_POSITION = hash("position")
 local H_TEXCOORD0 = hash("texcoord0")

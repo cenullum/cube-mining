@@ -700,7 +700,7 @@ function on_message(self, message_id, message, sender)
                 if world.get_block(gx, gy, gz) == 0 then
                     world.set_block(gx, gy, gz, target_id)
 
-                    if target_id == 4 and self.torch_factory then
+                    if target_id == 11 and self.torch_factory then
                         local offset = -self.grid_size / 2 + 0.5
                         local pos = vmath.vector3(offset + gx, offset + gy, 490 + gz)
                         local t_id = factory.create(self.torch_factory, pos)
