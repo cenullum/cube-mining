@@ -450,7 +450,17 @@ local function update_mesh(self)
                                     local l1_sun, l1_source = world.get_lights(px, py, pz)
                                     local l2_sun, l2_source = world.get_lights(px + dx1, py + dy1, pz + dz1)
                                     local l3_sun, l3_source = world.get_lights(px + dx2, py + dy2, pz + dz2)
-                                    local l4_sun, l4_source = world.get_lights(px + dx3, py + dy3, pz + dz3)
+
+                                    local l4_sun, l4_source
+                                    local op1 = is_opaque(self, px + dx1, py + dy1, pz + dz1, opaque_cache)
+                                    local op2 = is_opaque(self, px + dx2, py + dy2, pz + dz2, opaque_cache)
+
+                                    if op1 and op2 then
+                                        l4_sun, l4_source = 0, 0
+                                    else
+                                        l4_sun, l4_source = world.get_lights(px + dx3, py + dy3, pz + dz3)
+                                    end
+
                                     return (l1_sun + l2_sun + l3_sun + l4_sun) / 4.0,
                                         (l1_source + l2_source + l3_source + l4_source) / 4.0
                                 end
