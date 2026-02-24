@@ -1,0 +1,94 @@
+-- shooting.script
+local npc_manager = require "main.scripts.npc"
+
+local vmath = vmath
+local math = math
+local hash = hash
+
+local H_FIRE = hash("fire")
+
+-- Constants
+local MAX_DIST = 20.0
+
+-- Ray-AABB intersection algorithm
+-- returns distance to hit or nil
+local function ray_aabb_intersection(ray_origin, ray_dir, box_min, box_max)
+    local t1 = (box_min.x - ray_origin.x) / (ray_dir.x + 0.000001)
+    local t2 = (box_max.x - ray_origin.x) / (ray_dir.x + 0.000001)
+    local t3 = (box_min.y - ray_origin.y) / (ray_dir.y + 0.000001)
+    local t4 = (box_max.y - ray_origin.y) / (ray_dir.y + 0.000001)
+    local t5 = (box_min.z - ray_origin.z) / (ray_dir.z + 0.000001)
+    local t6 = (box_max.z - ray_origin.z) / (ray_dir.z + 0.000001)
+
+    local tmin = math.max(math.max(math.min(t1, t2), math.min(t3, t4)), math.min(t5, t6))
+    local tmax = math.min(math.min(math.max(t1, t2), math.max(t3, t4)), math.max(t5, t6))
+
+    if tmax < 0 or tmin > tmax then
+        return nil
+    end
+
+    if tmin < 0 then
+        return tmax
+    end
+    return tmin
+end
+
+function on_message(self, message_id, message, sender)
+    if message_id == H_FIRE then
+        -- Debug: Print all registered NPCs and their health
+        print("--- NPC Registry Status ---")
+        for id, npc in pairs(npc_manager.registry) do
+            local status = npc.is_dead and "DEAD" or "ALIVE"
+            print(string.format("NPC ID: %s | Health: %d | Status: %s", tostring(id), npc.health or 0, status))
+        end
+        print("---------------------------")
+
+        local cam_pos = go.get_world_position()
+        local cam_rot = go.get_world_rotation()
+        local cam_dir = vmath.rotate(cam_rot, vmath.vector3(0, 0, -1))
+
+        local damage = message.damage or 10
+        local penetration = message.penetration or 0 -- 0 means 1 hit, 1 means 2 hits, etc.
+
+        local hits = {}
+
+        for id, npc in pairs(npc_manager.registry) do
+            if not npc.is_dead then
+                local npc_pos = go.get_world_position(id)
+                local to_npc = npc_pos - cam_pos
+                local dist_sq = vmath.length_sqr(to_npc)
+
+                -- Optimization 1: Distance check
+                if dist_sq < (MAX_DIST * MAX_DIST) then
+                    -- Optimization 2: Frustum Culling (Dot product)
+                    -- If dot product > 0, it's in the forward hemisphere
+                    -- We can be tighter, e.g. dot > 0.5 for ~60deg FOV
+                    local dot = vmath.dot(cam_dir, vmath.normalize(to_npc))
+                    if dot > 0.5 then
+                        -- Optimization 3: Ray-AABB Intersection
+                        local half_size = npc.size * 0.5
+                        local b_min = npc_pos + vmath.vector3(-half_size.x, 0, -half_size.z)
+                        local b_max = npc_pos + vmath.vector3(half_size.x, npc.size.y, half_size.z)
+
+                        local hit_dist = ray_aabb_intersection(cam_pos, cam_dir, b_min, b_max)
+                        if hit_dist and hit_dist < MAX_DIST then
+                            table.insert(hits, { npc = npc, dist = hit_dist })
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Sort hits by distance
+        table.sort(hits, function(a, b) return a.dist < b.dist end)
+
+        -- Apply damage based on penetration
+        local hit_count = penetration + 1
+        for i = 1, math.min(#hits, hit_count) do
+            local hit = hits[i]
+            -- Knockback direction: away from shooter
+            local kb_dir = cam_dir * 10
+            npc_manager.take_damage(hit.npc, damage, kb_dir)
+        end
+    end
+end

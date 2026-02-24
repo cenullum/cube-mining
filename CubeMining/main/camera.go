@@ -37,6 +37,10 @@ components {
   }
 }
 components {
+  id: "shooting"
+  component: "/main/scripts/shooting.script"
+}
+components {
   id: "voxelizer"
   component: "/main/scripts/voxelizer.script"
   properties {

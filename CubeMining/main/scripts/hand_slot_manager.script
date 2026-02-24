@@ -29,6 +29,7 @@ local H_CLICK_RIGHT  = hash("click_right")
 local H_RELOAD       = hash("reload")
 local H_APPLY_RECOIL = hash("apply_recoil")
 local H_SET_FOV      = hash("set_fov")
+local H_FIRE         = hash("fire")
 
 -- Voxelizer message hashes
 local H_SET_HAND     = hash("set_hand_state")
@@ -117,7 +118,7 @@ local function fire_one_shot(self)
     end
 
     -- Recoil animation (additive)
-    local power = item.damage_power or 1
+    local power = item.recoil_power or 1
     go.cancel_animations("#", "recoil_pos")
     go.cancel_animations("#", "recoil_rot")
     self.recoil_pos = vmath.vector3()
@@ -130,6 +131,12 @@ local function fire_one_shot(self)
 
     -- Camera recoil
     msg.post("#camera_script", H_APPLY_RECOIL, { power = power, is_ads = self.ads_active })
+
+    -- Trigger shooting logic (raycast + damage)
+    msg.post("#shooting", H_FIRE, {
+        damage = item.damage_power or 10,
+        penetration = item.penetration or 0
+    })
 
     sync_hud(self)
     return true

@@ -12,6 +12,10 @@ function init(self)
     sm.play(sm.swing, 1.0, go.get_position())
 end
 
+function final(self)
+    npc.final(self)
+end
+
 function update(self, dt)
     npc.update(self, dt)
 end
