@@ -28,6 +28,7 @@ local H_JUMP = hash("jump")
 local H_SPRINT = hash("sprint")
 local H_SWITCH_MODE = hash("switch_mode")
 local H_SET_VIEW_PROJECTION = hash("set_view_projection")
+local H_SET_VIEW = hash("set_view")
 local H_DRAW_LINE = hash("draw_line")
 local H_EULER = hash("euler")
 local H_SET_PERFORMANCE_MODE = hash("set_performance_mode")
@@ -61,6 +62,10 @@ function init(self)
 
     self.shake_intensity = 0
     self.shake_duration = 0
+
+    -- Recoil state
+    self.recoil_offset_pos = 0   -- Backward movement (local Z)
+    self.recoil_offset_pitch = 0 -- Upward pitch
 
     -- Inputs
     self.input = vmath.vector3()
@@ -102,11 +107,17 @@ local function update_camera(self)
         current_pitch = current_pitch + shake_y
     end
 
+    -- Apply recoil
+    current_pitch = current_pitch + self.recoil_offset_pitch
+
     local rot = vmath.quat_rotation_y(math.rad(current_yaw)) * vmath.quat_rotation_x(math.rad(current_pitch))
     go.set_rotation(rot)
 
     -- GO is at eye level now, so no offset for camera view
+    -- Recoil position offset (move back along local negative forward)
     local eye_pos = go.get_position()
+    local forward = vmath.rotate(rot, vmath.vector3(0, 0, -1))
+    eye_pos = eye_pos - forward * self.recoil_offset_pos
 
     -- Export camera state for performance_overlay
     _G.cam_pos = eye_pos
@@ -126,15 +137,7 @@ local function update_camera(self)
     local pos_inv = vmath.matrix4_translation(-eye_pos)
     view = view * pos_inv
 
-    local width, height = window.get_size()
-    local aspect = width / height
-    local target_fov = _G.camera_fov or 60
-    self.current_fov = self.current_fov or 60
-    self.current_fov = vmath.lerp(0.2, self.current_fov, target_fov)
-    local fov = math.rad(self.current_fov)
-    local projection = vmath.matrix4_perspective(fov, aspect, 0.1, 1000.0)
-
-    msg.post("@render:", H_SET_VIEW_PROJECTION, { id = H_CAMERA, view = view, projection = projection })
+    msg.post("@render:", H_SET_VIEW, { view = view })
 end
 
 function update(self, dt)
@@ -148,6 +151,11 @@ function update(self, dt)
         end
         self.shake_duration = shake_duration
     end
+
+    -- Recoil decay
+    local lerp_speed = 10
+    self.recoil_offset_pos = vmath.lerp(math.min(dt * lerp_speed, 1.0), self.recoil_offset_pos, 0)
+    self.recoil_offset_pitch = vmath.lerp(math.min(dt * lerp_speed, 1.0), self.recoil_offset_pitch, 0)
 
     -- Rotation Logic
     -- (Applied in update_camera directly from accumulated pitch/yaw)
@@ -481,5 +489,18 @@ function on_message(self, message_id, message, sender)
             self.shake_intensity = 5.0 * intensity_factor * message.force
             self.shake_duration = 0.35 * intensity_factor
         end
+    elseif message_id == hash("apply_recoil") then
+        local power = message.power or 1
+        local is_ads = message.is_ads or false
+
+        -- Reduce recoil if aiming down sights
+        local ads_multiplier = is_ads and 0.4 or 1.0
+
+        -- Add recoil offsets (stackable)
+        self.recoil_offset_pos = self.recoil_offset_pos + (0.03 * power * ads_multiplier)
+        self.recoil_offset_pitch = self.recoil_offset_pitch + (1.2 * power * ads_multiplier)
+
+        -- Clamp recoil
+        self.recoil_offset_pos = math.min(self.recoil_offset_pos, 0.5)
     end
 end

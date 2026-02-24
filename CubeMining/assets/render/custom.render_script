@@ -9,6 +9,7 @@ local render                 = render
 local vmath                  = vmath
 local sys                    = sys
 local math                   = math
+local hash                   = hash
 
 -----------------------------------------
 ---
@@ -18,10 +19,12 @@ local math                   = math
 local MSG_CLEAR_COLOR        = hash("clear_color")
 local MSG_WINDOW_RESIZED     = hash("window_resized")
 local MSG_SET_VIEW_PROJ      = hash("set_view_projection")
+local MSG_SET_VIEW           = hash("set_view")
 -- local MSG_SET_CAMERA_PROJ =     hash("use_camera_projection")
 local MSG_USE_STRETCH_PROJ   = hash("use_stretch_projection")
 local MSG_USE_FIXED_PROJ     = hash("use_fixed_projection")
 local MSG_USE_FIXED_FIT_PROJ = hash("use_fixed_fit_projection")
+local MSG_SET_FOV            = hash("set_fov")
 
 --------------------------------------------------------------------------------
 -- Render State & Predicates (Local Scope for Performance)
@@ -34,7 +37,17 @@ local particle_pred
 local debug_text_pred
 
 -- Camera objects
-local world_cam              = { view = vmath.matrix4(), proj = vmath.matrix4(), near = -1, far = 1, zoom = 1, proj_fn = nil }
+-- Camera objects
+local world_cam              = {
+    view = vmath.matrix4(),
+    proj = vmath.matrix4(),
+    near = 0.1,
+    far = 1000,
+    zoom = 1,
+    fov = 60,
+    target_fov = 60,
+    proj_fn = nil
+}
 local gui_cam                = { view = vmath.matrix4(), proj = vmath.matrix4(), near = -1, far = 1, zoom = 1, proj_fn = nil }
 
 -- Active primary camera reference (defaults to world_cam)
@@ -58,8 +71,8 @@ local clear_buffers          = {
 --------------------------------------------------------------------------------
 -- Performance Constants
 --------------------------------------------------------------------------------
-local DEFAULT_NEAR           = -1
-local DEFAULT_FAR            = 1
+local DEFAULT_NEAR           = 0.1
+local DEFAULT_FAR            = 1000
 local DEFAULT_ZOOM           = 1
 
 --------------------------------------------------------------------------------
@@ -92,6 +105,13 @@ end
 -- Stretched projection (fills entire window)
 local function calculate_stretched_projection(camera)
     return vmath.matrix4_orthographic(0, main_width, 0, main_height, camera.near, camera.far)
+end
+
+-- Perspective projection
+local function calculate_perspective_projection(camera)
+    local aspect = window_width / window_height
+    local fov = math.rad(camera.fov)
+    return vmath.matrix4_perspective(fov, aspect, camera.near, camera.far)
 end
 
 -- GUI projection (matches window coordinates)
@@ -153,8 +173,8 @@ function init(self)
     )
 
     -- Setup initial camera states
-    setup_camera_properties(world_cam, calculate_stretched_projection)
-    setup_camera_properties(gui_cam, calculate_gui_projection)
+    setup_camera_properties(world_cam, calculate_perspective_projection, 0.1, 1000)
+    setup_camera_properties(gui_cam, calculate_gui_projection, -1, 1)
 
     refresh_render_state()
 end
@@ -162,6 +182,23 @@ end
 function update(self)
     if not is_valid then
         if not refresh_render_state() then return end
+    end
+
+    -- FOV Lerping for ADS
+    local is_lerping = false
+    if world_cam.fov ~= world_cam.target_fov then
+        is_lerping = true
+        local lerp_t = 0.15 -- Smooth transition
+        world_cam.fov = vmath.lerp(lerp_t, world_cam.fov, world_cam.target_fov)
+        -- If very close, snap to target
+        if math.abs(world_cam.fov - world_cam.target_fov) < 0.1 then
+            world_cam.fov = world_cam.target_fov
+        end
+    end
+
+    -- Always update projection from function to prevent resets by messages
+    if world_cam.proj_fn then
+        world_cam.proj = world_cam.proj_fn(world_cam)
     end
 
     -- 1. Preparation & Clear
@@ -179,7 +216,6 @@ function update(self)
     render.enable_state(render.STATE_CULL_FACE)
     render.set_cull_face(render.FACE_BACK)
     render.disable_state(render.STATE_BLEND)
-
     render.draw(model_pred)
 
     -- 3. Transparent Pass
@@ -220,6 +256,8 @@ function on_message(self, message_id, message)
     if message_id == MSG_SET_VIEW_PROJ then
         primary_camera.view = message.view
         primary_camera.proj = message.projection
+    elseif message_id == MSG_SET_VIEW then
+        primary_camera.view = message.view
     elseif message_id == MSG_WINDOW_RESIZED then
         refresh_render_state()
     elseif message_id == MSG_CLEAR_COLOR then
@@ -233,5 +271,12 @@ function on_message(self, message_id, message)
     elseif message_id == MSG_USE_FIXED_FIT_PROJ then
         setup_camera_properties(world_cam, calculate_fit_projection, message.near, message.far)
         update_camera_projection(world_cam)
+    elseif message_id == MSG_SET_FOV then
+        world_cam.target_fov = message.fov or 60
+        -- Switch to perspective if we receive an FOV message
+        if world_cam.proj_fn ~= calculate_perspective_projection then
+            world_cam.proj_fn = calculate_perspective_projection
+            update_camera_projection(world_cam)
+        end
     end
 end
