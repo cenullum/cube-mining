@@ -9,10 +9,10 @@ local math = math
 local os = os
 local hash = hash
 local timer = timer
-local gui = gui
+
 
 local H_DRAW_LINE = hash("draw_line")
-local H_TINT = hash("tint")
+
 
 local STATE_IDLE = 1
 local STATE_WALK = 2

@@ -35,14 +35,6 @@ end
 
 function on_message(self, message_id, message, sender)
     if message_id == H_FIRE then
-        -- Debug: Print all registered NPCs and their health
-        print("--- NPC Registry Status ---")
-        for id, npc in pairs(npc_manager.registry) do
-            local status = npc.is_dead and "DEAD" or "ALIVE"
-            print(string.format("NPC ID: %s | Health: %d | Status: %s", tostring(id), npc.health or 0, status))
-        end
-        print("---------------------------")
-
         local cam_pos = go.get_world_position()
         local cam_rot = go.get_world_rotation()
         local cam_dir = vmath.rotate(cam_rot, vmath.vector3(0, 0, -1))

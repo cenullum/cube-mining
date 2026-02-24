@@ -35,10 +35,6 @@ key_trigger {
   action: "toggle_performance"
 }
 key_trigger {
-  input: KEY_Q
-  action: "switch_item"
-}
-key_trigger {
   input: KEY_P
   action: "switch_mode"
 }
@@ -64,11 +60,11 @@ key_trigger {
 }
 key_trigger {
   input: KEY_1
-  action: "key_1"
+  action: "next_item"
 }
 key_trigger {
   input: KEY_2
-  action: "key_2"
+  action: "previous_item"
 }
 mouse_trigger {
   input: MOUSE_BUTTON_1

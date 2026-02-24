@@ -18,7 +18,7 @@ A 3D voxel mining example built with the **Defold Game Engine**. This project in
 - **Greedy Meshing Algorithm**: Reduces vertex count and draw calls by merging adjacent faces into quads.
 - **Swept AABB Collision System**: Collision detection and resolution with sub-stepping to prevent tunneling.
 - **Runtime Sprite-to-Mesh Voxelization**: Converts 2D pixel art sprites into 3D voxel meshes at runtime.
-- **Vertex-based Ambient Occlusion**: Calculated per-vertex to darken corners and edges. Toggleable with 'K'.
+- **Vertex-based Ambient Occlusion**: Calculated per-vertex to darken corners and edges. Toggleable with 'O'.
 - **Distance-based Fog**: Distance-based fog applied to terrain and voxelized items.
 - **Dynamic Item System**: A variety of holdable items including blocks, tools (pickaxes, swords), and guns (pistol, submachine gun with ammo/reload mechanics).
 - **Block Health & Mining Power**: Blocks have varying durability, and tools have distinct mining/damage power.
@@ -32,16 +32,17 @@ A 3D voxel mining example built with the **Defold Game Engine**. This project in
 
 - **WASD**: Move around
 - **Shift**: Sprint (Move faster)
-- **Space**: Ascend (Jump in Walk mode)
+- **Space**: Jump / Ascend
 - **Ctrl**: Descend
-- **Left Click**: Break block / Attack animation
-- **Right Click**: Place block
-- **Q**: Cycle held items (Gun, Pickaxe, Sword, etc.)
-- **M**: Toggle Performance Overlay (Off / Text / Text + Graph)
-- **K**: Toggle Ambient Occlusion
-- **P**: Toggle Noclip / Free Cam mode
+- **Left Click**: Break / Shoot
+- **Right Click**: Place / ADS (Aim Down Sights)
+- **1 / 2**: Next / Previous active item
+- **R**: Reload weapon
+- **M**: Toggle Performance Overlay (Off / Text / Graph)
+- **O**: Toggle Ambient Occlusion
+- **P**: Toggle Fly / Walk mode
 - **T**: Spawn mouse at targeted block
-- **Y**: Spawn mice rapidly while held
+- **Y**: Spawn mice rapidly (Hold)
 
 ## Scope & Technical Notes
 
@@ -67,11 +68,9 @@ This project was inspired by the [Meshes-In-Defold](https://github.com/mozok/Mes
 - **[physics.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/physics.lua)**: Shared physics module implementing AABB collision detection and resolution.
 - **[character_controller.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/character_controller.script)**: Manages player movement, input handling, and camera logic.
 - **[hand_slot_manager.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/hand_slot_manager.script)**: Manages the player's active hand item, inventory, and dynamic switching.
-- **[item_sway.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/item_sway.script)**: Manages animations for held items, including swaying and click-triggered movements.
 - **[performance_overlay.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/performance_overlay.script)**: Provides a visual debugger for FPS, RAM usage, and camera state.
 - **[cube_cursor.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/cube_cursor.script)**: Manages 3D cursor interaction for targeting and modifying the voxel world.
 - **[sound_manager.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/sound_manager.lua)**: Optimizes and handles audio playback, throttling, and spatial sounds.
-- **[bomb.script](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/bomb.script)**: Handles the physics, timer, and explosion mechanics of throwable bombs.
 - **[items.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/items.lua)**: Defines available blocks, tools, and weapons with their properties (health, sound, damage).
 - **[world.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/world.lua)**: Centralized world data management, providing shared access to the voxel grid and dimensions.
 - **[block_data.lua](file:///home/cenker/Documents/GitHub/cube-mining/CubeMining/main/scripts/block_data.lua)**: Extensible system for defining block properties, transparency, and UV metadata.

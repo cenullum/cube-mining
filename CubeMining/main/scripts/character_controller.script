@@ -427,7 +427,7 @@ function on_input(self, action_id, action)
         return
     end
 
-    -- (Note: H_KEY_1, H_KEY_2, H_CLICK, H_CLICK_RIGHT handling moved to hand_slot_manager.script)
+    -- (Note: next_item, previous_item, click, click_right handling moved to hand_slot_manager.script)
 
     -- Movement Input
     if action_id == H_MOVE_FORWARD then

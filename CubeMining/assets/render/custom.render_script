@@ -185,9 +185,8 @@ function update(self)
     end
 
     -- FOV Lerping for ADS
-    local is_lerping = false
+
     if world_cam.fov ~= world_cam.target_fov then
-        is_lerping = true
         local lerp_t = 0.15 -- Smooth transition
         world_cam.fov = vmath.lerp(lerp_t, world_cam.fov, world_cam.target_fov)
         -- If very close, snap to target

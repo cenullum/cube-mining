@@ -98,16 +98,17 @@ function init(self)
     self.controls = {
         "WASD: Move",
         "Shift: Sprint",
-        "Space: Jump",
-        "P: Toggle Fly",
-        "1: Select Item",
-        "2: Select Block",
-        "Left Click: Break",
-        "Right Click: Place/Use",
+        "Space: Jump/Up",
+        "CTRL: Down",
+        "P: Fly/Walk Mode",
+        "1 / 2: Next/Prev Item",
+        "LClick: Break/Shoot",
+        "RClick: Place/ADS",
+        "R: Reload Weapon",
         "T: Spawn Mouse",
         "Y: Spawn Mouse (Hold)",
         "M: Switch Metrics",
-        "O: Toggle AO",
+        "O: Toggle Ambient Occlusion",
         "L: Toggle Lighting"
     }
 
