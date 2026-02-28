@@ -4,9 +4,10 @@
 in mediump vec2 var_texcoord0;     // Tiling coordinate (scaled by quad size)
 in mediump vec4 var_atlas_metadata; // Atlas bounds
 in mediump float var_light;        // Directional Lighting factor
-in mediump float var_ao;           // Ambient Occlusion factor
-in mediump float var_torch_light;
-in mediump float var_sun_light;
+in mediump vec4 var_corner_ao;     // Corner AO values [v1, v2, v3, v4]
+in mediump vec4 var_corner_torch;  // Corner Torch Light
+in mediump vec4 var_corner_sun;    // Corner Sun Light
+in mediump vec2 var_local_uv;      // Local quad UV [0..1]
 in mediump vec3 var_view_pos;       // View-space position
 in mediump vec3 var_pos;            // Local position for block breaking
 in mediump vec3 var_normal;         // Normal for block breaking
@@ -27,6 +28,13 @@ uniform fs_uniforms
     mediump vec4 break_info; // x: frame, y: enabled, z: total_frames
     mediump vec4 break_pos;  // xyz: block grid coordinates
 };
+
+// Bilinear interpolation for a quad
+float bilinear(vec4 corners, vec2 uv) {
+    float top = mix(corners.x, corners.y, uv.x);
+    float bottom = mix(corners.w, corners.z, uv.x);
+    return mix(top, bottom, uv.y);
+}
 
 void main()
 {
@@ -76,15 +84,19 @@ void main()
     }
     
     // Light calculation
+    float ao = bilinear(var_corner_ao, var_local_uv);
+    float torch_light = bilinear(var_corner_torch, var_local_uv);
+    float sun_light = bilinear(var_corner_sun, var_local_uv);
+
     // Torch color is yellowish: vmath.vector3(1.0, 0.9, 0.6)
-    vec3 torch_color = vec3(1.0, 0.9, 0.6) * var_torch_light * 1.5; // Slightly boosted
+    vec3 torch_color = vec3(1.0, 0.9, 0.6) * torch_light * 1.5; // Slightly boosted
     
     // Sun color is slightly warm white, affected by directional light `var_light`
-    vec3 sun_color = vec3(1.0, 1.0, 1.0) * var_sun_light * var_light;
+    vec3 sun_color = vec3(1.0, 1.0, 1.0) * sun_light * var_light;
     
     // Combine lighting: (Sun + Torch) * AO
     // max prevents going completely black, though sun_light/torch_light handle darkness.
-    vec3 final_light = max(vec3(0.02), sun_color + torch_color) * var_ao;
+    vec3 final_light = max(vec3(0.02), sun_color + torch_color) * ao;
     color.rgb *= final_light;
 
     // Apply Fog (Per-fragment)

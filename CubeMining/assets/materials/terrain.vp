@@ -4,15 +4,19 @@ in highp vec4 position;     // Local vertex position (x, y, z)
 in mediump vec2 texcoord0;  // Tiling coordinates
 in mediump vec4 texcoord1;  // Atlas metadata
 in mediump vec3 normal;      // Normal vector
-in mediump vec4 color;       // AO Data (Grayscale)
+in mediump vec4 color;       // Corner AO (Manual interpolation data)
+in mediump vec4 color1;      // Corner Torch Light
+in mediump vec4 color2;      // Corner Sun Light
+in mediump vec2 texcoord2;   // Local UV [0..1] for bilinear interpolation
 
 // --- Outputs ---
 out mediump vec2 var_texcoord0;     // Passed to fragment shader
 out mediump vec4 var_atlas_metadata; // Passed to fragment shader
 out mediump float var_light;        // Directional Lighting factor
-out mediump float var_ao;           // Ambient Occlusion factor
-out mediump float var_torch_light;  // Torch Light
-out mediump float var_sun_light;    // Sun Light
+out mediump vec4 var_corner_ao;     // Pass all 4 corners
+out mediump vec4 var_corner_torch;  // Pass all 4 corners
+out mediump vec4 var_corner_sun;    // Pass all 4 corners
+out mediump vec2 var_local_uv;      // Local quad UV [0..1]
 out mediump vec3 var_view_pos;      // Position in view space
 out mediump vec3 var_pos;           // Position for block breaking
 out mediump vec3 var_normal;        // Normal for block breaking
@@ -40,9 +44,10 @@ void main()
     // Pass attributes to fragment shader
     var_texcoord0 = texcoord0;
     var_atlas_metadata = texcoord1;
-    var_ao = color.r; // AO is stored in the red channel
-    var_torch_light = color.g;
-    var_sun_light = color.b;
+    var_corner_ao = color;
+    var_corner_torch = color1;
+    var_corner_sun = color2;
+    var_local_uv = texcoord2;
     
     // Pass view-space position for fog
     var_view_pos = p.xyz;
