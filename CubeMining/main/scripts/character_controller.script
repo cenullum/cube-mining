@@ -37,6 +37,7 @@ local H_SPAWN_TORCH = hash("spawn_torch")
 local H_SPAWN_FAST = hash("spawn_fast")
 local H_TOGGLE_LIGHT_MODE = hash("toggle_light_mode")
 local H_TOGGLE_AO = hash("toggle_ao")
+local H_TEST_SPAWN = hash("test_spawn")
 
 go.property("speed", 5)
 go.property("jump_force", 9.0) -- Tweaked for standard gravity
@@ -475,6 +476,27 @@ function on_input(self, action_id, action)
     elseif action_id == H_TOGGLE_AO and action.released then
         msg.post("/root#main", "toggle_ao")
         print("AO Toggle Request Sent")
+    elseif action_id == H_TEST_SPAWN and action.released then
+        -- Spawn 16x16 mice grid and a bomb in the center
+        local cam_pos = go.get_world_position()
+        local center_pos = cam_pos
+
+        -- Spawn bomb at center
+        factory.create(self.bomb_factory, center_pos, vmath.quat())
+
+        -- Spawn 16x16 mice grid around center
+        local grid_size = 16
+        local spacing = 1.0
+        local offset = (grid_size * spacing) / 2.0
+
+        for x = 0, grid_size - 1 do
+            for z = 0, grid_size - 1 do
+                local spawn_x = center_pos.x - offset + (x * spacing)
+                local spawn_z = center_pos.z - offset + (z * spacing)
+                local spawn_pos_mouse = vmath.vector3(spawn_x, center_pos.y, spawn_z)
+                factory.create(self.mouse_factory, spawn_pos_mouse, vmath.quat())
+            end
+        end
     end
 end
 

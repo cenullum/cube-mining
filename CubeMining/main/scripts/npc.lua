@@ -64,42 +64,48 @@ function M.final(self)
     M.registry[go.get_id()] = nil
 end
 
-function M.take_damage(self, damage, knockback_dir)
+function M.die(self)
+    self.health = 0
+    self.is_dead = true
+    self.state = STATE_DEAD
+    self.death_timer = 0
+
+    -- Set dead tint (grey, no fade)
+    pcall(function() go.set(self.model_url, "tint", vmath.vector4(0.35, 0.35, 0.35, 1.0)) end)
+    self.tint_timer = 0
+
+    -- Remove from registry immediately so shooting logic skips it
+    M.registry[self.id] = nil
+
+    -- Death animation: Tip over 90 degrees
+    -- Use explicit ID to avoid animating the caller (camera)
+    local rot = go.get_rotation(self.id)
+    local target_rot = rot * vmath.quat_rotation_x(math.rad(-90))
+    go.animate(self.id, "rotation", go.PLAYBACK_ONCE_FORWARD, target_rot, go.EASING_OUTBOUNCE, 0.5)
+end
+
+function M.take_damage(self, damage, knockback_dir, is_override_velocity)
     if self.is_dead then return end
 
     self.health = self.health - damage
 
-    -- Apply knockback: current velocity + knockback
-    -- Upward force doubled as requested (10 instead of 5)
-    local knockback_force = knockback_dir + vmath.vector3(0, 10, 0)
-    self.velocity = self.velocity + knockback_force
+    if self.health <= 0 then
+        M.die(self)
+        -- No need to apply velocity or tint if they died
+        return
+    end
+
+    if is_override_velocity then
+        self.velocity = knockback_dir
+    else
+        -- Apply knockback: current velocity + knockback
+        -- Upward force doubled as requested (10 instead of 5)
+        local knockback_force = knockback_dir + vmath.vector3(0, 10, 0)
+        self.velocity = self.velocity + knockback_force
+    end
 
     -- Trigger red tint for 2 seconds
     self.tint_timer = 2.0
-
-    if self.health <= 0 then
-        self.health = 0
-        self.is_dead = true
-        self.state = STATE_DEAD
-
-        -- Remove from registry immediately so shooting logic skips it
-        M.registry[self.id] = nil
-
-        -- Death animation: Tip over 90 degrees
-        -- Use explicit ID to avoid animating the caller (camera)
-        local rot = go.get_rotation(self.id)
-        local target_rot = rot * vmath.quat_rotation_x(math.rad(-90))
-        go.animate(self.id, "rotation", go.PLAYBACK_ONCE_FORWARD, target_rot, go.EASING_OUTBOUNCE, 0.5)
-
-        -- Delete NPC after 2 seconds
-        -- ID is already captured in self.id
-        local deletion_id = self.id
-        timer.delay(2, false, function()
-            if pcall(function() go.get_position(deletion_id) end) then
-                go.delete(deletion_id)
-            end
-        end)
-    end
 end
 
 local function pick_random_direction()
@@ -108,7 +114,13 @@ local function pick_random_direction()
 end
 
 function M.update(self, dt)
-    if self.is_dead then return end
+    if self.is_dead then
+        self.death_timer = self.death_timer + dt
+        if self.death_timer >= 2.0 then
+            pcall(function() go.delete(self.id) end)
+        end
+        return
+    end
 
     self.timer = self.timer + dt
     if self.cliff_check_timer > 0 then
@@ -162,6 +174,11 @@ function M.update(self, dt)
 
     -- Physics Step
     local new_pos, new_vel, grounded = physics.move_and_slide(pos, self.velocity, self.size, dt)
+
+    if new_pos.y <= -10 then
+        M.die(self)
+        return
+    end
 
     -- Cliff Avoidance & Smart Jump Logic
     if self.state == STATE_WALK and grounded then

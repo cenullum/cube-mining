@@ -78,3 +78,8 @@ key_trigger {
   input: KEY_R
   action: "reload"
 }
+
+key_trigger {
+  input: KEY_C
+  action: "test_spawn"
+}
