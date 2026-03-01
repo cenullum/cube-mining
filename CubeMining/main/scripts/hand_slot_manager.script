@@ -50,6 +50,8 @@ go.property("bomb_factory", msg.url())
 go.property("mouse_factory", msg.url())
 go.property("pistol_shot_factory", msg.url())
 go.property("submachine_gun_shot_factory", msg.url())
+go.property("rot_sway_enabled", true)
+go.property("rot_sway_intensity", -1.0)
 
 -- ============================================================================
 -- HELPERS
@@ -287,6 +289,8 @@ function init(self)
     -- Mouse sway state
     self.sway_target = vmath.vector3()
     self.sway_current = vmath.vector3()
+    self.rot_sway_target = vmath.quat()
+    self.rot_sway_current = vmath.quat()
 
     -- Pre-fill ammo
     self.ammo = {}
@@ -344,9 +348,16 @@ function update(self, dt)
     local lerp_t = math.min(dt * 15.0, 1.0)
     self.sway_current.x = vmath.lerp(lerp_t, self.sway_current.x, self.sway_target.x)
     self.sway_current.y = vmath.lerp(lerp_t, self.sway_current.y, self.sway_target.y)
+
+    local rot_sway_lerp_t = math.min(dt * 10.0, 1.0)
+    self.rot_sway_current = vmath.slerp(rot_sway_lerp_t, self.rot_sway_current, self.rot_sway_target)
+
     local decay_t = math.min(dt * 7.0, 1.0)
     self.sway_target.x = vmath.lerp(decay_t, self.sway_target.x, 0)
     self.sway_target.y = vmath.lerp(decay_t, self.sway_target.y, 0)
+
+    local rot_decay_t = math.min(dt * 8.0, 1.0)
+    self.rot_sway_target = vmath.slerp(rot_decay_t, self.rot_sway_target, vmath.quat())
 
     -- ── COMPOSITE POSITION & ROTATION ────────────────────────────────────
     if _G.held_mesh_id and _G.hand_base_pos and _G.hand_base_rot then
@@ -361,8 +372,8 @@ function update(self, dt)
 
         go.set_position(final_pos, _G.held_mesh_id)
 
-        -- Rotation = base * ads * swing * recoil
-        local final_rot = _G.hand_base_rot * self.ads_rot * self.swing_rot * self.recoil_rot
+        -- Rotation = base * ads * swing * recoil * rot_sway
+        local final_rot = _G.hand_base_rot * self.ads_rot * self.swing_rot * self.recoil_rot * self.rot_sway_current
         go.set_rotation(final_rot, _G.held_mesh_id)
     end
 
@@ -388,6 +399,15 @@ function on_input(self, action_id, action)
         local sway_mul = self.ads_active and 0.0002 or 0.0009
         self.sway_target.x = -dx * sway_mul
         self.sway_target.y = -dy * sway_mul
+
+        if self.rot_sway_enabled then
+            local rot_sway_mul = (self.ads_active and 0.05 or 0.15) * self.rot_sway_intensity
+            local target_angle = math.rad(-dx * rot_sway_mul)
+            -- Limit rotation to avoid extreme angles
+            local max_angle = math.rad(15)
+            target_angle = math.max(-max_angle, math.min(max_angle, target_angle))
+            self.rot_sway_target = vmath.quat_rotation_y(target_angle)
+        end
         return
     end
 
@@ -516,5 +536,11 @@ function on_input(self, action_id, action)
     if action_id == H_RELOAD and action.pressed then
         if item.type == "gun" then start_reload(self) end
         return
+    end
+end
+
+function on_message(self, message_id, message, sender)
+    if message_id == hash("toggle_rot_sway") then
+        self.rot_sway_enabled = message.enabled ~= false
     end
 end
