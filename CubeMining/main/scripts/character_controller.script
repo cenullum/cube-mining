@@ -46,6 +46,12 @@ go.property("gravity", -25.0)
 go.property("mouse_factory", msg.url())
 go.property("bomb_factory", msg.url())
 
+-- Camera Sway/Lean Properties
+go.property("sway_enabled", true)
+go.property("lean_intensity", 0.05)  -- Forward lean based on velocity
+go.property("tilt_intensity", 1.5)   -- Sideways roll based on velocity
+go.property("sway_smoothness", 10.0) -- How fast it interpolates
+
 
 local STATE_FREE_CAM = 1
 local STATE_WALK = 2
@@ -75,6 +81,10 @@ function init(self)
     self.fly_mode = true -- Start in fly mode (free cam)
     self.spawn_fast = false
 
+    -- Camera Sway state
+    self.current_lean = 0
+    self.current_tilt = 0
+
     -- Character Physics params
     -- AABB size: 0.6 width, 1.5 height
     self.size = vmath.vector3(0.6, 1.5, 0.6)
@@ -93,7 +103,7 @@ function init(self)
     self.pitch = euler.x
 end
 
-local function update_camera(self)
+local function update_camera(self, dt)
     -- Compute base rotation
     local current_yaw = self.yaw
     local current_pitch = self.pitch
@@ -111,14 +121,48 @@ local function update_camera(self)
     -- Apply recoil
     current_pitch = current_pitch + self.recoil_offset_pitch
 
-    local rot = vmath.quat_rotation_y(math.rad(current_yaw)) * vmath.quat_rotation_x(math.rad(current_pitch))
+    -- Apply Camera Sway (Tilt/Roll)
+    local roll = 0
+    if self.sway_enabled and self.state == STATE_WALK then
+        -- Calculate target tilt based on local sideways velocity
+        -- We want to tilt AWAY from the movement direction (centrifugal feel) or TOWARDS it (leaning into turn)
+        -- The request says "sağa gidiyor sağa rotate sola gidiyor sola rotate", which means leaning into the turn.
+        local rot_y = vmath.quat_rotation_y(math.rad(self.yaw))
+        local right = vmath.rotate(rot_y, vmath.vector3(1, 0, 0))
+        local side_vel = vmath.dot(self.velocity, right)
+
+        local target_tilt = -side_vel * self.tilt_intensity                 -- negative for leaning into it
+        self.current_tilt = vmath.lerp(0.1, self.current_tilt, target_tilt) -- Using fixed lerp factor for simplicity or self.sway_smoothness * dt
+        roll = self.current_tilt
+    else
+        self.current_tilt = vmath.lerp(0.1, self.current_tilt, 0)
+        roll = self.current_tilt
+    end
+
+    local rot = vmath.quat_rotation_y(math.rad(current_yaw)) *
+        vmath.quat_rotation_x(math.rad(current_pitch)) *
+        vmath.quat_rotation_z(math.rad(roll))
     go.set_rotation(rot)
 
     -- GO is at eye level now, so no offset for camera view
     -- Recoil position offset (move back along local negative forward)
     local eye_pos = go.get_position()
+
+    -- Apply Camera Sway (Lean Forward/Backward)
+    if self.sway_enabled and self.state == STATE_WALK then
+        local rot_y = vmath.quat_rotation_y(math.rad(self.yaw))
+        local forward_horiz = vmath.rotate(rot_y, vmath.vector3(0, 0, -1))
+        local forward_vel = vmath.dot(self.velocity, forward_horiz)
+
+        -- Move forward based on forward velocity
+        local target_lean = forward_vel * self.lean_intensity
+        self.current_lean = vmath.lerp(0.1, self.current_lean, target_lean)
+    else
+        self.current_lean = vmath.lerp(0.1, self.current_lean, 0)
+    end
+
     local forward = vmath.rotate(rot, vmath.vector3(0, 0, -1))
-    eye_pos = eye_pos - forward * self.recoil_offset_pos
+    eye_pos = eye_pos - forward * self.recoil_offset_pos + forward * self.current_lean
 
     -- Export camera state for performance_overlay
     _G.cam_pos = eye_pos
@@ -404,7 +448,7 @@ function update(self, dt)
         end
     end
 
-    update_camera(self)
+    update_camera(self, dt)
 end
 
 function on_input(self, action_id, action)
@@ -524,5 +568,8 @@ function on_message(self, message_id, message, sender)
 
         -- Clamp recoil
         self.recoil_offset_pos = math.min(self.recoil_offset_pos, 0.5)
+    elseif message_id == hash("toggle_sway") then
+        self.sway_enabled = message.enabled ~= false
+        print("Camera Sway Enabled:", self.sway_enabled)
     end
 end
