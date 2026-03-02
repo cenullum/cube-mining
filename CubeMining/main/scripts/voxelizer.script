@@ -10,6 +10,10 @@ local factory = factory
 local sys = sys
 local image = image
 local hash = hash
+local math_rad = math.rad
+local math_min = math.min
+local math_max = math.max
+local math_huge = math.huge
 
 local block_data = require "main.scripts.block_data"
 local items_data = require "main.scripts.items"
@@ -22,6 +26,7 @@ local H_TEXTURE0 = hash("texture0")
 local H_VERTICES = hash("vertices")
 local H_ACQUIRE_INPUT_FOCUS = hash("acquire_input_focus")
 local H_MESH = hash("mesh")
+local H_SET_HAND = hash("set_hand_state")
 
 
 go.property("mesh_prefab", msg.url())
@@ -74,7 +79,7 @@ local function write_face(p, t0, t1, n, idx,
     return idx + 1
 end
 
-local function generate_model_from_faces(self, faces)
+local function generate_model_from_faces(faces)
     local face_count = #faces
     local buf = buffer.create(face_count * 6, {
         { name = H_POSITION,  type = buffer.VALUE_TYPE_FLOAT32, count = 3 },
@@ -163,7 +168,7 @@ local function build_voxel_mesh(self, item_index, item_name, meta)
         end
     end
 
-    local buf = generate_model_from_faces(self, faces)
+    local buf = generate_model_from_faces(faces)
     self.item_buffers[item_index] = resource.create_buffer("/item_" .. item_name .. ".bufferc", { buffer = buf })
 end
 
@@ -216,7 +221,7 @@ local function build_block_mesh(self, block_index, def)
     collect_face(vmath.vector3(ox, oy, oz), vmath.vector3(ox, oy, oz + w), vmath.vector3(ox, oy + w, oz + w),
         vmath.vector3(ox, oy + w, oz), def.uvs[6], vmath.vector3(-1, 0, 0), 0, 0, 1, 0, 1, 1, 0, 1)
 
-    local buf = generate_model_from_faces(self, faces)
+    local buf = generate_model_from_faces(faces)
     self.block_buffers[block_index] = resource.create_buffer("/block_" .. block_index .. ".bufferc", { buffer = buf })
 end
 
@@ -259,8 +264,8 @@ local function update_hand_model(self)
             local res = self.block_buffers[self.current_block]
             if res then go.set(self.held_mesh_url, H_VERTICES, res) end
 
-            local qx = vmath.quat_rotation_x(math.rad(15))
-            local qy = vmath.quat_rotation_y(math.rad(-45))
+            local qx = vmath.quat_rotation_x(math_rad(15))
+            local qy = vmath.quat_rotation_y(math_rad(-45))
             _G.held_mesh_id = self.held_mesh_id
             _G.hand_base_pos = self.base_hand_pos
             _G.hand_base_rot = qy * qx
@@ -303,11 +308,11 @@ function init(self)
                     local anim_id = type(anim.id) == "string" and hash(anim.id) or anim.id
                     if anim_id == hash(item.name) then
                         local geom = atlas_res.geometries[anim.frame_start]
-                        local min_u, max_u, min_v, max_v = math.huge, -math.huge, math.huge, -math.huge
+                        local min_u, max_u, min_v, max_v = math_huge, -math_huge, math_huge, -math_huge
                         for j = 1, #geom.uvs, 2 do
                             local u, v = geom.uvs[j], geom.uvs[j + 1]
-                            min_u = math.min(min_u, u); max_u = math.max(max_u, u)
-                            min_v = math.min(min_v, v); max_v = math.max(max_v, v)
+                            min_u = math_min(min_u, u); max_u = math_max(max_u, u)
+                            min_v = math_min(min_v, v); max_v = math_max(max_v, v)
                         end
                         meta.u = min_u / tex_info.width
                         meta.v = (tex_info.height - max_v) / tex_info.height
@@ -348,8 +353,8 @@ function init(self)
     go.set_position(self.base_hand_pos, h_id)
     go.set_scale(vmath.vector3(0.017, 0.017, 0.017), h_id)
 
-    local qx = vmath.quat_rotation_x(math.rad(1))
-    local qy = vmath.quat_rotation_y(math.rad(-65))
+    local qx = vmath.quat_rotation_x(math_rad(1))
+    local qy = vmath.quat_rotation_y(math_rad(-65))
     self.cam_rot = qy * qx
 
     go.set_parent(h_id, go.get_id())
@@ -360,14 +365,10 @@ function init(self)
     _G.held_mesh_id = self.held_mesh_id
 
     update_hand_model(self)
-
-    self.mining_target = nil
-    self.mining_progress = 0
-    self.ads_active = false
 end
 
 function on_message(self, message_id, message, sender)
-    if message_id == hash("set_hand_state") then
+    if message_id == H_SET_HAND then
         self.active_mode = message.mode
         if message.mode == "item" then
             self.current_item = message.id

@@ -36,6 +36,9 @@ local H_TEXTURE0 = hash("texture0")
 local H_VERTICES = hash("vertices")
 local H_TOGGLE_AO = hash("toggle_ao")
 local H_TOGGLE_LIGHT_MODE = hash("toggle_light_mode")
+local H_SET_BLOCKS_AREA = hash("set_blocks_area")
+local H_SET_BLOCKS_LIST = hash("set_blocks_list")
+local H_TEXTURE1 = hash("texture1")
 
 local PATCH_BUFFER = "/assets/models/patch_%s.bufferc"
 
@@ -52,26 +55,20 @@ local function create_mesh(self)
     return object
 end
 
-local function get_block(self, x, y, z)
-    local size = self.grid_size or 0
-    if x < 0 or x >= size or y < 0 or y >= size or z < 0 or z >= size then
-        return 0 -- Air out of bounds
+local function get_block(grid_size, x, y, z)
+    if x < 0 or x >= grid_size or y < 0 or y >= grid_size or z < 0 or z >= grid_size then
+        return 0
     end
-    -- Use global world data
     return world.get_block(x, y, z)
 end
 
--- Helper to check if a block is opaque (occluding)
-local function is_opaque(self, x, y, z, cache)
-    -- Cache key: Simple string or hashed integer.
-    -- X, Y, Z can be negative or > grid_size (neighbors), so handle that.
-    -- Using string key for reliability with negative coords.
+local function is_opaque(grid_size, x, y, z, cache)
     local key = x .. "_" .. y .. "_" .. z
     if cache and cache[key] ~= nil then
         return cache[key]
     end
 
-    local b_id = get_block(self, x, y, z)
+    local b_id = get_block(grid_size, x, y, z)
     local result = false
     if b_id ~= 0 then
         local def = block_data.get_block(b_id)
@@ -89,14 +86,11 @@ local function vertex_ao(side1, side2, corner)
     return (side1 and 1 or 0) + (side2 and 1 or 0) + (corner and 1 or 0)
 end
 
--- Calculates AO for the 4 corners of a greedy-meshable unit quad (1x1 face)
--- Returns table {ao_p1, ao_p2, ao_p3, ao_p4}
--- Mapping corresponds to P1, P2, P3, P4 in add_quad
-local function calculate_ao(self, x, y, z, face_dir, cache)
-    if not self.ao_enabled then return { 0, 0, 0, 0 } end
+local function calculate_ao(ao_enabled, grid_size, x, y, z, face_dir, cache)
+    if not ao_enabled then return { 0, 0, 0, 0 } end
 
     local vals = {}
-    local function op(tx, ty, tz) return is_opaque(self, tx, ty, tz, cache) end
+    local function op(tx, ty, tz) return is_opaque(grid_size, tx, ty, tz, cache) end
 
     -- NOTE: P1..P4 defs must match add_quad logic
     -- Check add_quad logic for each D to confirm P1..P4 positions
@@ -168,51 +162,13 @@ local function calculate_ao(self, x, y, z, face_dir, cache)
     return vals
 end
 
-local function calculate_light_smooth(self, face_dir, p1_x, p1_y, p1_z, p2_x, p2_y, p2_z, p3_x, p3_y, p3_z, p4_x, p4_y,
-                                      p4_z, channel)
-    local vals = { 0, 0, 0, 0 }
-
-    local function get_l(tx, ty, tz)
-        local l = world.get_light(tx, ty, tz, channel)
-        if channel == 1 and not l then return 15 end
-        if channel == 0 and not l then return 0 end
-        return l
-    end
-
-    local function avg_light(x, y, z, dx1, dy1, dz1, dx2, dy2, dz2, dx3, dy3, dz3)
-        -- To smooth light at a vertex, we average the light value of the 4 blocks sharing that vertex that are outside the solid mesh
-        -- Since this is blocky, we simply average the lights
-        local l1 = get_l(x, y, z)
-        local l2 = get_l(x + dx1, y + dy1, z + dz1)
-        local l3 = get_l(x + dx2, y + dy2, z + dz2)
-        local l4 = get_l(x + dx3, y + dy3, z + dz3)
-        return (l1 + l2 + l3 + l4) / 4.0
-    end
-
-    -- We pass the normal of the block face (nx, ny, nz) to know which adjacent blocks to average
-    -- For greedy meshing, P1..P4 are corners. Since greedy meshing can make large faces, smooth lighting
-    -- at the vertices of a large face will NOT BE PERFECT unless we partition it, but we can do a simple average at the 4 extrema points.
-
-    -- NOTE: Due to greedy meshing creating arbitrary sized quads, true per-vertex smooth lighting
-    -- requires writing a custom chunk mesher that interpolates over the whole face, OR
-    -- we disable greedy meshing when smooth lighting is on.
-    -- For now, we take the light of the block directly above the face.
-
-    return {
-        get_l(p1_x, p1_y, p1_z),
-        get_l(p2_x, p2_y, p2_z),
-        get_l(p3_x, p3_y, p3_z),
-        get_l(p4_x, p4_y, p4_z)
-    }
-end
-
 local H_NORMAL = hash("normal")
 
--- Visibility scan and greedy merge...
 local function update_mesh(self)
     local start_time = os.clock()
     local grid_size = self.grid_size
-    -- Use global world data
+    local ao_enabled = self.ao_enabled
+    local light_mode = self.light_mode
     local mask = self.mask
     local positions = self.positions
     local texcoord0 = self.texcoord0
@@ -223,11 +179,10 @@ local function update_mesh(self)
     local colors2 = self.colors2
     local normals = self.normals
 
-    local get_block_local = get_block
     local greedy_faces = 0
     local quad_idx = 0
 
-    local offset = -self.grid_size / 2 + 0.5
+    local offset = -grid_size / 2 + 0.5
     local mesh_edges = {}
 
     -- Opacity Cache for this frame
@@ -407,18 +362,18 @@ local function update_mesh(self)
                     end
 
                     local b_id = world.get_block(x, y, z)
-                    local neighbor_id = get_block_local(self, nx, ny, nz)
+                    local neighbor_id = get_block(grid_size, nx, ny, nz)
                     local b_def = block_data.get_block(b_id)
                     local n_def = block_data.get_block(neighbor_id)
 
                     if b_def and not b_def.transparent then
                         if not n_def or n_def.transparent then
-                            local ao_vals = calculate_ao(self, x, y, z, d, opaque_cache)
+                            local ao_vals = calculate_ao(ao_enabled, grid_size, x, y, z, d, opaque_cache)
                             local a0, a1, a2, a3 = ao_vals[1], ao_vals[2], ao_vals[3], ao_vals[4]
 
                             -- Light Encoding
                             local sun_l, source_l = 15, 0
-                            if self.light_mode == 0 or self.light_mode == 1 then -- Flat / Fake Smooth
+                            if light_mode == 0 or light_mode == 1 then
                                 sun_l, source_l = world.get_lights(nx, ny, nz)
                             end
                             local light_hash = sun_l + source_l * 16
@@ -472,7 +427,7 @@ local function update_mesh(self)
                         if uv_data then
                             local s_vals = { sun_l, source_l }
 
-                            if self.light_mode == 1 then
+                            if light_mode == 1 then
                                 -- SMOOTH LIGHTING calculations for the 4 corners (P1, P2, P3, P4)
                                 -- Calculate exact averaged corner lighting here (since greedy is disabled)
                                 local cx, cy, cz = 0, 0, 0
@@ -503,8 +458,8 @@ local function update_mesh(self)
                                     local l3_sun, l3_source = world.get_lights(px + dx2, py + dy2, pz + dz2)
 
                                     local l4_sun, l4_source
-                                    local op1 = is_opaque(self, px + dx1, py + dy1, pz + dz1, opaque_cache)
-                                    local op2 = is_opaque(self, px + dx2, py + dy2, pz + dz2, opaque_cache)
+                                    local op1 = is_opaque(grid_size, px + dx1, py + dy1, pz + dz1, opaque_cache)
+                                    local op2 = is_opaque(grid_size, px + dx2, py + dy2, pz + dz2, opaque_cache)
 
                                     if op1 and op2 then
                                         l4_sun, l4_source = 0, 0
@@ -638,7 +593,7 @@ local function create_chunk(self)
 
     local atlas = resource.get_atlas(self.game_atlas)
     go.set(mesh_go.mesh_url, H_TEXTURE0, hash(atlas.texture))
-    go.set(mesh_go.mesh_url, hash("texture1"), self.breaking_texture)
+    go.set(mesh_go.mesh_url, H_TEXTURE1, self.breaking_texture)
 
     block_data.init(self.game_atlas)
 
@@ -668,13 +623,11 @@ local function create_chunk(self)
     self.colors2      = buffer.get_stream(buf, H_COLOR2)
 
     -- Removed self.world assignment, accessing world.data directly or via get_block
-    self.total_cubes  = 0
     _G.shared_cubemap = {}
     for cx = 0, grid_size - 1 do
         for cy = 0, grid_size - 1 do
             for cz = 0, grid_size - 1 do
                 if world.get_block(cx, cy, cz) ~= 0 then
-                    self.total_cubes = self.total_cubes + 1
                     local cube_idx = cx + cy * grid_size + cz * grid_size * grid_size
                     _G.shared_cubemap[cube_idx] = true
                 end
@@ -688,7 +641,7 @@ local function create_chunk(self)
 
     update_mesh(self)
 
-    local offset = -self.grid_size / 2 + 0.5
+    local offset = -grid_size / 2 + 0.5
     go.set_position(vmath.vector3(offset, offset, 490), mesh_go.go_id)
 end
 
@@ -728,21 +681,21 @@ function init(self)
         end
     end
 
-    create_chunk(self) -- Removed world_data argument
-    self.time = 0
+    create_chunk(self)
 
     -- Listen for AO toggle
     msg.post(".", "acquire_input_focus")
 end
 
 function on_message(self, message_id, message, sender)
+    local grid_size = self.grid_size
     if message_id == H_DESTROY_CUBE then
         local gx, gy, gz = message.gx, message.gy, message.gz
-        if gx and gy and gz and self.grid_size then
+        if gx and gy and gz and grid_size then
             local b_id = world.get_block(gx, gy, gz)
             if b_id ~= 0 and b_id ~= 2 then -- Not air and not unbreakable
                 -- Optimized sound trigger with reused vector
-                local offset = -self.grid_size / 2 + 0.5
+                local offset = -grid_size / 2 + 0.5
                 TEMP_POS.x = offset + gx
                 TEMP_POS.y = offset + gy
                 TEMP_POS.z = 490 + gz
@@ -763,8 +716,7 @@ function on_message(self, message_id, message, sender)
                     self.block_entities[e_key] = nil
                 end
 
-                self.total_cubes = (self.total_cubes or 1) - 1
-                local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
+                local cube_idx = gx + gy * grid_size + gz * grid_size * grid_size
                 if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = false end
                 world.recalculate_lighting()
                 update_mesh(self)
@@ -773,13 +725,13 @@ function on_message(self, message_id, message, sender)
     elseif message_id == H_PLACE_CUBE then
         local gx, gy, gz = message.gx, message.gy, message.gz
         local target_id = message.block_id or 1
-        if gx and gy and gz and self.grid_size then
-            if gx >= 0 and gx < self.grid_size and gy >= 0 and gy < self.grid_size and gz >= 0 and gz < self.grid_size then
+        if gx and gy and gz and grid_size then
+            if gx >= 0 and gx < grid_size and gy >= 0 and gy < grid_size and gz >= 0 and gz < grid_size then
                 if world.get_block(gx, gy, gz) == 0 then
                     world.set_block(gx, gy, gz, target_id)
 
                     if target_id == 12 and self.torch_factory then
-                        local offset = -self.grid_size / 2 + 0.5
+                        local offset = -grid_size / 2 + 0.5
                         local pos = vmath.vector3(offset + gx, offset + gy, 490 + gz)
                         local t_id = factory.create(self.torch_factory, pos)
                         self.block_entities[gx .. "_" .. gy .. "_" .. gz] = t_id
@@ -787,41 +739,39 @@ function on_message(self, message_id, message, sender)
                         pcall(function() go.set(msg.url(nil, t_id, "model"), "tint", vmath.vector4(1, 1, 1, 1)) end)
                         sm.play(sm.place, 1.0, pos)
                     else
-                        local offset = -self.grid_size / 2 + 0.5
+                        local offset = -grid_size / 2 + 0.5
                         local pos = vmath.vector3(offset + gx, offset + gy, 490 + gz)
                         sm.play(sm.place, 1.0, pos)
                     end
 
-                    self.total_cubes = (self.total_cubes or 0) + 1
-                    local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
+                    local cube_idx = gx + gy * grid_size + gz * grid_size * grid_size
                     if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = true end
                     world.recalculate_lighting()
                     update_mesh(self)
                 end
             end
         end
-    elseif message_id == hash("set_blocks_area") then
+    elseif message_id == H_SET_BLOCKS_AREA then
         local center_gx, center_gy, center_gz = message.gx, message.gy, message.gz
         local radius = message.radius or 1
         local target_id = message.block_id or 0
         local modified = false
 
-        if center_gx and center_gy and center_gz and self.grid_size then
-            local offset = -self.grid_size / 2 + 0.5
+        if center_gx and center_gy and center_gz and grid_size then
+            local offset = -grid_size / 2 + 0.5
             for gx = center_gx - radius, center_gx + radius do
                 for gy = center_gy - radius, center_gy + radius do
                     for gz = center_gz - radius, center_gz + radius do
                         -- Bound checking within grid and above unbreakable layer
-                        if gx >= 0 and gx < self.grid_size and
-                            gy > 0 and gy < self.grid_size and
-                            gz >= 0 and gz < self.grid_size then
+                        if gx >= 0 and gx < grid_size and
+                            gy > 0 and gy < grid_size and
+                            gz >= 0 and gz < grid_size then
                             local current_id = world.get_block(gx, gy, gz)
                             if current_id ~= target_id and current_id ~= 2 then -- Don't break unbreakable (2)
                                 world.set_block(gx, gy, gz, target_id)
 
-                                local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
+                                local cube_idx = gx + gy * grid_size + gz * grid_size * grid_size
                                 if target_id == 0 then
-                                    if current_id ~= 0 then self.total_cubes = (self.total_cubes or 1) - 1 end
                                     if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = false end
                                     -- Remove any attached entity at this position
                                     local e_key = gx .. "_" .. gy .. "_" .. gz
@@ -837,7 +787,6 @@ function on_message(self, message_id, message, sender)
                                     TEMP_POS.z = 490 + gz
                                     sm.play(sm.stone_debris, 1.0, TEMP_POS)
                                 else
-                                    if current_id == 0 then self.total_cubes = (self.total_cubes or 0) + 1 end
                                     if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = true end
                                 end
                                 modified = true
@@ -851,24 +800,23 @@ function on_message(self, message_id, message, sender)
                 update_mesh(self)
             end
         end
-    elseif message_id == hash("set_blocks_list") then
+    elseif message_id == H_SET_BLOCKS_LIST then
         local blocks = message.blocks
         local modified = false
-        if blocks and self.grid_size then
-            local offset = -self.grid_size / 2 + 0.5
+        if blocks and grid_size then
+            local offset = -grid_size / 2 + 0.5
             for _, b in ipairs(blocks) do
                 local gx, gy, gz, target_id = b.gx, b.gy, b.gz, b.id or 0
                 if gx and gy and gz then
-                    if gx >= 0 and gx < self.grid_size and
-                        gy > 0 and gy < self.grid_size and
-                        gz >= 0 and gz < self.grid_size then
+                    if gx >= 0 and gx < grid_size and
+                        gy > 0 and gy < grid_size and
+                        gz >= 0 and gz < grid_size then
                         local current_id = world.get_block(gx, gy, gz)
                         if current_id ~= target_id and current_id ~= 2 then
                             world.set_block(gx, gy, gz, target_id)
 
-                            local cube_idx = gx + gy * self.grid_size + gz * self.grid_size * self.grid_size
+                            local cube_idx = gx + gy * grid_size + gz * grid_size * grid_size
                             if target_id == 0 then
-                                if current_id ~= 0 then self.total_cubes = (self.total_cubes or 1) - 1 end
                                 if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = false end
                                 -- Remove any attached entity at this position
                                 local e_key = gx .. "_" .. gy .. "_" .. gz
@@ -883,7 +831,6 @@ function on_message(self, message_id, message, sender)
                                 TEMP_POS.z = 490 + gz
                                 sm.play(sm.stone_debris, 1.0, TEMP_POS)
                             else
-                                if current_id == 0 then self.total_cubes = (self.total_cubes or 0) + 1 end
                                 if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = true end
                             end
                             modified = true
