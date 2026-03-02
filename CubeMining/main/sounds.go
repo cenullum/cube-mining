@@ -93,3 +93,11 @@ components {
   id: "place"
   component: "/assets/sounds/place.sound"
 }
+components {
+  id: "jumping"
+  component: "/assets/sounds/jumping.sound"
+}
+components {
+  id: "landing"
+  component: "/assets/sounds/landing.sound"
+}

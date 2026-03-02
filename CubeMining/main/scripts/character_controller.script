@@ -14,7 +14,6 @@ local world = require "main.scripts.world"
 local sm = require "main.scripts.sound_manager"
 
 -- Pre-hashed strings for optimization
-local H_CAMERA = hash("camera")
 local H_ACQUIRE_INPUT_FOCUS = hash("acquire_input_focus")
 local H_KEY_ESC = hash("key_esc")
 local H_CLICK = hash("click")
@@ -27,13 +26,10 @@ local H_MOVE_DOWN = hash("move_down")
 local H_JUMP = hash("jump")
 local H_SPRINT = hash("sprint")
 local H_SWITCH_MODE = hash("switch_mode")
-local H_SET_VIEW_PROJECTION = hash("set_view_projection")
 local H_SET_VIEW = hash("set_view")
 local H_DRAW_LINE = hash("draw_line")
 local H_EULER = hash("euler")
-local H_SET_PERFORMANCE_MODE = hash("set_performance_mode")
 local H_SPAWN_MOUSE = hash("spawn_mouse")
-local H_SPAWN_TORCH = hash("spawn_torch")
 local H_SPAWN_FAST = hash("spawn_fast")
 local H_TOGGLE_LIGHT_MODE = hash("toggle_light_mode")
 local H_TOGGLE_AO = hash("toggle_ao")
@@ -101,6 +97,7 @@ function init(self)
     local euler = go.get(".", H_EULER)
     self.yaw = euler.y
     self.pitch = euler.x
+    self.grounded = true
 end
 
 local function update_camera(self, dt)
@@ -258,6 +255,7 @@ function update(self, dt)
         local feet_pos = eye_pos - self.eye_offset
 
         -- Physics Step
+        local impact_vel_y = self.velocity.y
         local new_feet_pos, new_vel, grounded = physics.move_and_slide(feet_pos, self.velocity, self.size, dt)
 
         self.velocity = new_vel
@@ -266,19 +264,29 @@ function update(self, dt)
         local new_eye_pos = new_feet_pos + self.eye_offset
         go.set_position(new_eye_pos)
 
+        -- Landing Sound & Bounce
+        if grounded and not self.grounded and impact_vel_y < -2.0 then
+            sm.play(sm.landing)
+            msg.post("#hand_slot_manager", "bounce_item", { intensity = math.min(1.0, math.abs(impact_vel_y) / 10.0) })
+        end
+        self.grounded = grounded
+
         -- Jump
         if self.jump_pressed and grounded then
             self.velocity.y = self.jump_force
             self.jump_pressed = false -- Consume jump
+            sm.play(sm.jumping)
+            msg.post("#hand_slot_manager", "bounce_item", { intensity = 1.0 })
         end
 
         -- Reset jump constraints if falling too fast
         if not grounded and self.velocity.y < -30 then self.velocity.y = -30 end
 
-        -- Expose movement state for head bob (hand_slot_manager)
+        -- Expose movement state for head bob and inertia (hand_slot_manager)
         local hvel = math.sqrt(self.velocity.x * self.velocity.x + self.velocity.z * self.velocity.z)
         _G.player_speed = hvel
         _G.player_sprinting = self.sprinting
+        _G.player_velocity = self.velocity
     end
 
     -- Debug Drawing

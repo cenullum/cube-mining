@@ -37,6 +37,8 @@ M.pistol_reload = hash("pistol_reload")
 M.submachine_gun_shot = hash("submachine_gun_shot")
 M.submachine_gun_reload = hash("submachine_gun_reload")
 M.place = hash("place")
+M.jumping = hash("jumping")
+M.landing = hash("landing")
 
 -- Internal reverse lookup for URL construction
 local REVERSE_NAMES = {
@@ -49,7 +51,9 @@ local REVERSE_NAMES = {
     [M.pistol_reload] = "pistol_reload",
     [M.submachine_gun_shot] = "submachine_gun_shot",
     [M.submachine_gun_reload] = "submachine_gun_reload",
-    [M.place] = "place"
+    [M.place] = "place",
+    [M.jumping] = "jumping",
+    [M.landing] = "landing"
 }
 
 -- Throttling: Prevent the same sound from playing too frequently.
