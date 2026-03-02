@@ -358,12 +358,12 @@ function update(self, dt)
     local cam_rot = g.cam_rot or QUAT_ID
     local inv_cam_rot = v_conj(cam_rot)
 
-    -- ── Head bob ──────────────────────
     local speed = g.player_speed or 0
     local sprinting = g.player_sprinting or false
+    local grounded = g.player_grounded ~= false -- Default to true if nil
     local ads_active = self.ads_active
 
-    if speed > 0.5 then
+    if speed > 0.5 and grounded then
         local bob_freq = sprinting and 14.0 or 9.0
         local ads_mul = ads_active and 0.2 or 1.0
         local bob_amp_x = (sprinting and 0.025 or 0.015) * ads_mul
