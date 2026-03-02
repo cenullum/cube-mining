@@ -195,6 +195,14 @@ function update(self, dt)
     local faces = _G.stats_faces or 0
     local vertices = _G.stats_vertices or 0
     local build_time = _G.stats_mesh_build_time or 0
+    local b_times = _G.world_build_times or {}
+    local b_count = #b_times
+    local b_avg = 0
+    if b_count > 0 then
+        local sum = 0
+        for _, v in ipairs(b_times) do sum = sum + v end
+        b_avg = sum / b_count
+    end
 
     local x_start = self.width - 180
     local y_start = 200
@@ -205,6 +213,7 @@ function update(self, dt)
         string.format("Faces: %d", faces),
         string.format("Vertices: %d", vertices),
         string.format("World Build: %.2f ms", build_time),
+        string.format("Avg. Mesh Build: %.2f ms (%d/25)", b_avg, b_count),
         string.format("Item Build: %.2f ms", _G.item_mesh_build_time or 0),
         string.format("RAM: %s", format_mem(ram or 0)),
         string.format("Mouse: %d", _G.mouse_count or 0)

@@ -111,7 +111,6 @@ function update(self, dt)
         go.delete()
         return
     end
-    print("bomb")
     self.timer = timer
 
     local vel = self.velocity

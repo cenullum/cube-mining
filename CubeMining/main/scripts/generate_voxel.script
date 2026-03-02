@@ -42,6 +42,7 @@ local PATCH_BUFFER = "/assets/models/patch_%s.bufferc"
 _G.stats_faces = 0
 _G.stats_vertices = 0
 _G.stats_mesh_build_time = 0
+_G.world_build_times = {} -- NEW: track last 25 builds
 
 local function create_mesh(self)
     local object = {}
@@ -619,7 +620,14 @@ local function update_mesh(self)
     -- Cache edges globally for the performance overlay to read directly
     _G.cached_mesh_edges = mesh_edges
 
-    _G.stats_mesh_build_time = (os.clock() - start_time) * 1000
+    local b_time = (os.clock() - start_time) * 1000
+    _G.stats_mesh_build_time = b_time
+
+    -- Add to historical samples for averaging (capped at 25)
+    table.insert(_G.world_build_times, b_time)
+    if #_G.world_build_times > 25 then
+        table.remove(_G.world_build_times, 1)
+    end
 end
 
 local function create_chunk(self)
