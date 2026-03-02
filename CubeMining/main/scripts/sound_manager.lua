@@ -11,7 +11,6 @@ local math = math
 local os = os
 local type = type
 local tostring = tostring
-local pairs = pairs
 local factory = factory
 
 local vmath_length = vmath.length

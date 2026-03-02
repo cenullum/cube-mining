@@ -23,10 +23,11 @@ uniform mediump sampler2D texture1; // The breaking texture spritesheet
 uniform fs_uniforms
 {
     mediump vec4 tint; // Face tint color (default white)
-    mediump vec4 fog_color;
+    lowp vec4 fog_color;
     mediump vec4 fog_params;
     mediump vec4 break_info; // x: frame, y: enabled, z: total_frames
     mediump vec4 break_pos;  // xyz: block grid coordinates
+    mediump vec4 cam_pos;
 };
 
 // Bilinear interpolation for a quad
@@ -100,8 +101,8 @@ void main()
     color.rgb *= final_light;
 
     // Apply Fog (Per-fragment)
-    float dist = length(var_view_pos);
-    float fog_factor = clamp((fog_params.y - dist) / (fog_params.y - fog_params.x), 0.0, 1.0);
+    lowp float dist = length(var_view_pos);
+    lowp float fog_factor = clamp((fog_params.y - dist) / (fog_params.y - fog_params.x), 0.0, 1.0);
     color.rgb = mix(fog_color.rgb, color.rgb, fog_factor);
 
     // Output final color (force alpha to 1.0 for solid blocks)

@@ -51,6 +51,7 @@ void main()
     
     // Pass view-space position for fog
     var_view_pos = p.xyz;
+
     var_pos = position.xyz;
     var_normal = normal;
 

@@ -182,7 +182,7 @@ local function update_camera(self, dt)
     local pos_inv = vmath.matrix4_translation(-eye_pos)
     view = view * pos_inv
 
-    msg.post("@render:", H_SET_VIEW, { view = view })
+    msg.post("@render:", H_SET_VIEW, { view = view, pos = eye_pos })
 end
 
 function update(self, dt)
@@ -416,37 +416,19 @@ function update(self, dt)
         end
     end
 
-    -- Depth-based fog and clear color
-    -- Surface is at grid top (grid_size-1 in grid coords).
-    -- Player Y in grid coords: py (already calculated above)
-    -- At surface (py >= grid_size-1): full sky blue
-    -- 5 blocks below surface: full black
+    -- Fog color and clear color is now handled by GPU (render script and shaders)
+    -- We just calculate the depth factor for clear color here (or move it to render script)
     local surface_y = grid_size - 1
-    -- Calculate vertical position in grid units using the precise world Y
     local player_grid_y = (eye_pos.y - offset)
     local depth_below_surface = surface_y - player_grid_y
     local depth_factor = math.max(0, math.min(1, depth_below_surface / 5.0))
 
-    -- Sky blue color
     local sky_r, sky_g, sky_b = 0.67, 0.79, 0.98
     local fog_r = sky_r * (1.0 - depth_factor)
     local fog_g = sky_g * (1.0 - depth_factor)
     local fog_b = sky_b * (1.0 - depth_factor)
 
     msg.post("@render:", "clear_color", { color = vmath.vector4(fog_r, fog_g, fog_b, 1.0) })
-
-    -- Update fog color on entity and voxelizer materials
-    local fog_vec = vmath.vector4(fog_r, fog_g, fog_b, 1.0)
-    _G.fog_color = fog_vec
-    if fog_vec ~= self.last_fog_vec then
-        self.last_fog_vec = fog_vec
-        if _G.voxelizer_mesh_url then
-            pcall(function() go.set(_G.voxelizer_mesh_url, "fog_color", fog_vec) end)
-        end
-        if _G.terrain_mesh_url then
-            pcall(function() go.set(_G.terrain_mesh_url, "fog_color", fog_vec) end)
-        end
-    end
 
     update_camera(self, dt)
 end

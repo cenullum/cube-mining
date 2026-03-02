@@ -8,11 +8,8 @@ local go = go
 local math = math
 local os = os
 local hash = hash
-local timer = timer
-
 
 local H_DRAW_LINE = hash("draw_line")
-
 
 local STATE_IDLE = 1
 local STATE_WALK = 2
@@ -296,11 +293,7 @@ function M.update(self, dt)
         pcall(function() go.set(self.model_url, "tint", final_tint) end)
     end
 
-    -- 3. Fog color caching
-    if _G.fog_color and _G.fog_color ~= self.last_fog_color then
-        self.last_fog_color = _G.fog_color
-        pcall(function() go.set(self.model_url, "fog_color", _G.fog_color) end)
-    end
+    -- (Fog color and light sampling logic removed or moved to GPU)
 
     -- Debug Drawing
     if _G.performance_mode == 2 then

@@ -61,6 +61,8 @@ local main_height            = 0
 local last_win_w             = 0
 local last_win_h             = 0
 local is_valid               = false
+local camera_world_pos       = vmath.vector3(0, 0, 0)
+local gpu_constants          = nil -- Initialized in init()
 
 local clear_buffers          = {
     [render.BUFFER_COLOR_BIT] = vmath.vector4(0, 0, 0, 0),
@@ -176,6 +178,7 @@ function init(self)
     setup_camera_properties(world_cam, calculate_perspective_projection, 0.1, 1000)
     setup_camera_properties(gui_cam, calculate_gui_projection, -1, 1)
 
+    gpu_constants = render.constant_buffer()
     refresh_render_state()
 end
 
@@ -200,6 +203,22 @@ function update(self)
         world_cam.proj = world_cam.proj_fn(world_cam)
     end
 
+    -- Altitude-based Fog/Clear Color (Sync with Shader)
+    local grid_size = _G.grid_size or 16
+    local offset = -grid_size * 0.5 + 0.5
+    local surface_y = grid_size - 1
+    local player_grid_y = camera_world_pos.y - offset
+    local depth_factor = math.max(0, math.min(1, (surface_y - player_grid_y) / 5.0))
+
+    local sky_r, sky_g, sky_b = 0.67, 0.79, 0.98
+    local fog_vec = vmath.vector4(sky_r * (1.0 - depth_factor), sky_g * (1.0 - depth_factor),
+        sky_b * (1.0 - depth_factor), 1.0)
+    clear_buffers[render.BUFFER_COLOR_BIT] = fog_vec
+
+    -- Set GPU Constants
+    gpu_constants.fog_color = fog_vec
+    gpu_constants.cam_pos = vmath.vector4(camera_world_pos.x, camera_world_pos.y, camera_world_pos.z, grid_size)
+
     -- 1. Preparation & Clear
     render.set_depth_mask(true)
     render.set_stencil_mask(0xff)
@@ -215,22 +234,22 @@ function update(self)
     render.enable_state(render.STATE_CULL_FACE)
     render.set_cull_face(render.FACE_BACK)
     render.disable_state(render.STATE_BLEND)
-    render.draw(model_pred)
+    render.draw(model_pred, { constants = gpu_constants })
 
     -- 3. Transparent Pass
     render.enable_state(render.STATE_BLEND)
     render.set_blend_func(render.BLEND_SRC_ALPHA, render.BLEND_ONE_MINUS_SRC_ALPHA)
-    render.draw(transparent_pred)
+    render.draw(transparent_pred, { constants = gpu_constants })
 
     -- Particle Pass
-    render.draw(particle_pred)
+    render.draw(particle_pred, { constants = gpu_constants })
     render.disable_state(render.STATE_BLEND)
 
     -- 4. Overlay Pass (Hand/Voxelizer)
     -- Reset depth to ensure hand item is always on top
     render.set_depth_mask(true)
     render.clear({ [render.BUFFER_DEPTH_BIT] = 1 })
-    render.draw(hand_pred)
+    render.draw(hand_pred, { constants = gpu_constants })
 
     -- Debug Lines
     render.disable_state(render.STATE_DEPTH_TEST)
@@ -257,6 +276,7 @@ function on_message(self, message_id, message)
         primary_camera.proj = message.projection
     elseif message_id == MSG_SET_VIEW then
         primary_camera.view = message.view
+        camera_world_pos = message.pos or camera_world_pos
     elseif message_id == MSG_WINDOW_RESIZED then
         refresh_render_state()
     elseif message_id == MSG_CLEAR_COLOR then
