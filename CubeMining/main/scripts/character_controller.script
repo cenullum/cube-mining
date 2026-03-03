@@ -72,6 +72,12 @@ function init(self)
 
     -- Inputs
     self.input = vmath.vector3()
+    self.move_fw = 0
+    self.move_bw = 0
+    self.move_l = 0
+    self.move_r = 0
+    self.move_up = 0
+    self.move_dn = 0
     self.sprinting = false
     self.jump_pressed = false
     self.fly_mode = true -- Start in fly mode (free cam)
@@ -467,21 +473,28 @@ function on_input(self, action_id, action)
 
     -- Movement Input
     if action_id == H_MOVE_FORWARD then
-        if action.pressed then self.input.z = 1 elseif action.released then self.input.z = 0 end
+        self.move_fw = action.released and 0 or 1
     elseif action_id == H_MOVE_BACKWARD then
-        if action.pressed then self.input.z = -1 elseif action.released then self.input.z = 0 end
+        self.move_bw = action.released and 0 or 1
     elseif action_id == H_MOVE_LEFT then
-        if action.pressed then self.input.x = -1 elseif action.released then self.input.x = 0 end
+        self.move_l = action.released and 0 or 1
     elseif action_id == H_MOVE_RIGHT then
-        if action.pressed then self.input.x = 1 elseif action.released then self.input.x = 0 end
+        self.move_r = action.released and 0 or 1
     elseif action_id == H_MOVE_UP and self.state == STATE_FREE_CAM then
-        if action.pressed then self.input.y = 1 elseif action.released then self.input.y = 0 end
+        self.move_up = action.released and 0 or 1
     elseif action_id == H_MOVE_DOWN and self.state == STATE_FREE_CAM then
-        if action.pressed then self.input.y = -1 elseif action.released then self.input.y = 0 end
+        self.move_dn = action.released and 0 or 1
     elseif action_id == H_JUMP then
         if action.pressed then self.jump_pressed = true end
         if action.released then self.jump_pressed = false end
-    elseif action_id == H_SPRINT then
+    end
+
+    -- Always update input vector based on current state
+    self.input.z = self.move_fw - self.move_bw
+    self.input.x = self.move_r - self.move_l
+    self.input.y = self.move_up - self.move_dn
+
+    if action_id == H_SPRINT then
         self.sprinting = not action.released
     elseif action_id == H_SWITCH_MODE and action.released then
         if self.state == STATE_FREE_CAM then
