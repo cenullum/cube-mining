@@ -324,18 +324,12 @@ function init(self)
                 build_voxel_mesh(self, id, item.name, meta)
             end
         elseif item.visual == "model" then
-            if item.name == "torch" and self.torch_prefab then
-                local mid = factory.create(self.torch_prefab, nil, nil, { is_held = true })
-                go.set_parent(mid, go.get_id())
-                go.set_position(vmath.vector3(0.4, -0.3, -0.8), mid)
-                self.model_urls[id] = msg.url(mid)
-                self.name_to_model[item.name] = self.model_urls[id]
-                msg.post(mid, "disable")
-            elseif item.name == "bomb" and self.bomb_prefab then
-                local mid = factory.create(self.bomb_prefab, nil, nil, { is_held = true })
-                go.set_parent(mid, go.get_id())
-                go.set_position(vmath.vector3(0.4, -0.2, -0.8), mid)
-                self.model_urls[id] = msg.url(mid)
+            -- Models are embedded in the collection hierarchy as children of camera
+            local hand_map = { torch = "hand_torch", bomb = "hand_bomb" }
+            local hand_name = hand_map[item.name]
+            if hand_name then
+                local mid = go.get_id(hand_name)
+                self.model_urls[id] = msg.url(nil, mid, nil)
                 self.name_to_model[item.name] = self.model_urls[id]
                 msg.post(mid, "disable")
             end

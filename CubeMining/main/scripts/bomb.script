@@ -60,7 +60,7 @@ go.property("gravity", -25.0)
 go.property("radius", 3)
 go.property("friction", 2.0)
 
-go.property("is_held", false)
+
 
 function init(self)
     self.velocity = vmath.vector3(0, 0, 0)
@@ -79,9 +79,6 @@ function init(self)
 end
 
 function update(self, dt)
-    if self.is_held then
-        return
-    end
 
     local timer = self.timer - dt
 

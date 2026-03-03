@@ -98,6 +98,7 @@ embedded_components {
   data: "prototype: \"/main/entity/torch.go\"\n"
   ""
 }
+
 embedded_components {
   id: "pistol_shot_factory"
   type: "factory"

@@ -2,6 +2,8 @@ name: "main"
 instances {
   id: "camera"
   prototype: "/main/camera.go"
+  children: "hand_bomb"
+  children: "hand_torch"
   position {
     x: -13.0
     y: 8.0
@@ -25,6 +27,47 @@ instances {
   prototype: "/main/sounds.go"
 }
 scale_along_z: 1
+embedded_instances {
+  id: "hand_torch"
+  data: "embedded_components {\n"
+  "  id: \"model\"\n"
+  "  type: \"model\"\n"
+  "  data: \"mesh: \\\"/assets/model/torch.gltf\\\"\\n"
+  "name: \\\"unnamed\\\"\\n"
+  "materials {\\n"
+  "  name: \\\"default\\\"\\n"
+  "  material: \\\"/assets/materials/hand_model.material\\\"\\n"
+  "  textures {\\n"
+  "    sampler: \\\"tex0\\\"\\n"
+  "    texture: \\\"/assets/images/entity/torch.png\\\"\\n"
+  "  }\\n"
+  "}\\n"
+  "\"\n"
+  "  position {\n"
+  "    y: -0.5\n"
+  "  }\n"
+  "}\n"
+  ""
+}
+embedded_instances {
+  id: "hand_bomb"
+  data: "embedded_components {\n"
+  "  id: \"model\"\n"
+  "  type: \"model\"\n"
+  "  data: \"mesh: \\\"/assets/model/bomb.gltf\\\"\\n"
+  "name: \\\"unnamed\\\"\\n"
+  "materials {\\n"
+  "  name: \\\"default\\\"\\n"
+  "  material: \\\"/assets/materials/hand_model.material\\\"\\n"
+  "  textures {\\n"
+  "    sampler: \\\"tex0\\\"\\n"
+  "    texture: \\\"/assets/images/entity/bomb.png\\\"\\n"
+  "  }\\n"
+  "}\\n"
+  "\"\n"
+  "}\n"
+  ""
+}
 embedded_instances {
   id: "root"
   data: "components {\n"
