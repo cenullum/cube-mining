@@ -25,8 +25,10 @@ local H_MOVE_UP = hash("move_up")
 local H_MOVE_DOWN = hash("move_down")
 local H_JUMP = hash("jump")
 local H_SPRINT = hash("sprint")
+local H_SNEAK = hash("sneak")
 local H_SWITCH_MODE = hash("switch_mode")
 local H_SET_VIEW = hash("set_view")
+local H_SET_FOV = hash("set_fov")
 local H_DRAW_LINE = hash("draw_line")
 local H_EULER = hash("euler")
 local H_SPAWN_MOUSE = hash("spawn_mouse")
@@ -41,6 +43,13 @@ go.property("sensitivity", 0.15)
 go.property("gravity", -25.0)
 go.property("mouse_factory", msg.url())
 go.property("bomb_factory", msg.url())
+
+-- Sprint & ADS Properties
+go.property("default_fov", 60)
+go.property("sprint_fov", 68)
+go.property("ads_sensitivity_mul", 0.09)
+go.property("ads_move_speed_mul", 0.5)
+go.property("sneak_move_speed_mul", 0.4)
 
 -- Camera Sway/Lean Properties
 go.property("sway_enabled", true)
@@ -79,6 +88,8 @@ function init(self)
     self.move_up = 0
     self.move_dn = 0
     self.sprinting = false
+    self.sneaking = false
+    self.ads_active = false
     self.jump_pressed = false
     self.fly_mode = true -- Start in fly mode (free cam)
     self.spawn_fast = false
@@ -93,6 +104,8 @@ function init(self)
 
     -- Eye Height (GO is at eyes, feet are below)
     self.eye_height = 1.25
+    self.sneak_eye_height = 1.1
+    self.current_eye_height = self.eye_height
     self.eye_offset = vmath.vector3(0, self.eye_height, 0)
 
     -- Mouse Lock
@@ -243,10 +256,36 @@ function update(self, dt)
         local wish_dir = forward * self.input.z + right * self.input.x
         if vmath.length_sqr(wish_dir) > 1 then wish_dir = vmath.normalize(wish_dir) end
 
-        local speed = self.speed * (self.sprinting and 1.5 or 1)
+        -- Speed calculation: sprint (1.5x), ADS (ads_move_speed_mul), sneak (sneak_move_speed_mul), normal (1x)
+        local speed_mul = 1
+        if self.sprinting then
+            speed_mul = 1.5
+        elseif self.ads_active then
+            speed_mul = self.ads_move_speed_mul
+        elseif self.sneaking then
+            speed_mul = self.sneak_move_speed_mul
+        end
+        local speed = self.speed * speed_mul
+
+        -- Smooth eye offset lerp for sneaking
+        -- Compensate GO position so feet stay at the same level when eye_offset changes
+        local prev_eye_height = self.current_eye_height
+        local target_eye = self.sneaking and self.sneak_eye_height or self.eye_height
+        self.current_eye_height = vmath.lerp(0.15, self.current_eye_height, target_eye)
+        if math.abs(self.current_eye_height - target_eye) < 0.001 then
+            self.current_eye_height = target_eye
+        end
+        self.eye_offset.y = self.current_eye_height
+
+        -- Push GO position up/down to keep feet level when eye height changes
+        local eye_delta = self.current_eye_height - prev_eye_height
+        if eye_delta ~= 0 then
+            local p = go.get_position()
+            p.y = p.y + eye_delta
+            go.set_position(p)
+        end
 
         -- Apply horizontal movement
-        local resistance = 10.0 -- Ground friction/damping
         local target_vel_x = wish_dir.x * speed
         local target_vel_z = wish_dir.z * speed
 
@@ -265,6 +304,40 @@ function update(self, dt)
         local new_feet_pos, new_vel, grounded = physics.move_and_slide(feet_pos, self.velocity, self.size, dt)
 
         self.velocity = new_vel
+
+        -- Sneak edge detection (post-movement — AABB based)
+        -- Checks if the new bounding box has ANY ground block below it.
+        -- If none, the move is reverted. This matches Minecraft's AABB support logic perfectly.
+        if self.sneaking and grounded then
+            local hx = self.size.x * 0.5 - 0.05
+            local hz = self.size.z * 0.5 - 0.05
+            local y = new_feet_pos.y
+            local check_y = y - 0.1
+
+            -- Check X movement
+            if new_feet_pos.x ~= feet_pos.x then
+                local x_safe = physics.check_collision(
+                    new_feet_pos.x - hx, check_y, feet_pos.z - hz,
+                    new_feet_pos.x + hx, y, feet_pos.z + hz
+                )
+                if not x_safe then
+                    new_feet_pos.x = feet_pos.x
+                    self.velocity.x = 0
+                end
+            end
+
+            -- Check Z movement
+            if new_feet_pos.z ~= feet_pos.z then
+                local z_safe = physics.check_collision(
+                    new_feet_pos.x - hx, check_y, new_feet_pos.z - hz,
+                    new_feet_pos.x + hx, y, new_feet_pos.z + hz
+                )
+                if not z_safe then
+                    new_feet_pos.z = feet_pos.z
+                    self.velocity.z = 0
+                end
+            end
+        end
 
         -- Update EYES based on new FEET
         local new_eye_pos = new_feet_pos + self.eye_offset
@@ -294,6 +367,18 @@ function update(self, dt)
         _G.player_sprinting = self.sprinting
         _G.player_grounded = grounded
         _G.player_velocity = self.velocity
+
+        -- Sprint FOV: only when actually moving
+        if self.sprinting then
+            if hvel > 0.5 then
+                msg.post("@render:", H_SET_FOV, { fov = self.sprint_fov })
+            else
+                msg.post("@render:", H_SET_FOV, { fov = self.default_fov })
+            end
+        end
+
+        -- Sync ADS state from hand_slot_manager
+        self.ads_active = _G.ads_active or false
     end
 
     -- Debug Drawing
@@ -451,9 +536,13 @@ end
 function on_input(self, action_id, action)
     if not action_id then
         if window.get_mouse_lock() then
-            -- Mouse movement
-            self.yaw = self.yaw - action.dx * self.sensitivity
-            self.pitch = self.pitch + action.dy * self.sensitivity
+            -- Mouse movement (reduced sensitivity when ADS)
+            local sens = self.sensitivity
+            if self.ads_active then
+                sens = sens * self.ads_sensitivity_mul
+            end
+            self.yaw = self.yaw - action.dx * sens
+            self.pitch = self.pitch + action.dy * sens
 
             -- Clamp pitch
             if self.pitch > 89 then self.pitch = 89 end
@@ -494,8 +583,36 @@ function on_input(self, action_id, action)
     self.input.x = self.move_r - self.move_l
     self.input.y = self.move_up - self.move_dn
 
-    if action_id == H_SPRINT then
-        self.sprinting = not action.released
+    if action_id == H_SNEAK then
+        if action.pressed then
+            self.sneaking = true
+            -- Sneak cancels sprint
+            if self.sprinting then
+                self.sprinting = false
+                msg.post("@render:", H_SET_FOV, { fov = self.default_fov })
+            end
+        elseif action.released then
+            self.sneaking = false
+        end
+    elseif action_id == H_SPRINT then
+        if action.pressed then
+            -- Sprint cancels sneak
+            if self.sneaking then
+                self.sneaking = false
+            end
+            -- Sprint while ADS → cancel ADS, start sprint
+            if self.ads_active then
+                msg.post("#hand_slot_manager", "cancel_ads")
+                self.ads_active = false
+            end
+            self.sprinting = true
+            -- FOV change handled in update() based on movement
+        elseif action.released then
+            self.sprinting = false
+            if not self.ads_active then
+                msg.post("@render:", H_SET_FOV, { fov = self.default_fov })
+            end
+        end
     elseif action_id == H_SWITCH_MODE and action.released then
         if self.state == STATE_FREE_CAM then
             self.state = STATE_WALK
@@ -575,5 +692,9 @@ function on_message(self, message_id, message, sender)
     elseif message_id == hash("toggle_sway") then
         self.sway_enabled = message.enabled ~= false
         print("Camera Sway Enabled:", self.sway_enabled)
+    elseif message_id == hash("cancel_sprint") then
+        -- Called by hand_slot_manager when ADS overrides sprint
+        self.sprinting = false
+        -- FOV will be set by hand_slot_manager (ADS FOV)
     end
 end

@@ -23,6 +23,10 @@ key_trigger {
   action: "move_down"
 }
 key_trigger {
+  input: KEY_LCTRL
+  action: "sneak"
+}
+key_trigger {
   input: KEY_LSHIFT
   action: "sprint"
 }

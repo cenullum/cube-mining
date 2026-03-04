@@ -56,6 +56,38 @@ end
 
 M.check_collision = check_collision
 
+--- Check if solid ground exists below a given AABB position.
+--- Used for Minecraft-style sneak edge detection.
+---@param position vector3 Bottom-center position of the character
+---@param size vector3 AABB size
+---@param dx number Horizontal delta X to check ahead
+---@param dz number Horizontal delta Z to check ahead
+---@return boolean has_ground True if there's solid ground below at the next position
+function M.check_ground_ahead(position, size, dx, dz)
+    local next_x = position.x + dx
+    local next_z = position.z + dz
+    local check_y = position.y - 0.1 -- Slightly below feet
+
+    -- Check if any block below the feet AABB at the next position is solid
+    local half_x = size.x * 0.5 - 0.05 -- Shrink slightly to avoid false positives at block seams
+    local half_z = size.z * 0.5 - 0.05
+
+    return check_collision(
+        next_x - half_x, check_y, next_z - half_z,
+        next_x + half_x, position.y, next_z + half_z
+    )
+end
+
+--- Check if there is solid ground directly below a single point.
+--- Used for corner-based sneak edge detection.
+---@param x number World X coordinate
+---@param y number World Y coordinate (feet level)
+---@param z number World Z coordinate
+---@return boolean has_ground True if there's a solid block below this point
+function M.has_ground_below(x, y, z)
+    return check_collision(x - 0.02, y - 0.2, z - 0.02, x + 0.02, y, z + 0.02)
+end
+
 --- Resolve movement using sub-stepped AABB checks (Swept approximation)
 ---@param position vector3 Current position (bottom-center)
 ---@param velocity vector3 Current velocity
