@@ -22,10 +22,10 @@ A 3D voxel mining example built with the **Defold Game Engine**. This project in
 - **Distance-based Fog**: Distance-based fog applied to terrain and voxelized items.
 - **Dynamic Item System**: A variety of holdable items including blocks, tools (pickaxes, swords), and guns (pistol, submachine gun with ammo/reload mechanics).
 - **Block Health & Mining Power**: Blocks have varying durability, and tools have distinct mining/damage power.
-- **Sound System**: Spatial and triggered sound effects for interactions, placing, breaking, and weapon mechanics.
-- **Throwables**: Physics-based items like throwable bombs with screen shake effects.
-- **Voxel Interaction**: Block destruction and placement with mesh updates.
 - **Performance Monitoring**: Overlay showing FPS, 1% low frames, RAM usage, mesh statistics, and player position.
+- **Precise Sneaking (Crouch)**: Minecraft-style sneaking that prevents falling off edges and 1-block gaps. Includes smooth eye-height transitions.
+- **Dynamic Camera Tilt**: Camera rolls sideways based on movement velocity and tilts forward/backward when accelerating.
+- **Flexible Sound System**: Spatial and triggered sound effects for interactions, placing, breaking, jumping, landing, and weapon mechanics.
 - **Shader-based UV Mapping**: Texture tiling and atlas-based UV wrapping for voxel surfaces.
 
 ## Controls
@@ -33,7 +33,7 @@ A 3D voxel mining example built with the **Defold Game Engine**. This project in
 - **WASD**: Move around
 - **Shift**: Sprint (Move faster)
 - **Space**: Jump / Ascend
-- **Ctrl**: Descend
+- **Ctrl**: Sneak (Edge-safe movement) / Descend
 - **Left Click**: Break / Shoot
 - **Right Click**: Place / ADS (Aim Down Sights)
 - **1 / 2**: Next / Previous active item
@@ -81,14 +81,16 @@ This project was inspired by the [Meshes-In-Defold](https://github.com/mozok/Mes
 - **Textures & Models**: All textures and models are made by **cenullum** and are licensed under **CC0** (Public Domain).
 - **Sound Effects** (Sourced from Pixabay):
   - [Stone Hit](https://pixabay.com/sound-effects/film-special-effects-hit-rock-03-266305/)
-  - [Bomb / Rock Break](https://pixabay.com/sound-effects/film-special-effects-rock-break-hard-184891/)
-  - [Stone Falling / Debris](https://pixabay.com/sound-effects/film-special-effects-stones-falling-6375/)
+  - [Stone Break](https://pixabay.com/sound-effects/film-special-effects-rock-break-hard-184891/)
+  - [Stone Falling](https://pixabay.com/sound-effects/film-special-effects-stones-falling-6375/)
   - [Sword Swing](https://pixabay.com/sound-effects/film-special-effects-sword-air-swing-2-437695/)
   - [Gun Holster](https://pixabay.com/sound-effects/film-special-effects-holster-pistol-7132/)
-  - [Submachine Gun Shot / Reload](https://pixabay.com/sound-effects/film-special-effects-mp5-168858/)
+  - [SMG Shot / Reload](https://pixabay.com/sound-effects/film-special-effects-mp5-168858/)
   - [Pistol Reload](https://pixabay.com/sound-effects/film-special-effects-9mm-pistol-load-and-chamber-98830/)
   - [Pistol Shot](https://pixabay.com/sound-effects/film-special-effects-usp-pistol-sfx-80490/)
   - [Put Cube](https://pixabay.com/sound-effects/film-special-effects-put-item-83043/)
+  - [Landing](https://pixabay.com/sound-effects/film-special-effects-land2-43790/)
+  - [Jumping](https://pixabay.com/sound-effects/film-special-effects-jumplanding-398256/)
 
 ## Contributing
 
