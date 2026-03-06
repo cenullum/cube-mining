@@ -9,6 +9,7 @@ shared_state = 1
 width = 960
 height = 640
 high_dpi = 1
+vsync = 0
 
 [android]
 input_method = HiddenInputField
@@ -33,4 +34,7 @@ max_debug_vertices = 1000000
 
 [model]
 max_count = 1024
+
+[mesh]
+max_count = 512
 

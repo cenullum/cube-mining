@@ -23,7 +23,7 @@ A 3D voxel mining example built with the **Defold Game Engine**. This project in
 - **Dynamic Item System**: A variety of holdable items including blocks, tools (pickaxes, swords), and guns (pistol, submachine gun with ammo/reload mechanics).
 - **Block Health & Mining Power**: Blocks have varying durability, and tools have distinct mining/damage power.
 - **Performance Monitoring**: Overlay showing FPS, 1% low frames, RAM usage, mesh statistics, and player position.
-- **Precise Sneaking (Crouch)**: Minecraft-style sneaking that prevents falling off edges and 1-block gaps. Includes smooth eye-height transitions.
+- **Precise Sneaking (Crouch)**:Sneaking that prevents falling off edges and 1-block gaps. Includes smooth eye-height transitions.
 - **Dynamic Camera Tilt**: Camera rolls sideways based on movement velocity and tilts forward/backward when accelerating.
 - **Flexible Sound System**: Spatial and triggered sound effects for interactions, placing, breaking, jumping, landing, and weapon mechanics.
 - **Shader-based UV Mapping**: Texture tiling and atlas-based UV wrapping for voxel surfaces.

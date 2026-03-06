@@ -64,10 +64,9 @@ local STATE_WALK = 2
 function init(self)
     msg.post(".", H_ACQUIRE_INPUT_FOCUS)
 
-    -- Set starting position as requested
-    go.set_position(vmath.vector3(1, 10, 500))
+    -- Starting position now handled by world_manager
 
-    self.state = STATE_WALK
+    self.state = STATE_FREE_CAM
     self.velocity = vmath.vector3(0, 0, 0)
     self.pitch = 0
     self.yaw = 0
@@ -307,7 +306,7 @@ function update(self, dt)
 
         -- Sneak edge detection (post-movement — AABB based)
         -- Checks if the new bounding box has ANY ground block below it.
-        -- If none, the move is reverted. This matches Minecraft's AABB support logic perfectly.
+        -- If none, the move is reverted.
         if self.sneaking and grounded then
             local hx = self.size.x * 0.5 - 0.05
             local hz = self.size.z * 0.5 - 0.05
