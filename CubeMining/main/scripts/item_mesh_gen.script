@@ -1,4 +1,4 @@
--- voxelizer.script (Hand Slot Mesh Renderer)
+-- item_mesh_gen.script (Hand Slot Mesh Renderer)
 -- Purpose: Receives messages to render voxel meshes for items or blocks attached to the hand slot. Converts 2D sprites to 3D voxel meshes at runtime and caches them for performance.
 
 local vmath = vmath

@@ -72,7 +72,7 @@ embedded_instances {
   id: "root"
   data: "components {\n"
   "  id: \"main\"\n"
-  "  component: \"/main/scripts/generate_voxel.script\"\n"
+  "  component: \"/main/scripts/terrain_mesh_gen.script\"\n"
   "  properties {\n"
   "    id: \"mesh_prefab\"\n"
   "    value: \"/root#mesh_prefab\"\n"

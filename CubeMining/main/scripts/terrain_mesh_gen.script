@@ -1,9 +1,9 @@
--- generate_voxel.script
+-- mesh_gen.script
 -- This script manages dynamic voxel mesh generation using a greedy meshing algorithm.
 -- It handles world state, optimizes rendering by merging faces, and updates the GPU buffer at runtime.
 
 local block_data = require "main.scripts.block_data"
-local world = require "main.scripts.world"
+local world = require "main.scripts.world_data_storage"
 local sm = require "main.scripts.sound_manager"
 
 local vmath = vmath

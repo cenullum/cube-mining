@@ -42,7 +42,7 @@ components {
 }
 components {
   id: "voxelizer"
-  component: "/main/scripts/voxelizer.script"
+  component: "/main/scripts/item_mesh_gen.script"
   properties {
     id: "mesh_prefab"
     value: "/camera#voxel_mesh_factory"
@@ -98,7 +98,6 @@ embedded_components {
   data: "prototype: \"/main/entity/torch.go\"\n"
   ""
 }
-
 embedded_components {
   id: "pistol_shot_factory"
   type: "factory"

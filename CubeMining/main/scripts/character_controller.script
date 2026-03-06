@@ -10,7 +10,7 @@ local window = window
 local factory = factory
 local hash = hash
 local math = math
-local world = require "main.scripts.world"
+local world = require "main.scripts.world_data_storage"
 local sm = require "main.scripts.sound_manager"
 
 -- Pre-hashed strings for optimization

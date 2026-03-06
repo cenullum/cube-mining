@@ -1,6 +1,6 @@
 -- npc.lua
 local physics = require "main.scripts.physics"
-local world = require "main.scripts.world"
+local world = require "main.scripts.world_data_storage"
 
 local vmath = vmath
 local msg = msg

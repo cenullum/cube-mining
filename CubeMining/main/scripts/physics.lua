@@ -1,7 +1,7 @@
 -- physics.lua
 -- Shared physics logic for AABB collision detection and resolution against a voxel world.
 
-local world = require "main.scripts.world"
+local world = require "main.scripts.world_data_storage"
 local block_data = require "main.scripts.block_data"
 
 local M = {}

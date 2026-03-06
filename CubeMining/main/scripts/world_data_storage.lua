@@ -1,4 +1,4 @@
--- world.lua
+-- world_data_storage.lua
 -- Global module to store and access voxel data.
 -- This allows physics and other systems to access the world state without message passing.
 
