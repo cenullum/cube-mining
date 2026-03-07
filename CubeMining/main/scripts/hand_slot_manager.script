@@ -566,8 +566,34 @@ function on_input(self, action_id, action)
             local targeted = _G.targeted_cube
             if targeted and targeted.gx and targeted.normal then
                 local n = targeted.normal
+                local nx, ny, nz = targeted.gx + n.x, targeted.gy + n.y, targeted.gz + n.z
+
+                -- Check for player collision to prevent placing blocks inside the character
+                local eye_height = _G.player_eye_height
+                local p_size = _G.player_size
+                if eye_height and p_size then
+                    local eye_pos = go.get_position()
+                    local feet_pos = eye_pos - vmath.vector3(0, eye_height, 0)
+                    local half_size = p_size * 0.5
+                    local p_min = feet_pos - vmath.vector3(half_size.x, 0, half_size.z)
+                    local p_max = feet_pos + vmath.vector3(half_size.x, p_size.y, half_size.z)
+
+                    local grid_size = _G.grid_size or 16
+                    local offset = -grid_size / 2 + 0.5
+                    local b_pos = vmath.vector3(offset + nx, offset + ny, 490 + nz)
+                    local b_min = b_pos - vmath.vector3(0.49, 0.49, 0.49)
+                    local b_max = b_pos + vmath.vector3(0.49, 0.49, 0.49)
+
+                    if p_min.x < b_max.x and p_max.x > b_min.x and
+                        p_min.y < b_max.y and p_max.y > b_min.y and
+                        p_min.z < b_max.z and p_max.z > b_min.z then
+                        -- Character is blocking the space
+                        return
+                    end
+                end
+
                 msg.post("root#main", "place_cube",
-                    { gx = targeted.gx + n.x, gy = targeted.gy + n.y, gz = targeted.gz + n.z, block_id = self.current_id })
+                    { gx = nx, gy = ny, gz = nz, block_id = self.current_id })
             end
         elseif item.name == "bomb" then
             local cam_pos = go.get_world_position()

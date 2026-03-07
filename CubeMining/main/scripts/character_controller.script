@@ -342,6 +342,10 @@ function update(self, dt)
         local new_eye_pos = new_feet_pos + self.eye_offset
         go.set_position(new_eye_pos)
 
+        -- Export state for hand_slot_manager (on-demand calculations)
+        _G.player_eye_height = self.current_eye_height
+        _G.player_size = self.size
+
         -- Landing Sound & Bounce
         if grounded and not self.grounded and impact_vel_y < -2.0 then
             sm.play(sm.landing)
