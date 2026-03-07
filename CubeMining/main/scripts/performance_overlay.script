@@ -204,7 +204,7 @@ function update(self, dt)
         b_avg = sum / b_count
     end
 
-    local x_start = self.width - 180
+    local x_start = self.width - 250
     local y_start = 200
 
     local lines = {

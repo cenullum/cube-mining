@@ -1,25 +1,25 @@
 #version 140
 
 in highp vec4 position;     // Local vertex position (x, y, z)
-in mediump vec2 texcoord0;  // Tiling coordinates
-in mediump vec4 texcoord1;  // Atlas metadata
-in mediump vec3 normal;      // Normal vector
-in mediump vec4 color;       // Corner AO (Manual interpolation data)
-in mediump vec4 color1;      // Corner Torch Light
-in mediump vec4 color2;      // Corner Sun Light
-in mediump vec2 texcoord2;   // Local UV [0..1] for bilinear interpolation
+in mediump vec4 texcoord0;  // x,y = base_uv, z,w = unit_uv_size
+in mediump vec4 texcoord1;  // x,y = local_uv (0..1), z,w = quad_size (width, height)
+in mediump float texcoord2; // face_id (1..6)
+in lowp vec4 color;         // Corner AO (ubyte4, normalized to 0..1)
+in lowp vec4 color1;        // Corner Torch Light
+in lowp vec4 color2;        // Corner Sun Light
 
 // --- Outputs ---
-out mediump vec2 var_texcoord0;     // Passed to fragment shader
-out mediump vec4 var_atlas_metadata; // Passed to fragment shader
+out mediump vec2 var_texcoord0;     // Tiling coordinate
+out mediump vec4 var_atlas_metadata; // Atlas bounds (base_uv, unit_size)
 out mediump float var_light;        // Directional Lighting factor
-out mediump vec4 var_corner_ao;     // Pass all 4 corners
-out mediump vec4 var_corner_torch;  // Pass all 4 corners
-out mediump vec4 var_corner_sun;    // Pass all 4 corners
-out mediump vec2 var_local_uv;      // Local quad UV [0..1]
+out mediump vec4 var_corner_ao;     // AO for 4 corners
+out mediump vec4 var_corner_torch;  // Torch Light for 4 corners
+out mediump vec4 var_corner_sun;    // Sun Light for 4 corners
+out mediump vec2 var_local_uv;      // Local UV (0..1)
+out mediump vec2 var_quad_size;     // Quad size in blocks
 out mediump vec3 var_view_pos;      // Position in view space
 out mediump vec3 var_pos;           // Position for block breaking
-out mediump vec3 var_normal;        // Normal for block breaking
+out mediump vec3 var_normal;        // Reconstructed normal
 
 // --- Uniforms ---
 uniform vs_uniforms
@@ -32,29 +32,35 @@ uniform vs_uniforms
 
 void main()
 {
+    // Reconstruct Normal based on face_id (1: +Z, 2: -Z, 3: +Y, 4: -Y, 5: +X, 6: -X)
+    vec3 n = vec3(0.0);
+    int fid = int(texcoord2 + 0.5);
+    if      (fid == 1) n = vec3( 0,  0,  1);
+    else if (fid == 2) n = vec3( 0,  0, -1);
+    else if (fid == 3) n = vec3( 0,  1,  0);
+    else if (fid == 4) n = vec3( 0, -1,  0);
+    else if (fid == 5) n = vec3( 1,  0,  0);
+    else               n = vec3(-1,  0,  0);
+
     // Standard position transformation
     vec4 p = mtx_worldview * position;
     
-    // Calculate diffuse lighting in world space
-    // Terrain GO is axis-aligned and not rotated, so local normal = world normal
-    vec3 n = normalize(normal);
+    // Calculate diffuse lighting (Axis aligned)
     float diff = max(dot(n, normalize(light.xyz)), 0.0);
-    var_light = diff + light.w; // Add ambient factor
+    var_light = diff + light.w;
     
-    // Pass attributes to fragment shader
-    var_texcoord0 = texcoord0;
-    var_atlas_metadata = texcoord1;
-    var_corner_ao = color;
-    var_corner_torch = color1;
-    var_corner_sun = color2;
-    var_local_uv = texcoord2;
+    // Pass attributes
+    var_texcoord0 = texcoord0.xy;
+    var_atlas_metadata = texcoord0;
+    var_corner_ao = color / 255.0;
+    var_corner_torch = color1 / 255.0;
+    var_corner_sun = color2 / 255.0;
+    var_local_uv = texcoord1.xy;
+    var_quad_size = texcoord1.zw;
     
-    // Pass view-space position for fog
     var_view_pos = p.xyz;
-
     var_pos = position.xyz;
-    var_normal = normal;
+    var_normal = n;
 
-    // Final clip space position
     gl_Position = mtx_proj * p;
 }

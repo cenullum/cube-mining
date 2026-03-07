@@ -5,6 +5,6 @@ embedded_components {
   "vertices: \"/main/square/empty.buffer\"\n"
   "textures: \"/assets/images/tile_texture/unbreakable.png\"\n"
   "position_stream: \"position\"\n"
-  "normal_stream: \"position\"\n"
+  "normal_stream: \"normal\"\n"
   ""
 }
