@@ -81,8 +81,6 @@ function M.update(self, dt)
     end
 
     -- NPC movement and health are now handled entirely in C++
-
-    -- Visual feedback (hit flash) - currently disabled or can be triggered via message if needed
 end
 
 return M

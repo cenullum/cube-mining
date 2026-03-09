@@ -115,10 +115,7 @@ function init(self)
     self.pitch = euler.x
     self.grounded = true
 
-    -- Shooting state
-    self.shooting_timer = 0
-    self.is_shooting = false
-    self.fire_rate = 0.15
+    self.grounded = true
 end
 
 local function update_camera(self, dt)
@@ -203,34 +200,28 @@ local function update_camera(self, dt)
     msg.post("@render:", H_SET_VIEW, { view = view, pos = eye_pos })
 end
 
-local function update_shooting(self, dt)
-    if self.shooting_timer > 0 then
-        self.shooting_timer = self.shooting_timer - dt
-    end
+local function perform_shot(self, message)
+    local cam_pos = go.get_world_position()
+    local cam_rot = go.get_rotation()
+    local forward = vmath.rotate(cam_rot, vmath.vector3(0, 0, -1))
 
-    if self.is_shooting and self.shooting_timer <= 0 then
-        self.shooting_timer = self.fire_rate
+    -- C++ raycasting against voxels AND NPCs
+    -- parameters: origin, dir, dist, penetration, damage, knockback_power
+    local damage = message.damage or 25
+    local penetration = message.penetration or 1
+    local hits = terrain.shoot(cam_pos, forward, 100, penetration, damage, 5.0)
 
-        local cam_pos = go.get_world_position()
-        local cam_rot = go.get_rotation()
-        local forward = vmath.rotate(cam_rot, vmath.vector3(0, 0, -1))
-
-        -- High performance C++ raycasting against voxels AND NPCs
-        -- parameters: origin, dir, dist, penetration, damage, knockback_power
-        local hits = terrain.shoot(cam_pos, forward, 100, 1, 25, 5.0)
-
-        if hits and #hits > 0 then
-            for _, hit in ipairs(hits) do
-                if hit.is_block then
-                    -- Hit terrain
-                    sm.play(sm.stone_debris, 0.5, hit.pos)
-                end
+    if hits and #hits > 0 then
+        for _, hit in ipairs(hits) do
+            if hit.is_block then
+                -- Hit terrain
+                sm.play(sm.stone_debris, 0.5, hit.pos)
             end
         end
-
-        -- Recoil Visuals
-        msg.post(".", "apply_recoil", { power = 1.0 })
     end
+
+    -- Recoil Visuals
+    msg.post(".", "apply_recoil", { power = 1.0 })
 end
 
 function update(self, dt)
@@ -566,7 +557,6 @@ function update(self, dt)
 
     msg.post("@render:", "clear_color", { color = vmath.vector4(fog_r, fog_g, fog_b, 1.0) })
 
-    update_shooting(self, dt)
     update_camera(self, dt)
 end
 
@@ -734,7 +724,8 @@ function on_message(self, message_id, message, sender)
         self.sprinting = false
         -- FOV will be set by hand_slot_manager (ADS FOV)
     elseif message_id == hash("fire") then
-        self.is_shooting = message.pressed
-        if message.fire_rate then self.fire_rate = message.fire_rate end
+        if message.pressed then
+            perform_shot(self, message)
+        end
     end
 end
