@@ -2,8 +2,7 @@
 -- Thin Lua wrapper: buffer creation, GPU upload, message handling.
 -- All heavy work (mesh gen, AO, lighting) runs in C++ on a background thread.
 
-local block_data = require "main.scripts.block_data"
-local world = require "main.scripts.world_data_storage"
+local items = require "main.scripts.items"
 local sm = require "main.scripts.sound_manager"
 
 local vmath = vmath
@@ -40,6 +39,7 @@ local H_SET_BLOCKS_AREA = hash("set_blocks_area")
 local H_SET_BLOCKS_LIST = hash("set_blocks_list")
 local H_TEXTURE1 = hash("texture1")
 local H_NORMAL = hash("normal")
+local H_REQUEST_MESH_UPDATE = hash("request_mesh_update")
 
 local PATCH_BUFFER = "/assets/model/patch_%s.bufferc"
 
@@ -65,27 +65,91 @@ local function request_mesh_update(self)
     self.mesh_pending = true
 end
 
+local function get_uv_data(atlas, texture_info, animation_name)
+    local animation_id = hash(animation_name)
+    local geometry_id = nil
+
+    for i, anim in ipairs(atlas.animations) do
+        local anim_id = type(anim.id) == "string" and hash(anim.id) or anim.id
+        if anim_id == animation_id then
+            geometry_id = anim.frame_start
+            break
+        end
+    end
+
+    if not geometry_id then
+        print("WARNING: Texture '" .. animation_name .. "' not found in atlas!")
+        return nil
+    end
+
+    local geom = atlas.geometries[geometry_id]
+    local min_u, max_u, min_v, max_v = math.huge, -math.huge, math.huge, -math.huge
+    for i = 1, #geom.uvs, 2 do
+        local u, v = geom.uvs[i], geom.uvs[i + 1]
+        if u < min_u then min_u = u end
+        if u > max_u then max_u = u end
+        if v < min_v then min_v = v end
+        if v > max_v then max_v = v end
+    end
+
+    return {
+        u = min_u / texture_info.width,
+        v = (texture_info.height - max_v) / texture_info.height,
+        w = (max_u - min_u) / texture_info.width,
+        h = (max_v - min_v) / texture_info.height
+    }
+end
+
 local function register_blocks(self)
     local atlas = resource.get_atlas(self.game_atlas)
-    block_data.init(self.game_atlas)
+    local texture_info = resource.get_texture_info(atlas.texture)
 
     -- Register each block with C++ engine
-    for id = 0, 255 do
-        local def = block_data.get_block(id)
-        if def then
+    for id, def in pairs(items.definitions) do
+        if def.visual == "block" or def.is_placeable then
+            local transparent = def.transparent or false
+            local solid = true
+            if transparent then solid = false end
+            if def.solid ~= nil then solid = def.solid end
+
             local uvs = nil
-            if def.uvs then
+            if def.faces then
                 uvs = {}
-                for face = 1, 6 do
-                    local uv = def.uvs[face]
-                    if uv then
-                        uvs[face] = { uv.u, uv.v, uv.w, uv.h }
+                local faces = def.faces
+                local function assign_face(dir, tex_name)
+                    local uv = get_uv_data(atlas, texture_info, tex_name)
+                    if not uv then
+                        print("ERROR: Block '" .. def.name .. "' (ID " .. id .. ") missing texture: " .. tex_name)
+                        uv = { 0, 0, 0, 0 }
                     else
-                        uvs[face] = { 0, 0, 0, 0 }
+                        uv = { uv.u, uv.v, uv.w, uv.h }
                     end
+                    uvs[dir] = uv
+                end
+
+                if faces.all then
+                    for d = 1, 6 do assign_face(d, faces.all) end
+                else
+                    assign_face(3, faces.top or "top")    -- D_Y_POS
+                    assign_face(4, faces.bottom or "top") -- D_Y_NEG
+                    local side_tex = faces.side or "side"
+                    assign_face(1, side_tex)              -- D_Z_POS
+                    assign_face(2, side_tex)              -- D_Z_NEG
+                    assign_face(5, side_tex)              -- D_X_POS
+                    assign_face(6, side_tex)              -- D_X_NEG
                 end
             end
-            terrain.register_block(id, def.transparent or false, def.solid or false, def.light_level or 0, uvs)
+
+            terrain.register_block(
+                id,
+                transparent,
+                solid,
+                def.light_level or 0,
+                def.name,
+                def.hit_sound or "",
+                def.break_sound or "",
+                uvs
+            )
         end
     end
 end
@@ -117,23 +181,12 @@ local function create_chunk(self)
     self.buffer_resource = resource.create_buffer(string.format(PATCH_BUFFER, 7), { buffer = buf })
     go.set(self.mesh_url, H_VERTICES, self.buffer_resource)
 
-    self.max_verts    = max_verts
+    self.max_verts = max_verts
 
-    -- Build shared_cubemap
-    _G.shared_cubemap = {}
-    for cx = 0, grid_size - 1 do
-        for cy = 0, grid_size - 1 do
-            for cz = 0, grid_size - 1 do
-                if world.get_block(cx, cy, cz) ~= 0 then
-                    local cube_idx = cx + cy * grid_size + cz * grid_size * grid_size
-                    _G.shared_cubemap[cube_idx] = true
-                end
-            end
-        end
-    end
+    self.max_verts = max_verts
 
     -- Initial mesh update (synchronous lighting + async mesh)
-    world.recalculate_lighting()
+    terrain.recalc_lighting_sync()
     request_mesh_update(self)
 end
 
@@ -148,7 +201,7 @@ function init(self)
     self.mesh_pending = false
 
     -- Initialize C++ world storage and generate terrain
-    world.init(grid_size, os.time())
+    terrain.init(grid_size, os.time())
 
     -- Register block data with C++
     register_blocks(self)
@@ -159,31 +212,24 @@ end
 
 function update(self, dt)
     -- Poll for mesh results from the worker thread
-    if self.mesh_pending then
-        local buf, vc, fc, qc, b_time = terrain.poll_mesh_buffer()
-        if buf then
-            -- Note: vc is current active verts, but buf has max_verts size to match resource
-            print("terrain_mesh_gen: Applying mesh... verts=" .. vc .. " time=" .. string.format("%.2f", b_time) .. "ms")
+    local buf, vc, fc, qc, b_time = terrain.poll_mesh_buffer()
+    if buf then
+        -- Note: vc is current active verts, but buf has max_verts size to match resource
+        print("terrain_mesh_gen: Applying mesh... verts=" .. vc .. " time=" .. string.format("%.2f", b_time) .. "ms")
 
-            -- resource.set_buffer updates the GPU memory.
-            -- Using a fixed-size resource avoids expensive re-allocations and culling issues.
-            resource.set_buffer(self.buffer_resource, buf)
+        resource.set_buffer(self.buffer_resource, buf)
 
-            _G.stats_faces = fc
-            _G.stats_vertices = vc
+        _G.stats_faces = fc
+        _G.stats_vertices = vc
 
-            _G.stats_mesh_build_time = b_time
-            table.insert(_G.world_build_times, b_time)
-            if #_G.world_build_times > 25 then
-                table.remove(_G.world_build_times, 1)
-            end
-
-            self.mesh_pending = false
-        elseif vc == 0 then
-            -- Empty result (all air) handled by the fallback in the C++ extension returning buf=nil, vc=0
-            print("terrain_mesh_gen: Empty chunk result")
-            self.mesh_pending = false
+        _G.stats_mesh_build_time = b_time
+        table.insert(_G.world_build_times, b_time)
+        if #_G.world_build_times > 25 then
+            table.remove(_G.world_build_times, 1)
         end
+    elseif vc == 0 then
+        -- Empty result (all air) handled by the fallback in the C++ extension returning buf=nil, vc=0
+        print("terrain_mesh_gen: Empty chunk result")
     end
 end
 
@@ -192,21 +238,21 @@ function on_message(self, message_id, message, sender)
     if message_id == H_DESTROY_CUBE then
         local gx, gy, gz = message.gx, message.gy, message.gz
         if gx and gy and gz and grid_size then
-            local b_id = world.get_block(gx, gy, gz)
+            local b_id = terrain.get_block(gx, gy, gz)
             if b_id ~= 0 and b_id ~= 2 then
                 local offset = -grid_size / 2 + 0.5
                 TEMP_POS.x = offset + gx
                 TEMP_POS.y = offset + gy
                 TEMP_POS.z = 490 + gz
 
-                local b_def = block_data.get_block(b_id)
+                local b_def = terrain.get_block_info(b_id)
                 if b_def and b_def.break_sound then
                     sm.play(b_def.break_sound, 1.0, TEMP_POS)
                 else
                     sm.play(sm.stone_debris, 1.0, TEMP_POS)
                 end
 
-                world.set_block(gx, gy, gz, 0)
+                terrain.set_block(gx, gy, gz, 0)
 
                 local e_key = gx .. "_" .. gy .. "_" .. gz
                 if self.block_entities[e_key] then
@@ -214,8 +260,6 @@ function on_message(self, message_id, message, sender)
                     self.block_entities[e_key] = nil
                 end
 
-                local cube_idx = gx + gy * grid_size + gz * grid_size * grid_size
-                if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = false end
                 request_mesh_update(self)
             end
         end
@@ -224,8 +268,8 @@ function on_message(self, message_id, message, sender)
         local target_id = message.block_id or 1
         if gx and gy and gz and grid_size then
             if gx >= 0 and gx < grid_size and gy >= 0 and gy < grid_size and gz >= 0 and gz < grid_size then
-                if world.get_block(gx, gy, gz) == 0 then
-                    world.set_block(gx, gy, gz, target_id)
+                if terrain.get_block(gx, gy, gz) == 0 then
+                    terrain.set_block(gx, gy, gz, target_id)
 
                     if target_id == 12 and self.torch_factory then
                         local offset = -grid_size / 2 + 0.5
@@ -240,8 +284,6 @@ function on_message(self, message_id, message, sender)
                         sm.play(sm.place, 1.0, pos)
                     end
 
-                    local cube_idx = gx + gy * grid_size + gz * grid_size * grid_size
-                    if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = true end
                     request_mesh_update(self)
                 end
             end
@@ -260,12 +302,10 @@ function on_message(self, message_id, message, sender)
                         if gx >= 0 and gx < grid_size and
                             gy > 0 and gy < grid_size and
                             gz >= 0 and gz < grid_size then
-                            local current_id = world.get_block(gx, gy, gz)
+                            local current_id = terrain.get_block(gx, gy, gz)
                             if current_id ~= target_id and current_id ~= 2 then
-                                world.set_block(gx, gy, gz, target_id)
-                                local cube_idx = gx + gy * grid_size + gz * grid_size * grid_size
+                                terrain.set_block(gx, gy, gz, target_id)
                                 if target_id == 0 then
-                                    if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = false end
                                     local e_key = gx .. "_" .. gy .. "_" .. gz
                                     if self.block_entities[e_key] then
                                         pcall(go.delete, self.block_entities[e_key])
@@ -275,8 +315,6 @@ function on_message(self, message_id, message, sender)
                                     TEMP_POS.y = offset + gy
                                     TEMP_POS.z = 490 + gz
                                     sm.play(sm.stone_debris, 1.0, TEMP_POS)
-                                else
-                                    if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = true end
                                 end
                                 modified = true
                             end
@@ -299,12 +337,10 @@ function on_message(self, message_id, message, sender)
                     if gx >= 0 and gx < grid_size and
                         gy > 0 and gy < grid_size and
                         gz >= 0 and gz < grid_size then
-                        local current_id = world.get_block(gx, gy, gz)
+                        local current_id = terrain.get_block(gx, gy, gz)
                         if current_id ~= target_id and current_id ~= 2 then
-                            world.set_block(gx, gy, gz, target_id)
-                            local cube_idx = gx + gy * grid_size + gz * grid_size * grid_size
+                            terrain.set_block(gx, gy, gz, target_id)
                             if target_id == 0 then
-                                if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = false end
                                 local e_key = gx .. "_" .. gy .. "_" .. gz
                                 if self.block_entities[e_key] then
                                     go.delete(self.block_entities[e_key])
@@ -314,8 +350,6 @@ function on_message(self, message_id, message, sender)
                                 TEMP_POS.y = offset + gy
                                 TEMP_POS.z = 490 + gz
                                 sm.play(sm.stone_debris, 1.0, TEMP_POS)
-                            else
-                                if _G.shared_cubemap then _G.shared_cubemap[cube_idx] = true end
                             end
                             modified = true
                         end

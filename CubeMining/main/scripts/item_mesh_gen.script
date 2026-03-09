@@ -15,7 +15,6 @@ local math_min = math.min
 local math_max = math.max
 local math_huge = math.huge
 
-local block_data = require "main.scripts.block_data"
 local items_data = require "main.scripts.items"
 
 local H_POSITION = hash("position")
@@ -253,7 +252,7 @@ local function update_hand_model(self)
             end
         end
     elseif self.active_mode == "block" then
-        local b_def = block_data.get_block(self.current_block)
+        local b_def = terrain.get_block_info(self.current_block)
         if not b_def then return end
 
         if b_def.uvs then

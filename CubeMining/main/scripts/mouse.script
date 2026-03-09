@@ -1,5 +1,5 @@
 -- mouse.script
-local npc = require "main.scripts.npc"
+local base_npc = require "main.scripts.base_npc"
 
 go.property("gravity", -25.0)
 go.property("jump_force", 8.0)
@@ -7,17 +7,21 @@ go.property("speed", 3.0)
 go.property("rotation_offset_y", 90.0)
 
 function init(self)
-    npc.init(self)
     -- Override size for mouse (0.75 voxel height)
     self.size = vmath.vector3(0.6, 0.75, 0.6)
-
+    base_npc.init(self)
     _G.mouse_count = (_G.mouse_count or 0) + 1
 end
 
 function final(self)
+    base_npc.final(self)
     _G.mouse_count = (_G.mouse_count or 1) - 1
 end
 
 function update(self, dt)
-    npc.update(self, dt)
+    base_npc.update(self, dt)
+end
+
+function on_message(self, message_id, message, sender)
+    base_npc.on_message(self, message_id, message, sender)
 end

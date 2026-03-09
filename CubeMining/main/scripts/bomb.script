@@ -1,6 +1,4 @@
-local physics = require "main.scripts.physics"
 local sm = require "main.scripts.sound_manager"
-local npc_manager = require "main.scripts.npc"
 
 local vmath = vmath
 local msg = msg
@@ -8,52 +6,15 @@ local go = go
 local math = math
 local hash = hash
 
-local function apply_explosion_damage(pos, radius)
-    -- Calculate AABB for explosion
-    local exp_min = pos - vmath.vector3(radius, radius, radius)
-    local exp_max = pos + vmath.vector3(radius, radius, radius)
+local function explode(self)
+    local pos = go.get_position()
+    local radius = self.radius or 4.0
 
-    for id, npc in pairs(npc_manager.registry) do
-        if not npc.is_dead then
-            local npc_pos = go.get_world_position(id)
-            local half_size = npc.size * 0.5
-            local npc_min = npc_pos + vmath.vector3(-half_size.x, 0, -half_size.z)
-            local npc_max = npc_pos + vmath.vector3(half_size.x, npc.size.y, half_size.z)
+    -- Consolidate block destruction and NPC damage in C++
+    terrain.explode(pos, radius, 80)
 
-            -- Check AABB intersection
-            if (exp_min.x <= npc_max.x and exp_max.x >= npc_min.x) and
-                (exp_min.y <= npc_max.y and exp_max.y >= npc_min.y) and
-                (exp_min.z <= npc_max.z and exp_max.z >= npc_min.z) then
-                local to_npc = npc_pos - pos
-                local dist = vmath.length(to_npc)
-
-                -- Linear damage calculation 20 to 80 based on distance (closer = more damage)
-                local max_dist = radius
-                local dist_factor = 1.0
-                if max_dist > 0 then
-                    dist_factor = math.min(dist / max_dist, 1.0)
-                end
-                local damage = 80 - (dist_factor * 60)
-
-                local dir = vmath.vector3(0, 0, 0)
-                local horizontal_to_npc = vmath.vector3(to_npc.x, 0, to_npc.z)
-                if vmath.length(horizontal_to_npc) > 0.001 then
-                    -- Normalizing horizontal_to_npc gives the direction AWAY from the bomb.
-                    dir = vmath.normalize(horizontal_to_npc)
-                else
-                    -- Fallback direction if exactly on top of the bomb
-                    dir = vmath.vector3(1, 0, 0)
-                end
-
-                -- Direct velocity override: horizontal scales with damage, fixed jump force
-                local horiz_force = damage * 0.3
-                local fixed_jump = 10.0 -- reduced from 20.0 to 10.0
-                local explosion_vel = vmath.vector3(dir.x * horiz_force, fixed_jump, dir.z * horiz_force)
-
-                npc_manager.take_damage(npc, damage, explosion_vel, true)
-            end
-        end
-    end
+    sm.play(sm.bomb, 1.0, pos)
+    go.delete()
 end
 
 go.property("gravity", -25.0)
@@ -79,33 +40,10 @@ function init(self)
 end
 
 function update(self, dt)
-
     local timer = self.timer - dt
 
     if timer <= 0 then
-        local pos = go.get_position()
-        local grid_size = _G.grid_size or 5
-        local offset = -grid_size / 2 + 0.5
-        local OFFSET_X = offset
-        local OFFSET_Y = offset
-        local OFFSET_Z = 490
-
-        local gx = math.floor(pos.x - OFFSET_X + 0.5)
-        local gy = math.floor(pos.y - OFFSET_Y + 0.5)
-        local gz = math.floor(pos.z - OFFSET_Z + 0.5)
-
-        local radius = self.radius
-        msg.post("/root#main", "set_blocks_area", {
-            gx = gx, gy = gy, gz = gz, radius = radius, block_id = 0
-        })
-
-        -- Apply explosion damage to NPCs within an AABB of radius
-        apply_explosion_damage(pos, radius)
-
-        msg.post("/camera#camera_script", "explosion", { position = pos, force = radius / 3.0 })
-        sm.play(sm.bomb, 1.0, pos)
-
-        go.delete()
+        explode(self)
         return
     end
     self.timer = timer
@@ -122,7 +60,7 @@ function update(self, dt)
     local pos = go.get_position()
     local feet_pos = pos - vmath.vector3(0, size.y / 2, 0)
 
-    local new_feet_pos, new_vel, grounded = physics.move_and_slide(feet_pos, vel, size, dt)
+    local new_feet_pos, new_vel, grounded = terrain.move_and_slide(feet_pos, vel, size, dt)
 
     self.velocity = new_vel
     local new_pos = new_feet_pos + vmath.vector3(0, size.y / 2, 0)

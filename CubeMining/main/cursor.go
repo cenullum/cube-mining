@@ -1,5 +1,5 @@
 components {
-  id: "script"
+  id: "cube_cursor"
   component: "/main/scripts/cube_cursor.script"
 }
 embedded_components {

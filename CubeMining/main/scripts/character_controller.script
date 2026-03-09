@@ -1,7 +1,6 @@
 -- character_controller.script
 -- Purpose: Handles physical movement of the player character, including gravity, collision with world (physics module), walking, sprinting, jumping, and free-camera flying mode.
 
-local physics = require "main.scripts.physics"
 
 local vmath = vmath
 local msg = msg
@@ -10,7 +9,6 @@ local window = window
 local factory = factory
 local hash = hash
 local math = math
-local world = require "main.scripts.world_data_storage"
 local sm = require "main.scripts.sound_manager"
 
 -- Pre-hashed strings for optimization
@@ -116,6 +114,11 @@ function init(self)
     self.yaw = euler.y
     self.pitch = euler.x
     self.grounded = true
+
+    -- Shooting state
+    self.shooting_timer = 0
+    self.is_shooting = false
+    self.fire_rate = 0.15
 end
 
 local function update_camera(self, dt)
@@ -198,6 +201,36 @@ local function update_camera(self, dt)
     view = view * pos_inv
 
     msg.post("@render:", H_SET_VIEW, { view = view, pos = eye_pos })
+end
+
+local function update_shooting(self, dt)
+    if self.shooting_timer > 0 then
+        self.shooting_timer = self.shooting_timer - dt
+    end
+
+    if self.is_shooting and self.shooting_timer <= 0 then
+        self.shooting_timer = self.fire_rate
+
+        local cam_pos = go.get_world_position()
+        local cam_rot = go.get_rotation()
+        local forward = vmath.rotate(cam_rot, vmath.vector3(0, 0, -1))
+
+        -- High performance C++ raycasting against voxels AND NPCs
+        -- parameters: origin, dir, dist, penetration, damage, knockback_power
+        local hits = terrain.shoot(cam_pos, forward, 100, 1, 25, 5.0)
+
+        if hits and #hits > 0 then
+            for _, hit in ipairs(hits) do
+                if hit.is_block then
+                    -- Hit terrain
+                    sm.play(sm.stone_debris, 0.5, hit.pos)
+                end
+            end
+        end
+
+        -- Recoil Visuals
+        msg.post(".", "apply_recoil", { power = 1.0 })
+    end
 end
 
 function update(self, dt)
@@ -300,7 +333,7 @@ function update(self, dt)
 
         -- Physics Step
         local impact_vel_y = self.velocity.y
-        local new_feet_pos, new_vel, grounded = physics.move_and_slide(feet_pos, self.velocity, self.size, dt)
+        local new_feet_pos, new_vel, grounded = terrain.move_and_slide(feet_pos, self.velocity, self.size, dt)
 
         self.velocity = new_vel
 
@@ -315,7 +348,7 @@ function update(self, dt)
 
             -- Check X movement
             if new_feet_pos.x ~= feet_pos.x then
-                local x_safe = physics.check_collision(
+                local x_safe = terrain.check_collision(
                     new_feet_pos.x - hx, check_y, feet_pos.z - hz,
                     new_feet_pos.x + hx, y, feet_pos.z + hz
                 )
@@ -327,7 +360,7 @@ function update(self, dt)
 
             -- Check Z movement
             if new_feet_pos.z ~= feet_pos.z then
-                local z_safe = physics.check_collision(
+                local z_safe = terrain.check_collision(
                     new_feet_pos.x - hx, check_y, new_feet_pos.z - hz,
                     new_feet_pos.x + hx, y, new_feet_pos.z + hz
                 )
@@ -498,7 +531,7 @@ function update(self, dt)
     if px ~= self.last_px or py ~= self.last_py or pz ~= self.last_pz then
         self.last_px, self.last_py, self.last_pz = px, py, pz
 
-        local sun_l, source_l = world.get_lights(px, py, pz)
+        local sun_l, source_l = terrain.get_lights(px, py, pz)
         local sun_f = sun_l / 15.0
         local source_f = (source_l / 15.0) * 1.5
 
@@ -533,6 +566,7 @@ function update(self, dt)
 
     msg.post("@render:", "clear_color", { color = vmath.vector4(fog_r, fog_g, fog_b, 1.0) })
 
+    update_shooting(self, dt)
     update_camera(self, dt)
 end
 
@@ -699,5 +733,8 @@ function on_message(self, message_id, message, sender)
         -- Called by hand_slot_manager when ADS overrides sprint
         self.sprinting = false
         -- FOV will be set by hand_slot_manager (ADS FOV)
+    elseif message_id == hash("fire") then
+        self.is_shooting = message.pressed
+        if message.fire_rate then self.fire_rate = message.fire_rate end
     end
 end
