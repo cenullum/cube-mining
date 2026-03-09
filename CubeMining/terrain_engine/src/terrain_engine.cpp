@@ -17,7 +17,7 @@
 #include <cstdint>
 
 // ============================================================
-// Constants
+// 1. Foundation (Constants & Global State)
 // ============================================================
 static const int MAX_GRID_SIZE = 64;
 static const int MAX_BLOCKS = MAX_GRID_SIZE * MAX_GRID_SIZE * MAX_GRID_SIZE;
@@ -151,6 +151,10 @@ static int g_seed = 12345;
 static bool g_ao_enabled = true;
 static int g_light_mode = 1;
 
+// ============================================================
+// 2. Core Voxel Operations
+// ============================================================
+
 static inline int calculate_block_index(int x, int y, int z, int side_length) { 
     return x + y * side_length + z * side_length * side_length; 
 }
@@ -169,8 +173,18 @@ static inline void SetBlock(int x, int y, int z, uint8_t id) {
     g_blocks[calculate_block_index(x, y, z, g_grid_size)] = id;
 }
 
+static bool IsSolid(int x, int y, int z) {
+    if (x < 0 || x >= g_grid_size || y < 0 || y >= g_grid_size || z < 0 || z >= g_grid_size) {
+        return false;
+    }
+    int idx = calculate_block_index(x, y, z, g_grid_size);
+    int id = g_blocks[idx];
+    if (id == 0) return false;
+    return g_block_defs[id].registered && g_block_defs[id].solid;
+}
+
 // ============================================================
-// Terrain Generation
+// 3. Terrain Generation
 // ============================================================
 static int calculate_ground_height(int x, int z) {
     float seed_offset_x = g_seed * 0.132f, seed_offset_z = g_seed * 0.941f, seed_offset_y = g_seed * 0.42f;
@@ -224,7 +238,7 @@ static void initialize_world_terrain_data() {
 }
 
 // ============================================================
-// BFS Lighting
+// 4. Lighting & AO
 // ============================================================
 static void perform_lighting_pass(uint8_t* blocks, uint8_t* sun_light_data, uint8_t* source_light_data, int side_length) {
     int total_blocks = side_length * side_length * side_length;
@@ -421,7 +435,7 @@ static void calculate_smoothed_vertex_light(int px, int py, int pz, int dx1, int
 }
 
 // ============================================================
-// Mesh Output Buffers (pre-allocated)
+// 5. Mesh Generation
 // ============================================================
 static float* g_vertex_positions = 0;    // 3 per vert: x, y, z
 static float* g_vertex_uvs_base  = 0;    // 4 per vert: base_u, base_v, unit_w, unit_h
@@ -661,8 +675,244 @@ static void execute_mesh_generation_pipeline(const uint8_t* world_blocks, const 
     g_result_build_time   = (dmTime::GetTime() - start_time) / 1000.0;
 }
 
+static void copy_array_to_buffer_stream(dmBuffer::HBuffer buffer, dmhash_t stream_name, const float* source_data, uint32_t vertex_count, uint32_t components_per_vertex) {
+    float* stream_ptr = 0;
+    uint32_t stream_count = 0, stream_components = 0, stream_stride = 0;
+    dmBuffer::Result res = dmBuffer::GetStream(buffer, stream_name, (void**)&stream_ptr, &stream_count, &stream_components, &stream_stride);
+    if (res != dmBuffer::RESULT_OK || !stream_ptr || stream_count < vertex_count) return;
+    for (uint32_t i = 0; i < vertex_count; i++) {
+        for (uint32_t c = 0; c < stream_components && c < components_per_vertex; c++) {
+            stream_ptr[i * stream_stride + c] = source_data[i * components_per_vertex + c];
+        }
+    }
+}
+
+static void copy_byte_array_to_buffer_stream(dmBuffer::HBuffer buffer, dmhash_t stream_name, const uint8_t* source_data, uint32_t vertex_count, uint32_t components_per_vertex) {
+    uint8_t* stream_ptr = 0;
+    uint32_t stream_count = 0, stream_components = 0, stream_stride = 0;
+    dmBuffer::Result res = dmBuffer::GetStream(buffer, stream_name, (void**)&stream_ptr, &stream_count, &stream_components, &stream_stride);
+    if (res != dmBuffer::RESULT_OK || !stream_ptr || stream_count < vertex_count) return;
+    for (uint32_t i = 0; i < vertex_count; i++) {
+        for (uint32_t c = 0; c < stream_components && c < components_per_vertex; c++) {
+            stream_ptr[i * stream_stride + c] = source_data[i * components_per_vertex + c];
+        }
+    }
+}
+
+
+
 // ============================================================
-// Worker Thread
+// 6. Physics & Collision
+// ============================================================
+
+static bool CheckCollision(float min_x, float min_y, float min_z, float max_x, float max_y, float max_z) {
+    float offset = (float)g_grid_size / -2.0f + 0.5f;
+    float origin_x = offset;
+    float origin_y = offset;
+    float origin_z = 490.0f;
+
+    int start_x = (int)floorf(min_x - origin_x + 0.5f);
+    int end_x   = (int)floorf(max_x - origin_x + 0.5f);
+    int start_y = (int)floorf(min_y - origin_y + 0.5f);
+    int end_y   = (int)floorf(max_y - origin_y + 0.5f);
+    int start_z = (int)floorf(min_z - origin_z + 0.5f);
+    int end_z   = (int)floorf(max_z - origin_z + 0.5f);
+
+    for (int x = start_x; x <= end_x; x++) {
+        for (int y = start_y; y <= end_y; y++) {
+            for (int z = start_z; z <= end_z; z++) {
+                if (IsSolid(x, y, z)) return true;
+            }
+        }
+    }
+    return false;
+}
+
+    
+
+
+static void MoveAndSlide(dmVMath::Vector3& pos, dmVMath::Vector3& vel, const dmVMath::Vector3& size, float dt, bool& is_grounded) {
+    is_grounded = false;
+    float step_size = 0.4f;
+    float total_dist = dmVMath::Length(vel * dt);
+    int steps = (int)ceilf(total_dist / step_size);
+    if (steps < 1) steps = 1;
+
+    float dt_step = dt / (float)steps;
+    float half_x = size.getX() * 0.5f;
+    float half_z = size.getZ() * 0.5f;
+
+    for (int s = 0; s < steps; s++) {
+        // X Axis
+        float dx = vel.getX() * dt_step;
+        if (dx != 0) {
+            float next_x = pos.getX() + dx;
+            if (CheckCollision(next_x - half_x, pos.getY(), pos.getZ() - half_z,
+                              next_x + half_x, pos.getY() + size.getY(), pos.getZ() + half_z)) {
+                vel.setX(0);
+            } else {
+                pos.setX(next_x);
+            }
+        }
+
+        // Z Axis
+        float dz = vel.getZ() * dt_step;
+        if (dz != 0) {
+            float next_z = pos.getZ() + dz;
+            if (CheckCollision(pos.getX() - half_x, pos.getY(), next_z - half_z,
+                              pos.getX() + half_x, pos.getY() + size.getY(), next_z + half_z)) {
+                vel.setZ(0);
+            } else {
+                pos.setZ(next_z);
+            }
+        }
+
+        // Y Axis
+        float dy = vel.getY() * dt_step;
+        if (dy != 0) {
+            float next_y = pos.getY() + dy;
+            if (CheckCollision(pos.getX() - half_x, next_y, pos.getZ() - half_z,
+                              pos.getX() + half_x, next_y + size.getY(), pos.getZ() + half_z)) {
+                if (vel.getY() < 0) is_grounded = true;
+                vel.setY(0);
+            } else {
+                pos.setY(next_y);
+            }
+        }
+    }
+
+    if (!is_grounded && vel.getY() <= 0) {
+        float check_dist = 0.05f;
+        if (CheckCollision(pos.getX() - half_x + 0.05f, pos.getY() - check_dist, pos.getZ() - half_z + 0.05f,
+                          pos.getX() + half_x - 0.05f, pos.getY(), pos.getZ() + half_z - 0.05f)) {
+            is_grounded = true;
+            vel.setY(0);
+        }
+    }
+}
+
+static bool RayAABBIntersection(const dmVMath::Vector3& ray_origin, const dmVMath::Vector3& ray_dir, 
+                               const dmVMath::Vector3& box_min, const dmVMath::Vector3& box_max, float& t_out) {
+    float t1 = (box_min.getX() - ray_origin.getX()) / (ray_dir.getX() + 1e-6f);
+    float t2 = (box_max.getX() - ray_origin.getX()) / (ray_dir.getX() + 1e-6f);
+    float t3 = (box_min.getY() - ray_origin.getY()) / (ray_dir.getY() + 1e-6f);
+    float t4 = (box_max.getY() - ray_origin.getY()) / (ray_dir.getY() + 1e-6f);
+    float t5 = (box_min.getZ() - ray_origin.getZ()) / (ray_dir.getZ() + 1e-6f);
+    float t6 = (box_max.getZ() - ray_origin.getZ()) / (ray_dir.getZ() + 1e-6f);
+
+    float tmin = fmaxf(fmaxf(fminf(t1, t2), fminf(t3, t4)), fminf(t5, t6));
+    float tmax = fminf(fminf(fmaxf(t1, t2), fmaxf(t3, t4)), fmaxf(t5, t6));
+
+    if (tmax < 0 || tmin > tmax) return false;
+    t_out = (tmin < 0) ? tmax : tmin;
+    return true;
+}
+
+
+
+// ============================================================
+// 7. NPC Simulation
+// ============================================================
+static void UpdateAllNPCs(float dt) {
+    for (auto& npc : g_npcs) {
+        if (!npc.instance) continue;
+
+        if (npc.pos.getY() < -10.0f) {
+            npc.health = 0;
+        }
+
+        if (npc.health <= 0 && !npc.is_dead) {
+            npc.is_dead = true;
+            
+            dmMessage::URL receiver;
+            dmMessage::ResetURL(&receiver);
+            receiver.m_Socket = npc.socket;
+            receiver.m_Path = dmGameObject::GetIdentifier(npc.instance);
+            dmMessage::Post(0, &receiver, dmHashString64("died"), 0, 0, 0, 0, 0, 0);
+        }
+
+        if (npc.is_dead) continue;
+
+        npc.timer += dt;
+        if (npc.timer >= npc.state_duration) {
+            npc.timer = 0;
+            if (npc.state == 1) { // IDLE
+                npc.state = 2; // WALK
+                npc.state_duration = (float)(rand() % 300) / 100.0f + 1.0f; // 1-4s
+                float angle = (float)(rand() % 628) / 100.0f;
+                npc.move_dir = dmVMath::Vector3(cosf(angle), 0, sinf(angle));
+            } else {
+                npc.state = 1; // IDLE
+                npc.state_duration = (float)(rand() % 300) / 100.0f + 4.0f; // 4-7s
+                npc.move_dir = dmVMath::Vector3(0, 0, 0);
+            }
+        }
+
+        float target_vel_x = 0;
+        float target_vel_z = 0;
+        if (npc.state == 2) { // WALK
+            target_vel_x = npc.move_dir.getX() * npc.speed;
+            target_vel_z = npc.move_dir.getZ() * npc.speed;
+        }
+
+        float damping = (npc.state == 2) ? 0.05f : 0.02f; // Much lower damping for smoother knockback
+        npc.vel.setX(npc.vel.getX() + (target_vel_x - npc.vel.getX()) * damping);
+        npc.vel.setZ(npc.vel.getZ() + (target_vel_z - npc.vel.getZ()) * damping);
+        npc.vel.setY(npc.vel.getY() + npc.gravity * dt);
+
+        bool grounded = false;
+        MoveAndSlide(npc.pos, npc.vel, npc.size, dt, grounded);
+
+        // Cliff Avoidance & Jump Logic
+        if (npc.state == 2 && grounded) {
+            dmVMath::Vector3 dir = npc.move_dir;
+            if (dmVMath::LengthSqr(dir) > 0.001f) {
+                dir = dmVMath::Normalize(dir);
+                float check_dist = 0.6f;
+                
+                dmVMath::Vector3 ground_check_min = npc.pos + dir * check_dist + dmVMath::Vector3(-0.1f, -1.6f, -0.1f);
+                dmVMath::Vector3 ground_check_max = npc.pos + dir * (check_dist + 0.2f) + dmVMath::Vector3(0.1f, -0.1f, 0.1f);
+                if (!CheckCollision(ground_check_min.getX(), ground_check_min.getY(), ground_check_min.getZ(),
+                                   ground_check_max.getX(), ground_check_max.getY(), ground_check_max.getZ())) {
+                    npc.move_dir = -npc.move_dir;
+                    npc.timer = 0;
+                    npc.vel.setX(0); npc.vel.setZ(0);
+                } else {
+                    float current_speed = dmVMath::Length(dmVMath::Vector3(npc.vel.getX(), 0, npc.vel.getZ()));
+                    if (current_speed < npc.speed * 0.2f) {
+                        dmVMath::Vector3 obs_check_min = npc.pos + dir * 0.5f + dmVMath::Vector3(-0.1f, 0.1f, -0.1f);
+                        dmVMath::Vector3 obs_check_max = npc.pos + dir * 0.7f + dmVMath::Vector3(0.1f, 0.9f, 0.1f);
+                        dmVMath::Vector3 clear_check_min = npc.pos + dir * 0.5f + dmVMath::Vector3(-0.1f, 1.1f, -0.1f);
+                        dmVMath::Vector3 clear_check_max = npc.pos + dir * 0.7f + dmVMath::Vector3(0.1f, 1.9f, 0.1f);
+
+                        if (CheckCollision(obs_check_min.getX(), obs_check_min.getY(), obs_check_min.getZ(),
+                                          obs_check_max.getX(), obs_check_max.getY(), obs_check_max.getZ()) &&
+                            !CheckCollision(clear_check_min.getX(), clear_check_min.getY(), clear_check_min.getZ(),
+                                           clear_check_max.getX(), clear_check_max.getY(), clear_check_max.getZ())) {
+                            npc.vel.setY(npc.jump_force);
+                        } else {
+                            float angle = (float)(rand() % 628) / 100.0f;
+                            npc.move_dir = dmVMath::Vector3(cosf(angle), 0, sinf(angle));
+                            npc.timer = 0;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Apply transform to GO
+        dmGameObject::SetPosition(npc.instance, dmVMath::Point3(npc.pos.getX(), npc.pos.getY(), npc.pos.getZ()));
+        if (npc.state == 2 && dmVMath::LengthSqr(npc.move_dir) > 0.01f) {
+            float angle = atan2f(npc.move_dir.getX(), npc.move_dir.getZ());
+            dmVMath::Quat rot = dmVMath::Quat::rotationY(angle + npc.rotation_offset_y * (3.14159265f / 180.0f));
+            dmGameObject::SetRotation(npc.instance, rot);
+        }
+    }
+}
+
+
+// ============================================================
+// 8. Background Thread Management
 // ============================================================
 static dmThread::Thread g_worker_thread = 0;
 static dmMutex::HMutex g_mutex = 0;
@@ -693,7 +943,7 @@ static void WorkerThreadLoop(void* arg) {
 }
 
 // ============================================================
-// Lua API Bridge
+// 9. Lua API Bridge
 // ============================================================
 
 static int Lua_InitializeTerrainEngine(lua_State* L) {
@@ -847,125 +1097,6 @@ static int Lua_GetBlockFromWorld(lua_State* L) {
     return 1;
 }
 
-static bool IsSolid(int x, int y, int z) {
-    if (x < 0 || x >= g_grid_size || y < 0 || y >= g_grid_size || z < 0 || z >= g_grid_size) {
-        return false;
-    }
-    int idx = calculate_block_index(x, y, z, g_grid_size);
-    int id = g_blocks[idx];
-    if (id == 0) return false;
-    return g_block_defs[id].registered && g_block_defs[id].solid;
-}
-
-static bool CheckCollision(float min_x, float min_y, float min_z, float max_x, float max_y, float max_z) {
-    float offset = (float)g_grid_size / -2.0f + 0.5f;
-    float origin_x = offset;
-    float origin_y = offset;
-    float origin_z = 490.0f;
-
-    int start_x = (int)floorf(min_x - origin_x + 0.5f);
-    int end_x   = (int)floorf(max_x - origin_x + 0.5f);
-    int start_y = (int)floorf(min_y - origin_y + 0.5f);
-    int end_y   = (int)floorf(max_y - origin_y + 0.5f);
-    int start_z = (int)floorf(min_z - origin_z + 0.5f);
-    int end_z   = (int)floorf(max_z - origin_z + 0.5f);
-
-    for (int x = start_x; x <= end_x; x++) {
-        for (int y = start_y; y <= end_y; y++) {
-            for (int z = start_z; z <= end_z; z++) {
-                if (IsSolid(x, y, z)) return true;
-            }
-        }
-    }
-    return false;
-}
-
-static void MoveAndSlide(dmVMath::Vector3& pos, dmVMath::Vector3& vel, const dmVMath::Vector3& size, float dt, bool& is_grounded) {
-    is_grounded = false;
-    float step_size = 0.4f;
-    float total_dist = dmVMath::Length(vel * dt);
-    int steps = (int)ceilf(total_dist / step_size);
-    if (steps < 1) steps = 1;
-
-    float dt_step = dt / (float)steps;
-    float half_x = size.getX() * 0.5f;
-    float half_z = size.getZ() * 0.5f;
-
-    for (int s = 0; s < steps; s++) {
-        // X Axis
-        float dx = vel.getX() * dt_step;
-        if (dx != 0) {
-            float next_x = pos.getX() + dx;
-            if (CheckCollision(next_x - half_x, pos.getY(), pos.getZ() - half_z,
-                              next_x + half_x, pos.getY() + size.getY(), pos.getZ() + half_z)) {
-                vel.setX(0);
-            } else {
-                pos.setX(next_x);
-            }
-        }
-
-        // Z Axis
-        float dz = vel.getZ() * dt_step;
-        if (dz != 0) {
-            float next_z = pos.getZ() + dz;
-            if (CheckCollision(pos.getX() - half_x, pos.getY(), next_z - half_z,
-                              pos.getX() + half_x, pos.getY() + size.getY(), next_z + half_z)) {
-                vel.setZ(0);
-            } else {
-                pos.setZ(next_z);
-            }
-        }
-
-        // Y Axis
-        float dy = vel.getY() * dt_step;
-        if (dy != 0) {
-            float next_y = pos.getY() + dy;
-            if (CheckCollision(pos.getX() - half_x, next_y, pos.getZ() - half_z,
-                              pos.getX() + half_x, next_y + size.getY(), pos.getZ() + half_z)) {
-                if (vel.getY() < 0) is_grounded = true;
-                vel.setY(0);
-            } else {
-                pos.setY(next_y);
-            }
-        }
-    }
-
-    if (!is_grounded && vel.getY() <= 0) {
-        float check_dist = 0.05f;
-        if (CheckCollision(pos.getX() - half_x + 0.05f, pos.getY() - check_dist, pos.getZ() - half_z + 0.05f,
-                          pos.getX() + half_x - 0.05f, pos.getY(), pos.getZ() + half_z - 0.05f)) {
-            is_grounded = true;
-            vel.setY(0);
-        }
-    }
-}
-
-static int Lua_MoveAndSlide(lua_State* L) {
-    dmVMath::Vector3 pos = *dmScript::ToVector3(L, 1);
-    dmVMath::Vector3 vel = *dmScript::ToVector3(L, 2);
-    dmVMath::Vector3 size = *dmScript::ToVector3(L, 3);
-    float dt = (float)luaL_checknumber(L, 4);
-
-    bool is_grounded = false;
-    MoveAndSlide(pos, vel, size, dt, is_grounded);
-
-    dmScript::PushVector3(L, pos);
-    dmScript::PushVector3(L, vel);
-    lua_pushboolean(L, is_grounded);
-    return 3;
-}
-
-static int Lua_CheckCollision(lua_State* L) {
-    float min_x = (float)luaL_checknumber(L, 1);
-    float min_y = (float)luaL_checknumber(L, 2);
-    float min_z = (float)luaL_checknumber(L, 3);
-    float max_x = (float)luaL_checknumber(L, 4);
-    float max_y = (float)luaL_checknumber(L, 5);
-    float max_z = (float)luaL_checknumber(L, 6);
-    lua_pushboolean(L, CheckCollision(min_x, min_y, min_z, max_x, max_y, max_z));
-    return 1;
-}
-
 static int Lua_GetLightLevels(lua_State* L) {
     int x = luaL_checkinteger(L, 1), y = luaL_checkinteger(L, 2), z = luaL_checkinteger(L, 3);
     if (x < 0 || x >= g_grid_size || y < 0 || y >= g_grid_size || z < 0 || z >= g_grid_size) {
@@ -994,30 +1125,6 @@ static int Lua_RequestAsyncMeshUpdate(lua_State* L) {
     g_worker_has_work = true;
     dmMutex::Unlock(g_mutex);
     return 0;
-}
-
-static void copy_array_to_buffer_stream(dmBuffer::HBuffer buffer, dmhash_t stream_name, const float* source_data, uint32_t vertex_count, uint32_t components_per_vertex) {
-    float* stream_ptr = 0;
-    uint32_t stream_count = 0, stream_components = 0, stream_stride = 0;
-    dmBuffer::Result res = dmBuffer::GetStream(buffer, stream_name, (void**)&stream_ptr, &stream_count, &stream_components, &stream_stride);
-    if (res != dmBuffer::RESULT_OK || !stream_ptr || stream_count < vertex_count) return;
-    for (uint32_t i = 0; i < vertex_count; i++) {
-        for (uint32_t c = 0; c < stream_components && c < components_per_vertex; c++) {
-            stream_ptr[i * stream_stride + c] = source_data[i * components_per_vertex + c];
-        }
-    }
-}
-
-static void copy_byte_array_to_buffer_stream(dmBuffer::HBuffer buffer, dmhash_t stream_name, const uint8_t* source_data, uint32_t vertex_count, uint32_t components_per_vertex) {
-    uint8_t* stream_ptr = 0;
-    uint32_t stream_count = 0, stream_components = 0, stream_stride = 0;
-    dmBuffer::Result res = dmBuffer::GetStream(buffer, stream_name, (void**)&stream_ptr, &stream_count, &stream_components, &stream_stride);
-    if (res != dmBuffer::RESULT_OK || !stream_ptr || stream_count < vertex_count) return;
-    for (uint32_t i = 0; i < vertex_count; i++) {
-        for (uint32_t c = 0; c < stream_components && c < components_per_vertex; c++) {
-            stream_ptr[i * stream_stride + c] = source_data[i * components_per_vertex + c];
-        }
-    }
 }
 
 static int Lua_PollMeshBuffer(lua_State* L) {
@@ -1095,9 +1202,6 @@ static int Lua_PerformLightingPassSync(lua_State* L) {
     perform_lighting_pass(g_blocks, g_sun_light, g_source_light, g_grid_size);
     return 0;
 }
-
-
-
 
 static int Lua_RegisterNPC(lua_State* L) {
     dmhash_t id = dmScript::CheckHash(L, 1);
@@ -1275,23 +1379,6 @@ static int Lua_Explosion(lua_State* L) {
     return 2;
 }
 
-static bool RayAABBIntersection(const dmVMath::Vector3& ray_origin, const dmVMath::Vector3& ray_dir, 
-                               const dmVMath::Vector3& box_min, const dmVMath::Vector3& box_max, float& t_out) {
-    float t1 = (box_min.getX() - ray_origin.getX()) / (ray_dir.getX() + 1e-6f);
-    float t2 = (box_max.getX() - ray_origin.getX()) / (ray_dir.getX() + 1e-6f);
-    float t3 = (box_min.getY() - ray_origin.getY()) / (ray_dir.getY() + 1e-6f);
-    float t4 = (box_max.getY() - ray_origin.getY()) / (ray_dir.getY() + 1e-6f);
-    float t5 = (box_min.getZ() - ray_origin.getZ()) / (ray_dir.getZ() + 1e-6f);
-    float t6 = (box_max.getZ() - ray_origin.getZ()) / (ray_dir.getZ() + 1e-6f);
-
-    float tmin = fmaxf(fmaxf(fminf(t1, t2), fminf(t3, t4)), fminf(t5, t6));
-    float tmax = fminf(fminf(fmaxf(t1, t2), fmaxf(t3, t4)), fmaxf(t5, t6));
-
-    if (tmax < 0 || tmin > tmax) return false;
-    t_out = (tmin < 0) ? tmax : tmin;
-    return true;
-}
-
 static int Lua_ShootRay(lua_State* L) {
     dmVMath::Vector3 origin = *dmScript::ToVector3(L, 1);
     dmVMath::Vector3 dir = *dmScript::ToVector3(L, 2);
@@ -1419,106 +1506,34 @@ static int Lua_ShootRay(lua_State* L) {
     return 1;
 }
 
-static void UpdateAllNPCs(float dt) {
-    for (auto& npc : g_npcs) {
-        if (!npc.instance) continue;
+static int Lua_MoveAndSlide(lua_State* L) {
+    dmVMath::Vector3 pos = *dmScript::ToVector3(L, 1);
+    dmVMath::Vector3 vel = *dmScript::ToVector3(L, 2);
+    dmVMath::Vector3 size = *dmScript::ToVector3(L, 3);
+    float dt = (float)luaL_checknumber(L, 4);
 
-        if (npc.pos.getY() < -10.0f) {
-            npc.health = 0;
-        }
+    bool is_grounded = false;
+    MoveAndSlide(pos, vel, size, dt, is_grounded);
 
-        if (npc.health <= 0 && !npc.is_dead) {
-            npc.is_dead = true;
-            
-            dmMessage::URL receiver;
-            dmMessage::ResetURL(&receiver);
-            receiver.m_Socket = npc.socket;
-            receiver.m_Path = dmGameObject::GetIdentifier(npc.instance);
-            dmMessage::Post(0, &receiver, dmHashString64("died"), 0, 0, 0, 0, 0, 0);
-        }
-
-        if (npc.is_dead) continue;
-
-        npc.timer += dt;
-        if (npc.timer >= npc.state_duration) {
-            npc.timer = 0;
-            if (npc.state == 1) { // IDLE
-                npc.state = 2; // WALK
-                npc.state_duration = (float)(rand() % 300) / 100.0f + 1.0f; // 1-4s
-                float angle = (float)(rand() % 628) / 100.0f;
-                npc.move_dir = dmVMath::Vector3(cosf(angle), 0, sinf(angle));
-            } else {
-                npc.state = 1; // IDLE
-                npc.state_duration = (float)(rand() % 300) / 100.0f + 4.0f; // 4-7s
-                npc.move_dir = dmVMath::Vector3(0, 0, 0);
-            }
-        }
-
-        float target_vel_x = 0;
-        float target_vel_z = 0;
-        if (npc.state == 2) { // WALK
-            target_vel_x = npc.move_dir.getX() * npc.speed;
-            target_vel_z = npc.move_dir.getZ() * npc.speed;
-        }
-
-        float damping = (npc.state == 2) ? 0.05f : 0.02f; // Much lower damping for smoother knockback
-        npc.vel.setX(npc.vel.getX() + (target_vel_x - npc.vel.getX()) * damping);
-        npc.vel.setZ(npc.vel.getZ() + (target_vel_z - npc.vel.getZ()) * damping);
-        npc.vel.setY(npc.vel.getY() + npc.gravity * dt);
-
-        bool grounded = false;
-        MoveAndSlide(npc.pos, npc.vel, npc.size, dt, grounded);
-
-        // Cliff Avoidance & Jump Logic
-        if (npc.state == 2 && grounded) {
-            dmVMath::Vector3 dir = npc.move_dir;
-            if (dmVMath::LengthSqr(dir) > 0.001f) {
-                dir = dmVMath::Normalize(dir);
-                float check_dist = 0.6f;
-                
-                dmVMath::Vector3 ground_check_min = npc.pos + dir * check_dist + dmVMath::Vector3(-0.1f, -1.6f, -0.1f);
-                dmVMath::Vector3 ground_check_max = npc.pos + dir * (check_dist + 0.2f) + dmVMath::Vector3(0.1f, -0.1f, 0.1f);
-                if (!CheckCollision(ground_check_min.getX(), ground_check_min.getY(), ground_check_min.getZ(),
-                                   ground_check_max.getX(), ground_check_max.getY(), ground_check_max.getZ())) {
-                    npc.move_dir = -npc.move_dir;
-                    npc.timer = 0;
-                    npc.vel.setX(0); npc.vel.setZ(0);
-                } else {
-                    float current_speed = dmVMath::Length(dmVMath::Vector3(npc.vel.getX(), 0, npc.vel.getZ()));
-                    if (current_speed < npc.speed * 0.2f) {
-                        dmVMath::Vector3 obs_check_min = npc.pos + dir * 0.5f + dmVMath::Vector3(-0.1f, 0.1f, -0.1f);
-                        dmVMath::Vector3 obs_check_max = npc.pos + dir * 0.7f + dmVMath::Vector3(0.1f, 0.9f, 0.1f);
-                        dmVMath::Vector3 clear_check_min = npc.pos + dir * 0.5f + dmVMath::Vector3(-0.1f, 1.1f, -0.1f);
-                        dmVMath::Vector3 clear_check_max = npc.pos + dir * 0.7f + dmVMath::Vector3(0.1f, 1.9f, 0.1f);
-
-                        if (CheckCollision(obs_check_min.getX(), obs_check_min.getY(), obs_check_min.getZ(),
-                                          obs_check_max.getX(), obs_check_max.getY(), obs_check_max.getZ()) &&
-                            !CheckCollision(clear_check_min.getX(), clear_check_min.getY(), clear_check_min.getZ(),
-                                           clear_check_max.getX(), clear_check_max.getY(), clear_check_max.getZ())) {
-                            npc.vel.setY(npc.jump_force);
-                        } else {
-                            float angle = (float)(rand() % 628) / 100.0f;
-                            npc.move_dir = dmVMath::Vector3(cosf(angle), 0, sinf(angle));
-                            npc.timer = 0;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Apply transform to GO
-        dmGameObject::SetPosition(npc.instance, dmVMath::Point3(npc.pos.getX(), npc.pos.getY(), npc.pos.getZ()));
-        if (npc.state == 2 && dmVMath::LengthSqr(npc.move_dir) > 0.01f) {
-            float angle = atan2f(npc.move_dir.getX(), npc.move_dir.getZ());
-            dmVMath::Quat rot = dmVMath::Quat::rotationY(angle + npc.rotation_offset_y * (3.14159265f / 180.0f));
-            dmGameObject::SetRotation(npc.instance, rot);
-        }
-    }
+    dmScript::PushVector3(L, pos);
+    dmScript::PushVector3(L, vel);
+    lua_pushboolean(L, is_grounded);
+    return 3;
 }
 
-// ============================================================
-// Extension Lifecycle
-// ============================================================
+static int Lua_CheckCollision(lua_State* L) {
+    float min_x = (float)luaL_checknumber(L, 1);
+    float min_y = (float)luaL_checknumber(L, 2);
+    float min_z = (float)luaL_checknumber(L, 3);
+    float max_x = (float)luaL_checknumber(L, 4);
+    float max_y = (float)luaL_checknumber(L, 5);
+    float max_z = (float)luaL_checknumber(L, 6);
+    lua_pushboolean(L, CheckCollision(min_x, min_y, min_z, max_x, max_y, max_z));
+    return 1;
+}
+
+
+
 
 static const luaL_reg Module_methods[] = {
     {"init",                 Lua_InitializeTerrainEngine},
@@ -1541,6 +1556,9 @@ static const luaL_reg Module_methods[] = {
     {0, 0}
 };
 
+// ============================================================
+// 10. Extension Lifecycle
+// ============================================================
 static dmExtension::Result AppInit(dmExtension::AppParams* params) { return dmExtension::RESULT_OK; }
 static dmExtension::Result AppFinal(dmExtension::AppParams* params) { return dmExtension::RESULT_OK; }
 
