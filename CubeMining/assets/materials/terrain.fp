@@ -4,9 +4,6 @@
 in mediump vec2 var_texcoord0;      // Tiling coordinate (legacy/unused for greedy)
 in mediump vec4 var_atlas_metadata; // x,y = base_uv, z,w = unit_size
 in mediump float var_light;         // Directional Lighting factor
-in mediump vec4 var_corner_ao;      // AO for 4 corners [0..1]
-in mediump vec4 var_corner_torch;   // Torch Light for 4 corners [0..1]
-in mediump vec4 var_corner_sun;     // Sun Light for 4 corners [0..1]
 in mediump vec2 var_local_uv;       // Local UV (0..1)
 in mediump vec2 var_quad_size;      // Quad size in blocks
 in mediump vec3 var_view_pos;       // View-space position
@@ -19,6 +16,7 @@ out vec4 out_fragColor;
 // --- Samplers ---
 uniform mediump sampler2D texture0; // The block texture atlas (nearest filtered)
 uniform mediump sampler2D texture1; // The breaking texture spritesheet
+uniform mediump sampler2D texture2; // The chunk light map
 
 // --- Uniforms ---
 uniform fs_uniforms
@@ -31,12 +29,38 @@ uniform fs_uniforms
     mediump vec4 cam_pos;
 };
 
-// Bilinear interpolation for a quad
-float bilinear(vec4 corners, vec2 uv) {
-    // corners: x=BL, y=BR, z=TR, w=TL (Matches C++ corners)
-    float bottom = mix(corners.x, corners.y, uv.x);
-    float top    = mix(corners.w, corners.z, uv.x);
-    return mix(bottom, top, uv.y);
+vec4 sample_light(vec3 pc) {
+    // Clamp to chunk boundaries
+    pc = clamp(pc, vec3(0.0), vec3(15.0));
+    // Calculate 256x16 texture coordinates (u = x + z*16, v = y)
+    float u = (floor(pc.x) + 0.5 + floor(pc.z) * 16.0) / 256.0;
+    float v = (floor(pc.y) + 0.5) / 16.0;
+    return texture(texture2, vec2(u, v));
+}
+
+vec4 trilinear_light(vec3 pos) {
+    vec3 p = pos;
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    
+    vec4 c000 = sample_light(i + vec3(0.0, 0.0, 0.0));
+    vec4 c100 = sample_light(i + vec3(1.0, 0.0, 0.0));
+    vec4 c010 = sample_light(i + vec3(0.0, 1.0, 0.0));
+    vec4 c110 = sample_light(i + vec3(1.0, 1.0, 0.0));
+    vec4 c001 = sample_light(i + vec3(0.0, 0.0, 1.0));
+    vec4 c101 = sample_light(i + vec3(1.0, 0.0, 1.0));
+    vec4 c011 = sample_light(i + vec3(0.0, 1.0, 1.0));
+    vec4 c111 = sample_light(i + vec3(1.0, 1.0, 1.0));
+    
+    vec4 c00 = mix(c000, c100, f.x);
+    vec4 c10 = mix(c010, c110, f.x);
+    vec4 c01 = mix(c001, c101, f.x);
+    vec4 c11 = mix(c011, c111, f.x);
+    
+    vec4 c0 = mix(c00, c10, f.y);
+    vec4 c1 = mix(c01, c11, f.y);
+    
+    return mix(c0, c1, f.z);
 }
 
 void main()
@@ -72,16 +96,15 @@ void main()
     }
     
     // Light calculation
-    float ao = bilinear(var_corner_ao, var_local_uv);
-    float torch_l = bilinear(var_corner_torch, var_local_uv);
-    float sun_l  = bilinear(var_corner_sun, var_local_uv);
-
-    // Combine intensities conservatively
-    vec3 torch_color = vec3(1.0, 0.9, 0.6) * torch_l * 1.35;
-    vec3 sun_color   = vec3(1.0, 1.0, 1.0) * sun_l   * var_light;
+    vec3 sample_pos = var_pos + var_normal * 0.5;
+    vec4 light_data = trilinear_light(sample_pos);
     
-    // Use clamp to prevent bone-white explosion (max 1.5 for glow)
-    vec3 final_light = clamp(sun_color + torch_color, 0.02, 1.5) * ao;
+    // light_data.rgb contains our combined sun and torch
+    // light_data.a contains our Ambient Occlusion factor (0.0 = solid shadow, 1.0 = open air)
+    float ao = mix(0.2, 1.0, light_data.a); // Map AO curve purely from alpha
+
+    // Combine intensities footprint
+    vec3 final_light = clamp(light_data.rgb, 0.02, 1.5) * var_light * ao;
     color.rgb *= final_light;
 
     // Apply Fog (Per-fragment)

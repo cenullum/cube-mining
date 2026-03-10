@@ -26,20 +26,17 @@ local H_POSITION = hash("position")
 local H_TEXCOORD0 = hash("texcoord0")
 local H_TEXCOORD1 = hash("texcoord1")
 local H_TEXCOORD2 = hash("texcoord2")
-local H_COLOR = hash("color")
-local H_COLOR1 = hash("color1")
-local H_COLOR2 = hash("color2")
 local H_DESTROY_CUBE = hash("destroy_cube")
 local H_PLACE_CUBE = hash("place_cube")
 local H_TEXTURE0 = hash("texture0")
+local H_TEXTURE1 = hash("texture1")
+local H_TEXTURE2 = hash("texture2")
 local H_VERTICES = hash("vertices")
 local H_TOGGLE_AO = hash("toggle_ao")
 local H_TOGGLE_LIGHT_MODE = hash("toggle_light_mode")
 local H_SET_BLOCKS_AREA = hash("set_blocks_area")
 local H_SET_BLOCKS_LIST = hash("set_blocks_list")
-local H_TEXTURE1 = hash("texture1")
-local H_NORMAL = hash("normal")
-local H_REQUEST_MESH_UPDATE = hash("request_mesh_update")
+
 
 local PATCH_BUFFER = "/assets/model/patch_%s.bufferc"
 
@@ -61,7 +58,8 @@ local function create_mesh(self)
 end
 
 local function request_mesh_update(self)
-    terrain.request_mesh_update(self.ao_enabled, self.light_mode)
+    local debug_mode = (_G.performance_mode == 2)
+    terrain.request_mesh_update(self.ao_enabled, self.light_mode, debug_mode)
     self.mesh_pending = true
 end
 
@@ -164,16 +162,29 @@ local function create_chunk(self)
     go.set(mesh_go.mesh_url, H_TEXTURE1, self.breaking_texture)
 
     -- Allocate initial buffer matching the C++ max size
-    local max_verts      = terrain.get_max_vertices()
-    local buf            = buffer.create(max_verts, {
+    local max_verts       = terrain.get_max_vertices()
+    local buf             = buffer.create(max_verts, {
         { name = H_POSITION,  type = buffer.VALUE_TYPE_FLOAT32, count = 3 },
         { name = H_TEXCOORD0, type = buffer.VALUE_TYPE_FLOAT32, count = 4 }, -- base_uv, unit_size
         { name = H_TEXCOORD1, type = buffer.VALUE_TYPE_FLOAT32, count = 4 }, -- local_uv, quad_size
-        { name = H_COLOR,     type = buffer.VALUE_TYPE_UINT8,   count = 4 }, -- AO
-        { name = H_COLOR1,    type = buffer.VALUE_TYPE_UINT8,   count = 4 }, -- Torch
-        { name = H_COLOR2,    type = buffer.VALUE_TYPE_UINT8,   count = 4 }, -- Sun
         { name = H_TEXCOORD2, type = buffer.VALUE_TYPE_FLOAT32, count = 1 }  -- face_id
     })
+
+    -- Allocate Light Texture Buffer
+    local light_buf       = buffer.create(grid_size * grid_size * grid_size, {
+        { name = hash("rgba"), type = buffer.VALUE_TYPE_UINT8, count = 4 }
+    })
+    self.light_buffer     = light_buf
+
+    self.light_tex_params = {
+        width = grid_size * grid_size,
+        height = grid_size,
+        type = resource.TEXTURE_TYPE_2D,
+        format = resource.TEXTURE_FORMAT_RGBA,
+        num_mip_maps = 1
+    }
+    self.light_texture    = resource.create_texture("/assets/textures/light_map.texturec", self.light_tex_params)
+    go.set(mesh_go.mesh_url, H_TEXTURE2, self.light_texture)
 
     self.buf             = buf
     self.mesh_url        = mesh_go.mesh_url
@@ -183,10 +194,11 @@ local function create_chunk(self)
 
     self.max_verts = max_verts
 
-    self.max_verts = max_verts
-
     -- Initial mesh update (synchronous lighting + async mesh)
     terrain.recalc_lighting_sync()
+    terrain.update_light_buffer(self.light_buffer)
+    resource.set_texture(self.light_texture, self.light_tex_params, self.light_buffer)
+
     request_mesh_update(self)
 end
 
@@ -218,6 +230,33 @@ function update(self, dt)
         print("terrain_mesh_gen: Applying mesh... verts=" .. vc .. " time=" .. string.format("%.2f", b_time) .. "ms")
 
         resource.set_buffer(self.buffer_resource, buf)
+
+        -- Update light texture to match newest lighting pass
+        terrain.update_light_buffer(self.light_buffer)
+        resource.set_texture(self.light_texture, self.light_tex_params, self.light_buffer)
+
+        -- Cache debug quads for performance overlay
+        local quads = terrain.get_debug_quads()
+        local world_pos = go.get_world_position(self.mesh_url) or vmath.vector3()
+        print("terrain_mesh_gen: Received " .. #quads .. " debug quads from C++ at " .. tostring(world_pos))
+
+        local edges = {}
+        local c1 = vmath.vector4(1, 0, 0, 1) -- Red
+        local c2 = vmath.vector4(0, 1, 0, 1) -- Green
+        local c3 = vmath.vector4(0, 0, 1, 1) -- Blue
+        local c4 = vmath.vector4(1, 1, 0, 1) -- Yellow
+        for i = 1, #quads do
+            local q = quads[i]
+            local p1 = vmath.vector3(q[1], q[2], q[3]) + world_pos
+            local p2 = vmath.vector3(q[4], q[5], q[6]) + world_pos
+            local p3 = vmath.vector3(q[7], q[8], q[9]) + world_pos
+            local p4 = vmath.vector3(q[10], q[11], q[12]) + world_pos
+            table.insert(edges, { start_point = p1, end_point = p2, color = c1 })
+            table.insert(edges, { start_point = p2, end_point = p3, color = c2 })
+            table.insert(edges, { start_point = p3, end_point = p4, color = c3 })
+            table.insert(edges, { start_point = p4, end_point = p1, color = c4 })
+        end
+        _G.cached_mesh_edges = edges
 
         _G.stats_faces = fc
         _G.stats_vertices = vc

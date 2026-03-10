@@ -311,10 +311,18 @@ function update(self, dt)
             color = self.color_target
         })
 
-        -- Draw Terrain Wireframe Edges (color per face direction)
+        -- 11. Debug Visualization (Guaranteed test line + Edges)
         local edges = _G.cached_mesh_edges
+        local drawn_count = 0
+
+        -- Test line to verify renderer (White line 10m up from camera)
+        msg.post("@render:", H_DRAW_LINE, {
+            start_point = cam_pos,
+            end_point = cam_pos + vmath.vector3(0, 10, 0),
+            color = vmath.vector4(1, 1, 1, 1)
+        })
+
         if edges then
-            -- d=1: +Z (cyan), d=2: -Z (blue), d=3: +Y (green), d=4: -Y (yellow), d=5: +X (red), d=6: -X (magenta)
             local dir_colors = {
                 vmath.vector4(0, 1, 1, 1),     -- +Z cyan
                 vmath.vector4(0.3, 0.3, 1, 1), -- -Z blue
@@ -323,15 +331,26 @@ function update(self, dt)
                 vmath.vector4(1, 0.2, 0.2, 1), -- +X red
                 vmath.vector4(1, 0, 1, 1)      -- -X magenta
             }
+
             for i = 1, #edges do
                 local e = edges[i]
                 msg.post("@render:", H_DRAW_LINE, {
                     start_point = e.start_point,
                     end_point = e.end_point,
-                    color = dir_colors[e.d] or self.color_green
+                    color = e.color or dir_colors[e.d] or self.color_green
                 })
+                drawn_count = drawn_count + 1
+                if drawn_count > 5000 then break end
             end
         end
+
+        self.vec_offset.x = x_start
+        self.vec_offset.y = y_start - 200
+        msg.post("@render:", H_DRAW_DEBUG_TEXT, {
+            text = string.format("DEBUG EDGES: %d / %d", drawn_count, edges and #edges or 0),
+            position = self.vec_offset,
+            color = self.color_green
+        })
     end
 end
 

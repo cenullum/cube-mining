@@ -4,17 +4,11 @@ in highp vec4 position;     // Local vertex position (x, y, z)
 in mediump vec4 texcoord0;  // x,y = base_uv, z,w = unit_uv_size
 in mediump vec4 texcoord1;  // x,y = local_uv (0..1), z,w = quad_size (width, height)
 in mediump float texcoord2; // face_id (1..6)
-in lowp vec4 color;         // Corner AO (ubyte4, normalized to 0..1)
-in lowp vec4 color1;        // Corner Torch Light
-in lowp vec4 color2;        // Corner Sun Light
 
 // --- Outputs ---
 out mediump vec2 var_texcoord0;     // Tiling coordinate
 out mediump vec4 var_atlas_metadata; // Atlas bounds (base_uv, unit_size)
 out mediump float var_light;        // Directional Lighting factor
-out mediump vec4 var_corner_ao;     // AO for 4 corners
-out mediump vec4 var_corner_torch;  // Torch Light for 4 corners
-out mediump vec4 var_corner_sun;    // Sun Light for 4 corners
 out mediump vec2 var_local_uv;      // Local UV (0..1)
 out mediump vec2 var_quad_size;     // Quad size in blocks
 out mediump vec3 var_view_pos;      // Position in view space
@@ -52,9 +46,6 @@ void main()
     // Pass attributes
     var_texcoord0 = texcoord0.xy;
     var_atlas_metadata = texcoord0;
-    var_corner_ao = color / 255.0;
-    var_corner_torch = color1 / 255.0;
-    var_corner_sun = color2 / 255.0;
     var_local_uv = texcoord1.xy;
     var_quad_size = texcoord1.zw;
     
