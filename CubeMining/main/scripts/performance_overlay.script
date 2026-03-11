@@ -65,9 +65,8 @@ function init(self)
     _G.performance_mode = 0
 
     -- FPS Metrics (defold-metrics style)
-    self.fps_samples = 60
+    self.fps_samples = 5000
     self.fps_frames = {}
-    self.avg_fps = 0
 
     -- Graph & 1% Lows
     self.frame_times = {}
@@ -79,9 +78,16 @@ function init(self)
     self.avg_fps = 0
     self.low_1_fps = 0
 
-    -- Throttling for heavy operations only
-    self.update_timer = 0
-    self.update_interval = 0.5
+    -- Throttling for UI text (to make it readable)
+    self.text_update_timer = 0
+    self.text_update_interval = 0.05 -- 100ms
+    self.cached_lines = {}
+
+    -- RAM Metrics
+    self.ram_samples = {}
+    self.max_ram_samples = 5000
+    self.ram_sum = 0
+    self.avg_ram = 0
 
     -- Pre-allocated objects
     self.color_green = vmath.vector4(0, 1, 0, 1)
@@ -162,9 +168,13 @@ function update(self, dt)
     self.prev_time = self.current_time
 
     -- 2. FPS Calculation (Strict defold-metrics logic)
+    -- 2. FPS Calculation (Sliding/Growing Window)
     table.insert(self.fps_frames, self.current_time)
-    if #self.fps_frames == self.fps_samples + 1 then
+    if #self.fps_frames > self.fps_samples + 1 then
         table.remove(self.fps_frames, 1)
+    end
+
+    if #self.fps_frames > 1 then
         local dt_total = self.fps_frames[#self.fps_frames] - self.fps_frames[1]
         if dt_total > 0 then
             self.avg_fps = (#self.fps_frames - 1) / dt_total
@@ -173,6 +183,7 @@ function update(self, dt)
 
     -- 3. Delta Time for Graph & 1% Lows
     local dt_display = math.max(real_dt, 0.0001)
+    self.instant_fps = 1 / dt_display
 
     -- 4. Sample Management for Graph & 1% Lows
     table.insert(self.frame_times, dt_display)
@@ -180,9 +191,21 @@ function update(self, dt)
         table.remove(self.frame_times, 1)
     end
 
-    -- 5. Heavy Logic (Calculated every frame for immediate feedback)
+    -- 5. Heavy Logic (Standard 1% Lows: Average of slowest 1% of frames)
     local samples = #self.frame_times
-    if samples >= 20 then
+    if samples >= 100 then -- Need enough samples for 1% to be meaningful
+        local sorted_times = {}
+        for i, v in ipairs(self.frame_times) do sorted_times[i] = v end
+        table.sort(sorted_times)
+
+        local count_1_percent = math.max(1, math.floor(samples * 0.01))
+        local sum_slowest = 0
+        for i = samples, samples - count_1_percent + 1, -1 do
+            sum_slowest = sum_slowest + sorted_times[i]
+        end
+        self.low_1_fps = 1 / (sum_slowest / count_1_percent)
+    elseif samples >= 20 then
+        -- Fallback for small sample sets: 99th percentile point
         local sorted_times = {}
         for i, v in ipairs(self.frame_times) do sorted_times[i] = v end
         table.sort(sorted_times)
@@ -190,36 +213,56 @@ function update(self, dt)
         self.low_1_fps = 1 / sorted_times[math.max(1, index)]
     end
 
-    -- 6. Display Text (Real-time update as requested)
-    local ram = collectgarbage("count")
-    local faces = _G.stats_faces or 0
-    local vertices = _G.stats_vertices or 0
-    local build_time = _G.stats_mesh_build_time or 0
-    local b_times = _G.world_build_times or {}
-    local b_count = #b_times
-    local b_avg = 0
-    if b_count > 0 then
-        local sum = 0
-        for _, v in ipairs(b_times) do sum = sum + v end
-        b_avg = sum / b_count
+    -- 6. Collect RAM samples
+    local current_ram = collectgarbage("count")
+    table.insert(self.ram_samples, current_ram)
+    self.ram_sum = self.ram_sum + current_ram
+
+    if #self.ram_samples > self.max_ram_samples then
+        local removed = table.remove(self.ram_samples, 1)
+        self.ram_sum = self.ram_sum - removed
     end
 
+    -- Calculate Average RAM (Optimized O(1))
+    self.avg_ram = self.ram_sum / #self.ram_samples
+
+    -- 7. Update Throttled Text
+    self.text_update_timer = self.text_update_timer + dt
+    if self.text_update_timer >= self.text_update_interval or #self.cached_lines == 0 then
+        self.text_update_timer = 0
+
+        local faces = _G.stats_faces or 0
+        local vertices = _G.stats_vertices or 0
+        local build_time = _G.stats_mesh_build_time or 0
+        local b_times = _G.world_build_times or {}
+        local b_count = #b_times
+        local b_avg = 0
+        if b_count > 0 then
+            local sum = 0
+            for _, v in ipairs(b_times) do sum = sum + v end
+            b_avg = sum / b_count
+        end
+
+        self.cached_lines = {
+            string.format("FPS: %.1f", self.instant_fps),
+            string.format("1%% Low FPS: %.1f", self.low_1_fps),
+            string.format("Avg. FPS: %.2f", self.avg_fps),
+            string.format("Faces: %d", faces),
+            string.format("Vertices: %d", vertices),
+            string.format("Mesh Build: %.2f ms", build_time),
+            string.format("Avg. Mesh Build: %.2f ms (%d/25)", b_avg, b_count),
+            string.format("Item Build: %.2f ms", _G.item_mesh_build_time or 0),
+            string.format("RAM: %s", format_mem(current_ram)),
+            string.format("Avg. RAM: %s", format_mem(self.avg_ram)),
+            string.format("Mouse: %d", _G.mouse_count or 0)
+        }
+    end
+
+    -- 8. Draw Metrics (Always drawn, but text content only changes every 100ms)
     local x_start = self.width - 250
-    local y_start = 200
+    local y_start = 270
 
-    local lines = {
-        string.format("FPS: %.2f", self.avg_fps),
-        string.format("1%% Low FPS: %.1f", self.low_1_fps),
-        string.format("Faces: %d", faces),
-        string.format("Vertices: %d", vertices),
-        string.format("World Build: %.2f ms", build_time),
-        string.format("Avg. Mesh Build: %.2f ms (%d/25)", b_avg, b_count),
-        string.format("Item Build: %.2f ms", _G.item_mesh_build_time or 0),
-        string.format("RAM: %s", format_mem(ram or 0)),
-        string.format("Mouse: %d", _G.mouse_count or 0)
-    }
-
-    for i, line in ipairs(lines) do
+    for i, line in ipairs(self.cached_lines) do
         self.vec_offset.x = x_start
         self.vec_offset.y = y_start - (i * 20)
         msg.post("@render:", H_DRAW_DEBUG_TEXT, {
@@ -345,7 +388,7 @@ function update(self, dt)
         end
 
         self.vec_offset.x = x_start
-        self.vec_offset.y = y_start - 200
+        self.vec_offset.y = y_start - 240
         msg.post("@render:", H_DRAW_DEBUG_TEXT, {
             text = string.format("DEBUG EDGES: %d / %d", drawn_count, edges and #edges or 0),
             position = self.vec_offset,
