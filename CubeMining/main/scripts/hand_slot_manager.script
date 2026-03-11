@@ -366,10 +366,14 @@ function update(self, dt)
     local ads_active = self.ads_active
 
     if speed > 0.5 and grounded then
-        local bob_freq = sprinting and 14.0 or 9.0
+        local freq_mul = 1.85
+        local amp_x_mul = 0.0032
+        local amp_y_mul = 0.0025
+
+        local bob_freq = speed * freq_mul
         local ads_mul = ads_active and 0.2 or 1.0
-        local bob_amp_x = (sprinting and 0.025 or 0.015) * ads_mul
-        local bob_amp_y = (sprinting and 0.020 or 0.012) * ads_mul
+        local bob_amp_x = speed * amp_x_mul * ads_mul
+        local bob_amp_y = speed * amp_y_mul * ads_mul
 
         self.bob_time = self.bob_time + dt * bob_freq
         local bt = self.bob_time
