@@ -22,7 +22,8 @@ void main()
     vec4 color = texture(tex0, var_texcoord0);
     if (color.a < 0.1) discard;
     
-    // var_light contains diffuse directional light. tint contains block ambient light.
+    // var_light contains diffuse directional light. 
+    // tint contains environmental ambient light (overridden by damage/death in script).
     vec3 final_rgb = color.rgb * var_light * tint.xyz;
     
     final_rgb = mix(fog_color.rgb, final_rgb, var_fog_factor);

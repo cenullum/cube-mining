@@ -5,7 +5,6 @@ in mediump vec2 var_texcoord0;     // Normalized quad coordinate [0..1]
 in mediump vec4 var_atlas_metadata; // Atlas bounds [u, v, width, height]
 in mediump float var_light;
 in mediump vec3 var_view_pos;
-in lowp float var_fog_factor;
 
 // --- Output ---
 out vec4 out_fragColor;
@@ -15,8 +14,6 @@ uniform mediump sampler2D texture0;
 uniform fs_uniforms
 {
     mediump vec4 tint;
-    lowp vec4 fog_color;
-    mediump vec4 fog_params;
     mediump vec4 cam_pos;
 };
 
@@ -30,9 +27,8 @@ void main()
     // Hard discard for pixel art transparency
     if (color.a < 0.1) discard;
     
+    // tint contains environmental ambient light.
     vec3 final_rgb = color.rgb * var_light * tint.xyz;
-    
-    final_rgb = mix(fog_color.rgb, final_rgb, var_fog_factor);
     
     out_fragColor = vec4(final_rgb, color.a);
 }

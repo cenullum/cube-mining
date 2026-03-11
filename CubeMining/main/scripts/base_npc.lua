@@ -18,9 +18,11 @@ function M.init(self)
 
     self.is_dead = false
 
-    -- Visual feedback
-    self.tint_timer = 0
-    self.base_npc_tint = vmath.vector4(1, 1, 1, 1)
+    -- Optimized Lighting & State Tint Update
+    self.light_update_frame = math.random(1, 10)
+    self.frame_counter = 0
+    self.damage_flash_timer = 0
+    self.ambient_light = terrain.get_ambient_light(go.get_position(self.id))
 
     -- Register with C++ engine directly
     if terrain and terrain.register_npc then
@@ -37,6 +39,8 @@ function M.init(self)
         })
     end
 
+    pcall(function() go.set(self.model_url, "tint", self.ambient_light) end)
+
     sm.play(sm.swing, 1.0, go.get_position())
 end
 
@@ -49,7 +53,6 @@ function M.die(self)
     self.is_dead = true
     self.death_timer = 0
 
-    go.cancel_animations(self.model_url, "tint")
     pcall(function() go.set(self.model_url, "tint", vmath.vector4(0.35, 0.35, 0.35, 1.0)) end)
     local rot = go.get_rotation()
     local target_rot = rot * vmath.quat_rotation_x(math.rad(-90))
@@ -58,11 +61,7 @@ end
 
 function M.on_damage(self)
     if self.is_dead then return end
-    go.cancel_animations(self.model_url, "tint")
-    -- Bright red flash
-    go.set(self.model_url, "tint", vmath.vector4(2.0, 0.4, 0.4, 1.0))
-    -- Smoothly return to white over 0.7s
-    go.animate(self.model_url, "tint", go.PLAYBACK_ONCE_FORWARD, vmath.vector4(1, 1, 1, 1), go.EASING_OUTQUAD, 0.7)
+    self.damage_flash_timer = 0.5 -- 0.5s flash
 end
 
 function M.on_message(self, message_id, message, sender)
@@ -77,10 +76,44 @@ function M.update(self, dt)
     if self.is_dead then
         self.death_timer = self.death_timer + dt
         if self.death_timer >= 2.0 then go.delete() end
-        return
+        return -- Death tint fixed in M.die
     end
 
-    -- NPC movement and health are now handled entirely in C++
+    local needs_tint_update = false
+
+    -- Handle Damage Flash Timer
+    if self.damage_flash_timer > 0 then
+        self.damage_flash_timer = self.damage_flash_timer - dt
+        needs_tint_update = true
+        if self.damage_flash_timer <= 0 then
+            self.damage_flash_timer = 0
+        end
+    end
+
+    -- Handle Environmental Light (periodic staggered update)
+    self.frame_counter = self.frame_counter + 1
+    if self.frame_counter >= 10 then
+        self.frame_counter = 0
+        local pos = go.get_position(self.id)
+        local new_ambient = terrain.get_ambient_light(pos)
+        if new_ambient ~= self.ambient_light then
+            self.ambient_light = new_ambient
+            needs_tint_update = true
+        end
+    end
+
+    -- Apply Tint Priority: Damage Flash > Ambient Light
+    if needs_tint_update then
+        local final_tint = self.ambient_light
+        if self.damage_flash_timer > 0 then
+            local t = self.damage_flash_timer / 0.5
+            -- Flash red (override ambient)
+            final_tint = vmath.vector4(2.0 * t + final_tint.x * (1 - t),
+                0.4 * t + final_tint.y * (1 - t),
+                0.4 * t + final_tint.z * (1 - t), 1.0)
+        end
+        pcall(function() go.set(self.model_url, "tint", final_tint) end)
+    end
 end
 
 return M

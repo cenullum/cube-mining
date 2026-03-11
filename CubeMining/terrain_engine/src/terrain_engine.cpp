@@ -956,16 +956,35 @@ static int Lua_GetBlockFromWorld(lua_State* L) {
     return 1;
 }
 
-static int Lua_GetLightLevels(lua_State* L) {
-    int x = luaL_checkinteger(L, 1), y = luaL_checkinteger(L, 2), z = luaL_checkinteger(L, 3);
-    if (x < 0 || x >= g_grid_size || y < 0 || y >= g_grid_size || z < 0 || z >= g_grid_size) {
-        lua_pushinteger(L, 15); 
-        lua_pushinteger(L, 0); 
-        return 2; 
+
+
+static int Lua_GetAmbientLight(lua_State* L) {
+    dmVMath::Vector3 pos = *dmScript::ToVector3(L, 1);
+    
+    float offset = (float)g_grid_size / -2.0f + 0.5f;
+    float origin_x = offset;
+    float origin_y = offset;
+    float origin_z = 490.0f; // Matching current world origin in other functions
+
+    int x = (int)floorf(pos.getX() - origin_x + 0.5f);
+    int y = (int)floorf(pos.getY() - origin_y + 0.5f);
+    int z = (int)floorf(pos.getZ() - origin_z + 0.5f);
+
+    float sun_f = 1.0f;
+    float source_f = 0.0f;
+
+    if (x >= 0 && x < g_grid_size && y >= 0 && y < g_grid_size && z >= 0 && z < g_grid_size) {
+        int idx = calculate_block_index(x, y, z, g_grid_size);
+        sun_f = (float)g_sun_light[idx] / 15.0f;
+        source_f = ((float)g_source_light[idx] / 15.0f) * 1.5f;
     }
-    lua_pushinteger(L, g_sun_light[calculate_block_index(x, y, z, g_grid_size)]);
-    lua_pushinteger(L, g_source_light[calculate_block_index(x, y, z, g_grid_size)]);
-    return 2;
+
+    float r = fmaxf(0.02f, sun_f + source_f * 1.0f);
+    float g = fmaxf(0.02f, sun_f + source_f * 0.9f);
+    float b = fmaxf(0.02f, sun_f + source_f * 0.6f);
+
+    dmScript::PushVector4(L, dmVMath::Vector4(r, g, b, 1.0f));
+    return 1;
 }
 
 static int Lua_GetMaxVertices(lua_State* L) {
@@ -1474,7 +1493,7 @@ static const luaL_reg Module_methods[] = {
     {"get_block_info",       Lua_GetBlockInfo},
     {"set_block",            Lua_SetBlockInWorld},
     {"get_block",            Lua_GetBlockFromWorld},
-    {"get_lights",           Lua_GetLightLevels},
+    {"get_ambient_light",    Lua_GetAmbientLight},
     {"get_max_vertices",     Lua_GetMaxVertices},
     {"request_mesh_update",  Lua_RequestAsyncMeshUpdate},
     {"poll_mesh_buffer",     Lua_PollMeshBuffer},

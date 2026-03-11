@@ -518,20 +518,11 @@ function update(self, dt)
     local py = math.floor(eye_pos.y - offset + 0.5)
     local pz = math.floor(eye_pos.z - 490 + 0.5)
 
-    -- 1. Lighting calculation with caching
+    -- 1. Lighting calculation with caching (Offloaded to C++)
     if px ~= self.last_px or py ~= self.last_py or pz ~= self.last_pz then
         self.last_px, self.last_py, self.last_pz = px, py, pz
 
-        local sun_l, source_l = terrain.get_lights(px, py, pz)
-        local sun_f = sun_l / 15.0
-        local source_f = (source_l / 15.0) * 1.5
-
-        local ambient_light = vmath.vector4(
-            math.max(0.02, sun_f + source_f * 1.0),
-            math.max(0.02, sun_f + source_f * 0.9),
-            math.max(0.02, sun_f + source_f * 0.6),
-            1.0
-        )
+        local ambient_light = terrain.get_ambient_light(vmath.vector3(px, py, pz))
         _G.player_ambient_light = ambient_light
 
         -- Only update shader if ambient light actually changed
