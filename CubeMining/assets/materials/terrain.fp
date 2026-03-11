@@ -38,29 +38,32 @@ vec4 sample_light(vec3 pc) {
     return texture(texture2, vec2(u, v));
 }
 
-vec4 trilinear_light(vec3 pos) {
-    vec3 p = pos;
-    vec3 i = floor(p);
-    vec3 f = fract(p);
+vec4 bilinear_light(vec3 pos, vec3 normal) {
+    vec3 i = floor(pos);
+    vec3 f = fract(pos);
     
-    vec4 c000 = sample_light(i + vec3(0.0, 0.0, 0.0));
-    vec4 c100 = sample_light(i + vec3(1.0, 0.0, 0.0));
-    vec4 c010 = sample_light(i + vec3(0.0, 1.0, 0.0));
-    vec4 c110 = sample_light(i + vec3(1.0, 1.0, 0.0));
-    vec4 c001 = sample_light(i + vec3(0.0, 0.0, 1.0));
-    vec4 c101 = sample_light(i + vec3(1.0, 0.0, 1.0));
-    vec4 c011 = sample_light(i + vec3(0.0, 1.0, 1.0));
-    vec4 c111 = sample_light(i + vec3(1.0, 1.0, 1.0));
-    
-    vec4 c00 = mix(c000, c100, f.x);
-    vec4 c10 = mix(c010, c110, f.x);
-    vec4 c01 = mix(c001, c101, f.x);
-    vec4 c11 = mix(c011, c111, f.x);
-    
-    vec4 c0 = mix(c00, c10, f.y);
-    vec4 c1 = mix(c01, c11, f.y);
-    
-    return mix(c0, c1, f.z);
+    if (abs(normal.x) > 0.5) {
+        // YZ plane interpolation
+        vec4 c00 = sample_light(i + vec3(0.0, 0.0, 0.0));
+        vec4 c10 = sample_light(i + vec3(0.0, 1.0, 0.0));
+        vec4 c01 = sample_light(i + vec3(0.0, 0.0, 1.0));
+        vec4 c11 = sample_light(i + vec3(0.0, 1.0, 1.0));
+        return mix(mix(c00, c10, f.y), mix(c01, c11, f.y), f.z);
+    } else if (abs(normal.y) > 0.5) {
+        // XZ plane interpolation
+        vec4 c00 = sample_light(i + vec3(0.0, 0.0, 0.0));
+        vec4 c10 = sample_light(i + vec3(1.0, 0.0, 0.0));
+        vec4 c01 = sample_light(i + vec3(0.0, 0.0, 1.0));
+        vec4 c11 = sample_light(i + vec3(1.0, 0.0, 1.0));
+        return mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.z);
+    } else {
+        // XY plane interpolation
+        vec4 c00 = sample_light(i + vec3(0.0, 0.0, 0.0));
+        vec4 c10 = sample_light(i + vec3(1.0, 0.0, 0.0));
+        vec4 c01 = sample_light(i + vec3(0.0, 1.0, 0.0));
+        vec4 c11 = sample_light(i + vec3(1.0, 1.0, 0.0));
+        return mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
+    }
 }
 
 void main()
@@ -97,7 +100,7 @@ void main()
     
     // Light calculation
     vec3 sample_pos = var_pos + var_normal * 0.5;
-    vec4 light_data = trilinear_light(sample_pos);
+    vec4 light_data = bilinear_light(sample_pos, var_normal);
     
     // light_data.rgb contains our combined sun and torch
     // light_data.a contains our Ambient Occlusion factor (0.0 = solid shadow, 1.0 = open air)
