@@ -97,3 +97,57 @@ void perform_lighting_pass(uint8_t* blocks, uint8_t* sun_light_data, uint8_t* so
         }
     }
 }
+
+int Lua_GetAmbientLight(lua_State* L) {
+    dmVMath::Vector3 pos = *dmScript::ToVector3(L, 1);
+    float offset = (float)g_grid_size / -2.0f + 0.5f;
+    int x = (int)floorf(pos.getX() - offset + 0.5f);
+    int y = (int)floorf(pos.getY() - offset + 0.5f);
+    int z = (int)floorf(pos.getZ() - 490.0f + 0.5f);
+
+    float sun_f = 1.0f, source_f = 0.0f;
+    if (x >= 0 && x < g_grid_size && y >= 0 && y < g_grid_size && z >= 0 && z < g_grid_size) {
+        int idx = calculate_block_index(x, y, z, g_grid_size);
+        sun_f = (float)g_sun_light[idx] / 15.0f;
+        source_f = ((float)g_source_light[idx] / 15.0f) * 1.5f;
+    }
+    float r = fmaxf(0.02f, sun_f + source_f * 1.0f);
+    float g = fmaxf(0.02f, sun_f + source_f * 0.9f);
+    float b = fmaxf(0.02f, sun_f + source_f * 0.6f);
+    dmScript::PushVector4(L, dmVMath::Vector4(r, g, b, 1.0f));
+    return 1;
+}
+
+int Lua_UpdateLightBuffer(lua_State* L) {
+    dmScript::LuaHBuffer* luabuf = dmScript::CheckBuffer(L, 1);
+    dmBuffer::HBuffer buffer_handle = luabuf->m_Buffer;
+    uint8_t* stream_ptr = 0;
+    uint32_t stream_count = 0, stream_components = 0, stream_stride = 0;
+    dmBuffer::GetStream(buffer_handle, dmHashString64("rgba"), (void**)&stream_ptr, &stream_count, &stream_components, &stream_stride);
+    
+    for (int y = 0; y < g_grid_size; ++y) {
+        for (int z = 0; z < g_grid_size; ++z) {
+            for (int x = 0; x < g_grid_size; ++x) {
+                int block_idx = calculate_block_index(x, y, z, g_grid_size);
+                float sun_f = g_sun_light[block_idx] / 15.0f;
+                float torch_f = g_source_light[block_idx] / 15.0f;
+                float out_r = fminf(1.0f, sun_f + torch_f);
+                float out_g = fminf(1.0f, sun_f + torch_f * 0.9f);
+                float out_b = fminf(1.0f, sun_f + torch_f * 0.6f);
+                uint8_t a = IsSolid(x, y, z) ? 0 : 255;
+                int tex_idx = x + z * g_grid_size + y * g_grid_size * g_grid_size;
+                stream_ptr[tex_idx * stream_stride + 0] = (uint8_t)(out_r * 255.0f);
+                stream_ptr[tex_idx * stream_stride + 1] = (uint8_t)(out_g * 255.0f);
+                stream_ptr[tex_idx * stream_stride + 2] = (uint8_t)(out_b * 255.0f);
+                stream_ptr[tex_idx * stream_stride + 3] = a;
+            }
+        }
+    }
+    dmBuffer::UpdateContentVersion(buffer_handle);
+    return 0;
+}
+
+int Lua_PerformLightingPassSync(lua_State* L) {
+    perform_lighting_pass(g_blocks, g_sun_light, g_source_light, g_grid_size);
+    return 0;
+}

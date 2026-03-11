@@ -169,3 +169,32 @@ void copy_array_to_buffer_stream(dmBuffer::HBuffer buffer, dmhash_t stream_name,
         }
     }
 }
+
+int Lua_GetMaxVertices(lua_State* L) {
+    uint32_t max_verts = (uint32_t)g_grid_size * g_grid_size * g_grid_size * 3 * 6;
+    lua_pushinteger(L, max_verts);
+    return 1;
+}
+
+int Lua_GetMeshDebugQuads(lua_State* L) {
+    lua_newtable(L);
+    for (size_t i = 0; i < g_debug_quads.size(); ++i) {
+        const DebugQuad& dq = g_debug_quads[i];
+        lua_newtable(L);
+        lua_pushnumber(L, dq.x1); lua_rawseti(L, -2, 1);
+        lua_pushnumber(L, dq.y1); lua_rawseti(L, -2, 2);
+        lua_pushnumber(L, dq.z1); lua_rawseti(L, -2, 3);
+        lua_pushnumber(L, dq.x2); lua_rawseti(L, -2, 4);
+        lua_pushnumber(L, dq.y2); lua_rawseti(L, -2, 5);
+        lua_pushnumber(L, dq.z2); lua_rawseti(L, -2, 6);
+        lua_pushnumber(L, dq.x3); lua_rawseti(L, -2, 7);
+        lua_pushnumber(L, dq.y3); lua_rawseti(L, -2, 8);
+        lua_pushnumber(L, dq.z3); lua_rawseti(L, -2, 9);
+        lua_pushnumber(L, dq.x4); lua_rawseti(L, -2, 10);
+        lua_pushnumber(L, dq.y4); lua_rawseti(L, -2, 11);
+        lua_pushnumber(L, dq.z4); lua_rawseti(L, -2, 12);
+        lua_pushinteger(L, dq.dir); lua_rawseti(L, -2, 13);
+        lua_rawseti(L, -2, i + 1);
+    }
+    return 1;
+}

@@ -70,6 +70,9 @@ extern std::vector<NPCInfo> g_npcs;
 extern std::vector<DebugQuad> g_debug_quads;
 extern bool g_debug_enabled;
 
+// Prototypes - Engine/Thread
+void TriggerAsyncMeshUpdate();
+
 // Prototypes - World
 int calculate_block_index(int x, int y, int z, int side_length);
 uint8_t safe_get_block(int x, int y, int z, int s);
@@ -99,10 +102,40 @@ extern uint32_t g_result_face_count;
 extern uint32_t g_result_vertex_count;
 extern double g_result_build_time;
 
+// Prototypes - NPC
+void UpdateAllNPCs(float dt);
+int Lua_RegisterNPC(lua_State* L);
+int Lua_UnregisterNPC(lua_State* L);
+
 // Prototypes - Physics
 bool CheckCollision(float min_x, float min_y, float min_z, float max_x, float max_y, float max_z);
 void MoveAndSlide(dmVMath::Vector3& pos, dmVMath::Vector3& vel, const dmVMath::Vector3& size, float dt, bool& is_grounded);
 bool RayAABBIntersection(const dmVMath::Vector3& ray_origin, const dmVMath::Vector3& ray_dir, const dmVMath::Vector3& box_min, const dmVMath::Vector3& box_max, float& t_out);
+int Lua_Explosion(lua_State* L);
+int Lua_ShootRay(lua_State* L);
+int Lua_MoveAndSlide(lua_State* L);
+int Lua_CheckCollision(lua_State* L);
 
-// Prototypes - NPC
-void UpdateAllNPCs(float dt);
+// Prototypes - Lighting
+void perform_lighting_pass(uint8_t* blocks, uint8_t* sun_light_data, uint8_t* source_light_data, int side_length);
+int Lua_GetAmbientLight(lua_State* L);
+int Lua_UpdateLightBuffer(lua_State* L);
+int Lua_PerformLightingPassSync(lua_State* L);
+
+// Prototypes - Mesh
+void alloc_mesh_buffers(int grid_size);
+void execute_mesh_generation_pipeline(const uint8_t* world_blocks, const uint8_t* sun_light, const uint8_t* source_light, int side_length, bool ao_enabled, int light_mode);
+void copy_array_to_buffer_stream(dmBuffer::HBuffer buffer, dmhash_t stream_name, const float* source_data, uint32_t vertex_count, uint32_t components_per_vertex);
+int Lua_GetMaxVertices(lua_State* L);
+int Lua_GetMeshDebugQuads(lua_State* L);
+
+// Prototypes - World
+int calculate_block_index(int x, int y, int z, int side_length);
+uint8_t safe_get_block(int x, int y, int z, int s);
+uint8_t GetBlock(int x, int y, int z);
+void SetBlock(int x, int y, int z, uint8_t id);
+bool IsSolid(int x, int y, int z);
+int Lua_RegisterBlockType(lua_State* L);
+int Lua_GetBlockInfo(lua_State* L);
+int Lua_SetBlockInWorld(lua_State* L);
+int Lua_GetBlockFromWorld(lua_State* L);

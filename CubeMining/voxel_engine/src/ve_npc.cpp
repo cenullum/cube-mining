@@ -100,3 +100,43 @@ void UpdateAllNPCs(float dt) {
         }
     }
 }
+
+int Lua_RegisterNPC(lua_State* L) {
+    dmhash_t id = dmScript::CheckHash(L, 1);
+    dmGameObject::HInstance instance = dmScript::CheckGOInstance(L, 2);
+    dmVMath::Vector3 pos = *dmScript::ToVector3(L, 3);
+    dmVMath::Vector3 size = *dmScript::ToVector3(L, 4);
+    bool is_dead = lua_toboolean(L, 5);
+
+    int state = 1;
+    float timer = 0, state_duration = 5.0f, speed = 3.0f, gravity = -25.0f, jump_force = 8.0f, rotation_offset_y = 0, health = 100.0f;
+    dmhash_t socket = 0;
+    if (lua_istable(L, 6)) {
+        lua_getfield(L, 6, "state"); state = lua_isnumber(L, -1) ? (int)lua_tonumber(L, -1) : 1; lua_pop(L, 1);
+        lua_getfield(L, 6, "timer"); timer = (float)luaL_optnumber(L, -1, 0); lua_pop(L, 1);
+        lua_getfield(L, 6, "state_duration"); state_duration = (float)luaL_optnumber(L, -1, 5); lua_pop(L, 1);
+        lua_getfield(L, 6, "speed"); speed = (float)luaL_optnumber(L, -1, 3); lua_pop(L, 1);
+        lua_getfield(L, 6, "gravity"); gravity = (float)luaL_optnumber(L, -1, -25); lua_pop(L, 1);
+        lua_getfield(L, 6, "jump_force"); jump_force = (float)luaL_optnumber(L, -1, 8); lua_pop(L, 1);
+        lua_getfield(L, 6, "rotation_offset_y"); rotation_offset_y = (float)luaL_optnumber(L, -1, 0); lua_pop(L, 1);
+        lua_getfield(L, 6, "health"); health = (float)luaL_optnumber(L, -1, 100); lua_pop(L, 1);
+        lua_getfield(L, 6, "socket"); if (lua_isuserdata(L, -1)) socket = dmScript::CheckHash(L, -1); lua_pop(L, 1);
+    }
+    for (auto& npc : g_npcs) {
+        if (npc.id == id) {
+            npc.instance = instance; npc.pos = pos; npc.size = size; npc.is_dead = is_dead;
+            npc.state = state; npc.timer = timer; npc.state_duration = state_duration;
+            npc.speed = speed; npc.gravity = gravity; npc.jump_force = jump_force;
+            npc.rotation_offset_y = rotation_offset_y; npc.health = health; npc.socket = socket;
+            return 0;
+        }
+    }
+    g_npcs.push_back({id, instance, pos, dmVMath::Vector3(0,0,0), dmVMath::Vector3(0,0,0), size, is_dead, state, timer, state_duration, speed, gravity, jump_force, rotation_offset_y, health, socket});
+    return 0;
+}
+
+int Lua_UnregisterNPC(lua_State* L) {
+    dmhash_t id = dmScript::CheckHash(L, 1);
+    for (size_t i = 0; i < g_npcs.size(); ++i) { if (g_npcs[i].id == id) { g_npcs.erase(g_npcs.begin() + i); break; } }
+    return 0;
+}
