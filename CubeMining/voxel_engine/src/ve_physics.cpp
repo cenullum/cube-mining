@@ -63,8 +63,14 @@ void MoveAndSlide(dmVMath::Vector3& pos, dmVMath::Vector3& vel, const dmVMath::V
         float dy = vel.getY() * dt_step;
         if (dy != 0) {
             float next_y = pos.getY() + dy;
-            if (CheckCollision(pos.getX() - half_x, next_y, pos.getZ() - half_z,
-                               pos.getX() + half_x, next_y + size.getY(), pos.getZ() + half_z)) {
+            float check_min_y = next_y;
+            float check_max_y = next_y + size.getY();
+            if (dy > 0) check_min_y += 0.01f; // Skip floor slightly when jumping
+            else if (dy < 0) check_max_y -= 0.01f; // Skip ceiling slightly when falling
+
+            // Check collision with a small horizontal buffer (0.1f) to avoid snagging on walls while jumping/falling
+            if (CheckCollision(pos.getX() - half_x + 0.1f, check_min_y, pos.getZ() - half_z + 0.1f,
+                               pos.getX() + half_x - 0.1f, check_max_y, pos.getZ() + half_z - 0.1f)) {
                 if (vel.getY() < 0) is_grounded = true;
                 vel.setY(0);
             } else {
@@ -75,8 +81,8 @@ void MoveAndSlide(dmVMath::Vector3& pos, dmVMath::Vector3& vel, const dmVMath::V
 
     if (!is_grounded && vel.getY() <= 0) {
         float check_dist = 0.05f;
-        if (CheckCollision(pos.getX() - half_x + 0.05f, pos.getY() - check_dist, pos.getZ() - half_z + 0.05f,
-                          pos.getX() + half_x - 0.05f, pos.getY(), pos.getZ() + half_z - 0.05f)) {
+        if (CheckCollision(pos.getX() - half_x + 0.1f, pos.getY() - check_dist, pos.getZ() - half_z + 0.1f,
+                          pos.getX() + half_x - 0.1f, pos.getY(), pos.getZ() + half_z - 0.1f)) {
             is_grounded = true;
             vel.setY(0);
         }
