@@ -440,13 +440,13 @@ static void execute_mesh_generation_pipeline(const uint8_t* world_blocks, const 
 
     uint64_t start_time = dmTime::GetTime();
     int current_quad_index = 0, total_face_count = 0;
-    static uint64_t greedy_mask[MAX_GRID_SIZE * MAX_GRID_SIZE];
+    static uint32_t greedy_mask[MAX_GRID_SIZE * MAX_GRID_SIZE];
 
     g_debug_quads.clear();
 
     for (int face_direction = 1; face_direction <= 6; face_direction++) {
         for (int slice_idx = 0; slice_idx < side_length; slice_idx++) {
-            memset(greedy_mask, 0, side_length * side_length * sizeof(uint64_t));
+            memset(greedy_mask, 0, side_length * side_length * sizeof(uint32_t));
 
             // Visibility scan for current slice and direction
             for (int v_idx = 0; v_idx < side_length; v_idx++) {
@@ -467,17 +467,17 @@ static void execute_mesh_generation_pipeline(const uint8_t* world_blocks, const 
                     bool neighbor_is_transparent = (neighbor_id == 0) || !g_block_defs[neighbor_id].registered || g_block_defs[neighbor_id].transparent;
                     if (!neighbor_is_transparent) continue;
 
-                    greedy_mask[v_idx * side_length + u_idx] = (uint64_t)current_id | (1ULL << 48);
+                    greedy_mask[v_idx * side_length + u_idx] = (uint32_t)current_id | (1U << 30);
                 }
             }
 
             // Greedy merge on the current slice mask
             for (int v_idx = 0; v_idx < side_length; v_idx++) {
                 for (int u_idx = 0; u_idx < side_length; u_idx++) {
-                    uint64_t mask_val = greedy_mask[v_idx * side_length + u_idx];
+                    uint32_t mask_val = greedy_mask[v_idx * side_length + u_idx];
                     if (!mask_val) continue;
 
-                    uint16_t block_id = mask_val & 0xFFFF;
+                    uint16_t block_id = (uint16_t)(mask_val & 0xFFFF);
                     
                     int width = 1, height = 1;
                     while (u_idx + width < side_length && greedy_mask[v_idx * side_length + u_idx + width] == mask_val) width++;
