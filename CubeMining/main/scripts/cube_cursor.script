@@ -12,7 +12,7 @@ local H_DISABLE = hash("disable")
 
 
 local function get_targeted_cube(ray_start, ray_dir, max_dist)
-    local hits = terrain.shoot(ray_start, ray_dir, max_dist, 0)
+    local hits = voxel_engine.shoot(ray_start, ray_dir, max_dist, 0)
     if hits and #hits > 0 then
         local hit = hits[1]
         if hit.is_block then

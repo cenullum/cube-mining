@@ -11,7 +11,7 @@ local function explode(self)
     local radius = self.radius or 4.0
 
     -- Consolidate block destruction and NPC damage in C++
-    terrain.explode(pos, radius, 80)
+    voxel_engine.explode(pos, radius, 80)
 
     sm.play(sm.bomb, 1.0, pos)
     go.delete()
@@ -60,7 +60,7 @@ function update(self, dt)
     local pos = go.get_position()
     local feet_pos = pos - vmath.vector3(0, size.y / 2, 0)
 
-    local new_feet_pos, new_vel, grounded = terrain.move_and_slide(feet_pos, vel, size, dt)
+    local new_feet_pos, new_vel, grounded = voxel_engine.move_and_slide(feet_pos, vel, size, dt)
 
     self.velocity = new_vel
     local new_pos = new_feet_pos + vmath.vector3(0, size.y / 2, 0)

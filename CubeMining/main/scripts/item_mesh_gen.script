@@ -252,7 +252,7 @@ local function update_hand_model(self)
             end
         end
     elseif self.active_mode == "block" then
-        local b_def = terrain.get_block_info(self.current_block)
+        local b_def = voxel_engine.get_block_info(self.current_block)
         if not b_def then return end
 
         if b_def.uvs then

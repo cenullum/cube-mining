@@ -59,7 +59,7 @@ end
 
 local function request_mesh_update(self)
     local debug_mode = (_G.performance_mode == 2)
-    terrain.request_mesh_update(self.ao_enabled, self.light_mode, debug_mode)
+    voxel_engine.request_mesh_update(self.ao_enabled, self.light_mode, debug_mode)
     self.mesh_pending = true
 end
 
@@ -138,7 +138,7 @@ local function register_blocks(self)
                 end
             end
 
-            terrain.register_block(
+            voxel_engine.register_block(
                 id,
                 transparent,
                 solid,
@@ -162,7 +162,7 @@ local function create_chunk(self)
     go.set(mesh_go.mesh_url, H_TEXTURE1, self.breaking_texture)
 
     -- Allocate initial buffer matching the C++ max size
-    local max_verts       = terrain.get_max_vertices()
+    local max_verts       = voxel_engine.get_max_vertices()
     local buf             = buffer.create(max_verts, {
         { name = H_POSITION,  type = buffer.VALUE_TYPE_FLOAT32, count = 3 },
         { name = H_TEXCOORD0, type = buffer.VALUE_TYPE_FLOAT32, count = 4 }, -- base_uv, unit_size
@@ -188,15 +188,15 @@ local function create_chunk(self)
 
     self.buf             = buf
     self.mesh_url        = mesh_go.mesh_url
-    _G.terrain_mesh_url  = mesh_go.mesh_url
+    _G.world_voxel_mesh_url  = mesh_go.mesh_url
     self.buffer_resource = resource.create_buffer(string.format(PATCH_BUFFER, 7), { buffer = buf })
     go.set(self.mesh_url, H_VERTICES, self.buffer_resource)
 
     self.max_verts = max_verts
 
     -- Initial mesh update (synchronous lighting + async mesh)
-    terrain.recalc_lighting_sync()
-    terrain.update_light_buffer(self.light_buffer)
+    voxel_engine.recalc_lighting_sync()
+    voxel_engine.update_light_buffer(self.light_buffer)
     resource.set_texture(self.light_texture, self.light_tex_params, self.light_buffer)
 
     request_mesh_update(self)
@@ -213,7 +213,7 @@ function init(self)
     self.mesh_pending = false
 
     -- Initialize C++ world storage and generate terrain
-    terrain.init(grid_size, os.time())
+    voxel_engine.init(grid_size, os.time())
 
     -- Register block data with C++
     register_blocks(self)
@@ -224,7 +224,7 @@ end
 
 function update(self, dt)
     -- Poll for mesh results from the worker thread
-    local buf, vc, fc, qc, b_time = terrain.poll_mesh_buffer()
+    local buf, vc, fc, qc, b_time = voxel_engine.poll_mesh_buffer()
     if buf then
         -- Note: vc is current active verts, but buf has max_verts size to match resource
         print("terrain_mesh_gen: Applying mesh... verts=" .. vc .. " time=" .. string.format("%.2f", b_time) .. "ms")
@@ -232,11 +232,11 @@ function update(self, dt)
         resource.set_buffer(self.buffer_resource, buf)
 
         -- Update light texture to match newest lighting pass
-        terrain.update_light_buffer(self.light_buffer)
+        voxel_engine.update_light_buffer(self.light_buffer)
         resource.set_texture(self.light_texture, self.light_tex_params, self.light_buffer)
 
         -- Cache debug quads for performance overlay
-        local quads = terrain.get_debug_quads()
+        local quads = voxel_engine.get_debug_quads()
         local world_pos = go.get_world_position(self.mesh_url) or vmath.vector3()
         print("terrain_mesh_gen: Received " .. #quads .. " debug quads from C++ at " .. tostring(world_pos))
 
@@ -277,21 +277,21 @@ function on_message(self, message_id, message, sender)
     if message_id == H_DESTROY_CUBE then
         local gx, gy, gz = message.gx, message.gy, message.gz
         if gx and gy and gz and grid_size then
-            local b_id = terrain.get_block(gx, gy, gz)
+            local b_id = voxel_engine.get_block(gx, gy, gz)
             if b_id ~= 0 and b_id ~= 2 then
                 local offset = -grid_size / 2 + 0.5
                 TEMP_POS.x = offset + gx
                 TEMP_POS.y = offset + gy
                 TEMP_POS.z = 490 + gz
 
-                local b_def = terrain.get_block_info(b_id)
+                local b_def = voxel_engine.get_block_info(b_id)
                 if b_def and b_def.break_sound then
                     sm.play(b_def.break_sound, 1.0, TEMP_POS)
                 else
                     sm.play(sm.stone_debris, 1.0, TEMP_POS)
                 end
 
-                terrain.set_block(gx, gy, gz, 0)
+                voxel_engine.set_block(gx, gy, gz, 0)
 
                 local e_key = gx .. "_" .. gy .. "_" .. gz
                 if self.block_entities[e_key] then
@@ -307,8 +307,8 @@ function on_message(self, message_id, message, sender)
         local target_id = message.block_id or 1
         if gx and gy and gz and grid_size then
             if gx >= 0 and gx < grid_size and gy >= 0 and gy < grid_size and gz >= 0 and gz < grid_size then
-                if terrain.get_block(gx, gy, gz) == 0 then
-                    terrain.set_block(gx, gy, gz, target_id)
+                if voxel_engine.get_block(gx, gy, gz) == 0 then
+                    voxel_engine.set_block(gx, gy, gz, target_id)
 
                     if target_id == 12 and self.torch_factory then
                         local offset = -grid_size / 2 + 0.5
@@ -341,9 +341,9 @@ function on_message(self, message_id, message, sender)
                         if gx >= 0 and gx < grid_size and
                             gy > 0 and gy < grid_size and
                             gz >= 0 and gz < grid_size then
-                            local current_id = terrain.get_block(gx, gy, gz)
+                            local current_id = voxel_engine.get_block(gx, gy, gz)
                             if current_id ~= target_id and current_id ~= 2 then
-                                terrain.set_block(gx, gy, gz, target_id)
+                                voxel_engine.set_block(gx, gy, gz, target_id)
                                 if target_id == 0 then
                                     local e_key = gx .. "_" .. gy .. "_" .. gz
                                     if self.block_entities[e_key] then
@@ -376,9 +376,9 @@ function on_message(self, message_id, message, sender)
                     if gx >= 0 and gx < grid_size and
                         gy > 0 and gy < grid_size and
                         gz >= 0 and gz < grid_size then
-                        local current_id = terrain.get_block(gx, gy, gz)
+                        local current_id = voxel_engine.get_block(gx, gy, gz)
                         if current_id ~= target_id and current_id ~= 2 then
-                            terrain.set_block(gx, gy, gz, target_id)
+                            voxel_engine.set_block(gx, gy, gz, target_id)
                             if target_id == 0 then
                                 local e_key = gx .. "_" .. gy .. "_" .. gz
                                 if self.block_entities[e_key] then
@@ -415,5 +415,5 @@ end
 
 function final(self)
     resource.release(string.format(PATCH_BUFFER, 7))
-    terrain.shutdown()
+    voxel_engine.shutdown()
 end

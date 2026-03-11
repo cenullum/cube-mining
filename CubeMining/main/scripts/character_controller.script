@@ -209,7 +209,7 @@ local function perform_shot(self, message)
     -- parameters: origin, dir, dist, penetration, damage, knockback_power
     local damage = message.damage or 25
     local penetration = message.penetration or 1
-    local hits = terrain.shoot(cam_pos, forward, 100, penetration, damage, 5.0)
+    local hits = voxel_engine.shoot(cam_pos, forward, 100, penetration, damage, 5.0)
 
     if hits and #hits > 0 then
         for _, hit in ipairs(hits) do
@@ -324,7 +324,7 @@ function update(self, dt)
 
         -- Physics Step
         local impact_vel_y = self.velocity.y
-        local new_feet_pos, new_vel, grounded = terrain.move_and_slide(feet_pos, self.velocity, self.size, dt)
+        local new_feet_pos, new_vel, grounded = voxel_engine.move_and_slide(feet_pos, self.velocity, self.size, dt)
 
         self.velocity = new_vel
 
@@ -339,7 +339,7 @@ function update(self, dt)
 
             -- Check X movement
             if new_feet_pos.x ~= feet_pos.x then
-                local x_safe = terrain.check_collision(
+                local x_safe = voxel_engine.check_collision(
                     new_feet_pos.x - hx, check_y, feet_pos.z - hz,
                     new_feet_pos.x + hx, y, feet_pos.z + hz
                 )
@@ -351,7 +351,7 @@ function update(self, dt)
 
             -- Check Z movement
             if new_feet_pos.z ~= feet_pos.z then
-                local z_safe = terrain.check_collision(
+                local z_safe = voxel_engine.check_collision(
                     new_feet_pos.x - hx, check_y, new_feet_pos.z - hz,
                     new_feet_pos.x + hx, y, new_feet_pos.z + hz
                 )
@@ -522,7 +522,7 @@ function update(self, dt)
     if px ~= self.last_px or py ~= self.last_py or pz ~= self.last_pz then
         self.last_px, self.last_py, self.last_pz = px, py, pz
 
-        local ambient_light = terrain.get_ambient_light(vmath.vector3(px, py, pz))
+        local ambient_light = voxel_engine.get_ambient_light(vmath.vector3(px, py, pz))
         _G.player_ambient_light = ambient_light
 
         -- Only update shader if ambient light actually changed

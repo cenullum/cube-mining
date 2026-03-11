@@ -22,11 +22,11 @@ function M.init(self)
     self.light_update_frame = math.random(1, 10)
     self.frame_counter = 0
     self.damage_flash_timer = 0
-    self.ambient_light = terrain.get_ambient_light(go.get_position(self.id))
+    self.ambient_light = voxel_engine.get_ambient_light(go.get_position(self.id))
 
     -- Register with C++ engine directly
-    if terrain and terrain.register_npc then
-        terrain.register_npc(self.id, self.id, go.get_position(), self.size, false, {
+    if voxel_engine and voxel_engine.register_npc then
+        voxel_engine.register_npc(self.id, self.id, go.get_position(), self.size, false, {
             state = 1,
             timer = 0,
             state_duration = math.random(4, 6),
@@ -45,7 +45,7 @@ function M.init(self)
 end
 
 function M.final(self)
-    terrain.unregister_npc(self.id)
+    voxel_engine.unregister_npc(self.id)
 end
 
 function M.die(self)
@@ -95,7 +95,7 @@ function M.update(self, dt)
     if self.frame_counter >= 10 then
         self.frame_counter = 0
         local pos = go.get_position(self.id)
-        local new_ambient = terrain.get_ambient_light(pos)
+        local new_ambient = voxel_engine.get_ambient_light(pos)
         if new_ambient ~= self.ambient_light then
             self.ambient_light = new_ambient
             needs_tint_update = true
