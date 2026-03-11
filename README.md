@@ -3,9 +3,9 @@
 
 # Cube Mining
 
-A 3D voxel mining example built with the **Defold Game Engine**. This project includes mesh generation, collision detection, and performance monitoring.
+A 3D voxel template built with the **Defold Game Engine**. This project includes mesh generation, lighting, player movement , npc movement, collision detection, and performance monitoring.
 
-## Play the demo here: https://cenullum.itch.io/cubemining
+## PLAY: https://cenullum.itch.io/cubemining
 
 ![recording_20260214_014218](https://github.com/user-attachments/assets/577a2205-77c9-462d-b8ac-08a0a5fded29)
 
