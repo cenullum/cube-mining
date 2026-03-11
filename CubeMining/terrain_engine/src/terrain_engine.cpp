@@ -254,27 +254,18 @@ static void perform_lighting_pass(uint8_t* blocks, uint8_t* sun_light_data, uint
     memset(source_light_data, 0, total_blocks);
 
     // Source light seeds + Sun top-down
-    static int bfs_queue_buffer[MAX_BLOCKS * 4]; // x,y,z triples, reused
+    static int source_queue[MAX_BLOCKS];
+    static int sun_queue[MAX_BLOCKS];
     int source_queue_length = 0, sun_queue_length = 0;
-    
-    // Use separate regions of bfs_queue_buffer
-    int* source_queue = bfs_queue_buffer;
-    int* sun_queue = bfs_queue_buffer + MAX_BLOCKS * 2; 
 
     // Seed source lights from blocks that emit light
     for (int i = 0; i < total_blocks; i++) {
         uint8_t block_id = blocks[i];
         if (g_block_defs[block_id].registered && g_block_defs[block_id].light_level > 0) {
             source_light_data[i] = g_block_defs[block_id].light_level;
-            int z = i / (side_length * side_length);
-            int remainder = i % (side_length * side_length);
-            int y = remainder / side_length;
-            int x = remainder % side_length;
-            
-            source_queue[source_queue_length * 3]     = x; 
-            source_queue[source_queue_length * 3 + 1] = y; 
-            source_queue[source_queue_length * 3 + 2] = z;
-            source_queue_length++;
+            if (source_queue_length < MAX_BLOCKS) {
+                source_queue[source_queue_length++] = i;
+            }
         }
     }
 
@@ -283,16 +274,16 @@ static void perform_lighting_pass(uint8_t* blocks, uint8_t* sun_light_data, uint
         for (int z = 0; z < side_length; z++) {
             int current_sun_light = 15;
             for (int y = side_length - 1; y >= 0; y--) {
-                uint8_t block_id = blocks[calculate_block_index(x, y, z, side_length)];
+                int cur_idx = calculate_block_index(x, y, z, side_length);
+                uint8_t block_id = blocks[cur_idx];
                 if (g_block_defs[block_id].registered && !g_block_defs[block_id].transparent) {
                     current_sun_light = 0;
                 }
-                sun_light_data[calculate_block_index(x, y, z, side_length)] = current_sun_light;
+                sun_light_data[cur_idx] = current_sun_light;
                 if (current_sun_light > 0) {
-                    sun_queue[sun_queue_length * 3]     = x; 
-                    sun_queue[sun_queue_length * 3 + 1] = y; 
-                    sun_queue[sun_queue_length * 3 + 2] = z;
-                    sun_queue_length++;
+                    if (sun_queue_length < MAX_BLOCKS) {
+                        sun_queue[sun_queue_length++] = cur_idx;
+                    }
                 }
             }
         }
@@ -304,24 +295,26 @@ static void perform_lighting_pass(uint8_t* blocks, uint8_t* sun_light_data, uint
 
     // BFS for source (torch) light propagation
     for (int i = 0; i < source_queue_length; i++) {
-        int cx = source_queue[i * 3], cy = source_queue[i * 3 + 1], cz = source_queue[i * 3 + 2];
-        int current_level = source_light_data[calculate_block_index(cx, cy, cz, side_length)];
+        int cur_idx = source_queue[i];
+        int cz  = cur_idx / (side_length * side_length);
+        int rem = cur_idx % (side_length * side_length);
+        int cy  = rem / side_length;
+        int cx  = rem % side_length;
+        int current_level = source_light_data[cur_idx];
         if (current_level <= 1) continue;
         
         for (int d = 0; d < 6; d++) {
             int nx = cx + neighbor_offsets[d][0], ny = cy + neighbor_offsets[d][1], nz = cz + neighbor_offsets[d][2];
             if (nx < 0 || nx >= side_length || ny < 0 || ny >= side_length || nz < 0 || nz >= side_length) continue;
             
-            uint8_t neighbor_id = blocks[calculate_block_index(nx, ny, nz, side_length)];
+            int n_idx = calculate_block_index(nx, ny, nz, side_length);
+            uint8_t neighbor_id = blocks[n_idx];
             bool is_transparent = !g_block_defs[neighbor_id].registered || g_block_defs[neighbor_id].transparent;
             
-            if (is_transparent && source_light_data[calculate_block_index(nx, ny, nz, side_length)] < current_level - 1) {
-                source_light_data[calculate_block_index(nx, ny, nz, side_length)] = current_level - 1;
+            if (is_transparent && source_light_data[n_idx] < current_level - 1) {
+                source_light_data[n_idx] = current_level - 1;
                 if (source_queue_length < MAX_BLOCKS) {
-                    source_queue[source_queue_length * 3]     = nx; 
-                    source_queue[source_queue_length * 3 + 1] = ny; 
-                    source_queue[source_queue_length * 3 + 2] = nz;
-                    source_queue_length++;
+                    source_queue[source_queue_length++] = n_idx;
                 }
             }
         }
@@ -329,29 +322,32 @@ static void perform_lighting_pass(uint8_t* blocks, uint8_t* sun_light_data, uint
 
     // BFS for sun light propagation
     for (int i = 0; i < sun_queue_length; i++) {
-        int cx = sun_queue[i * 3], cy = sun_queue[i * 3 + 1], cz = sun_queue[i * 3 + 2];
-        int current_level = sun_light_data[calculate_block_index(cx, cy, cz, side_length)];
+        int cur_idx = sun_queue[i];
+        int cz  = cur_idx / (side_length * side_length);
+        int rem = cur_idx % (side_length * side_length);
+        int cy  = rem / side_length;
+        int cx  = rem % side_length;
+        int current_level = sun_light_data[cur_idx];
         if (current_level <= 1) continue;
         
         for (int d = 0; d < 6; d++) {
             int nx = cx + neighbor_offsets[d][0], ny = cy + neighbor_offsets[d][1], nz = cz + neighbor_offsets[d][2];
             if (nx < 0 || nx >= side_length || ny < 0 || ny >= side_length || nz < 0 || nz >= side_length) continue;
             
-            uint8_t neighbor_id = blocks[calculate_block_index(nx, ny, nz, side_length)];
+            int n_idx = calculate_block_index(nx, ny, nz, side_length);
+            uint8_t neighbor_id = blocks[n_idx];
             bool is_transparent = !g_block_defs[neighbor_id].registered || g_block_defs[neighbor_id].transparent;
             
-            if (is_transparent && sun_light_data[calculate_block_index(nx, ny, nz, side_length)] < current_level - 1) {
-                sun_light_data[calculate_block_index(nx, ny, nz, side_length)] = current_level - 1;
+            if (is_transparent && sun_light_data[n_idx] < current_level - 1) {
+                sun_light_data[n_idx] = current_level - 1;
                 if (sun_queue_length < MAX_BLOCKS) {
-                    sun_queue[sun_queue_length * 3]     = nx; 
-                    sun_queue[sun_queue_length * 3 + 1] = ny; 
-                    sun_queue[sun_queue_length * 3 + 2] = nz;
-                    sun_queue_length++;
+                    sun_queue[sun_queue_length++] = n_idx;
                 }
             }
         }
     }
 }
+
 
 // ============================================================
 // 5. Mesh Generation
