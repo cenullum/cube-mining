@@ -41,80 +41,63 @@ vec4 sample_light(vec3 pc) {
 vec4 bilinear_light(vec3 pos, vec3 normal) {
     vec3 i = floor(pos);
     vec3 f = fract(pos);
-    
-    if (abs(normal.x) > 0.5) {
-        // YZ plane interpolation
-        vec4 c00 = sample_light(i + vec3(0.0, 0.0, 0.0));
-        vec4 c10 = sample_light(i + vec3(0.0, 1.0, 0.0));
-        vec4 c01 = sample_light(i + vec3(0.0, 0.0, 1.0));
-        vec4 c11 = sample_light(i + vec3(0.0, 1.0, 1.0));
-        return mix(mix(c00, c10, f.y), mix(c01, c11, f.y), f.z);
-    } else if (abs(normal.y) > 0.5) {
-        // XZ plane interpolation
-        vec4 c00 = sample_light(i + vec3(0.0, 0.0, 0.0));
-        vec4 c10 = sample_light(i + vec3(1.0, 0.0, 0.0));
-        vec4 c01 = sample_light(i + vec3(0.0, 0.0, 1.0));
-        vec4 c11 = sample_light(i + vec3(1.0, 0.0, 1.0));
-        return mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.z);
-    } else {
-        // XY plane interpolation
-        vec4 c00 = sample_light(i + vec3(0.0, 0.0, 0.0));
-        vec4 c10 = sample_light(i + vec3(1.0, 0.0, 0.0));
-        vec4 c01 = sample_light(i + vec3(0.0, 1.0, 0.0));
-        vec4 c11 = sample_light(i + vec3(1.0, 1.0, 0.0));
-        return mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
-    }
+
+    vec3 mask = 1.0 - abs(normal);
+
+    vec3 d1 = vec3(mask.x, (1.0 - mask.x) * mask.y, 0.0);
+    vec3 d2 = mask - d1;
+
+    float u = dot(f, d1);
+    float v = dot(f, d2);
+
+    vec4 c00 = sample_light(i);
+    vec4 c10 = sample_light(i + d1);
+    vec4 c01 = sample_light(i + d2);
+    vec4 c11 = sample_light(i + d1 + d2);
+
+    return mix(mix(c00, c10, u), mix(c01, c11, u), v);
 }
 
 void main()
 {
-    vec4 tint_pm = vec4(tint.xyz * tint.w, tint.w);
-    
-    // Robust Greedy Tiling
-    vec2 base_uv = var_atlas_metadata.xy;
-    vec2 unit_size = var_atlas_metadata.zw;
-    vec2 atlas_uv = base_uv + fract(var_local_uv * var_quad_size) * unit_size;
-    
-    vec4 color = texture(texture0, atlas_uv) * tint_pm;
+    vec2 atlas_uv = var_atlas_metadata.xy
+                  + fract(var_local_uv * var_quad_size) * var_atlas_metadata.zw;
 
-    // Overlay Breaking Texture
+    vec4 color = texture(texture0, atlas_uv) * vec4(tint.xyz * tint.w, tint.w);
+
     if (break_info.y > 0.5) {
-        vec3 interior_pos = var_pos - var_normal * 0.05;
-        vec3 grid_pos = floor(interior_pos + 0.5);
+        vec3 grid_pos = round(var_pos - var_normal * 0.05); // floor(x+0.5) yerine round
         if (all(lessThan(abs(grid_pos - break_pos.xyz), vec3(0.01)))) {
-            vec2 block_uv;
-            if (abs(var_normal.x) > 0.5) {
-                block_uv = fract(var_pos.zy + 0.5);
-            } else if (abs(var_normal.y) > 0.5) {
-                block_uv = fract(var_pos.xz + 0.5);
-            } else {
-                block_uv = fract(var_pos.xy + 0.5);
-            }
-            float frame = floor(break_info.x);
-            float total_frames = max(1.0, break_info.z);
-            vec2 b_uv = vec2((block_uv.x + frame) / total_frames, 1.0 - block_uv.y);
+
+            vec3 an     = abs(var_normal);
+            float use_x = step(an.y, an.x) * step(an.z, an.x);
+            float use_y = step(an.x, an.y) * step(an.z, an.y);
+
+            vec2 block_uv = mix(
+                mix(fract(var_pos.xy + 0.5),
+                    fract(var_pos.xz + 0.5), use_y),
+                    fract(var_pos.zy + 0.5), use_x);
+
+            vec2 b_uv = vec2(
+                (block_uv.x + floor(break_info.x)) / max(1.0, break_info.z),
+                1.0 - block_uv.y);
+
             vec4 break_color = texture(texture1, b_uv);
             color.rgb = mix(color.rgb, color.rgb * break_color.rgb, break_color.a);
         }
     }
-    
-    // Light calculation
-    vec3 sample_pos = var_pos + var_normal * 0.5;
-    vec4 light_data = bilinear_light(sample_pos, var_normal);
-    
-    // light_data.rgb contains our combined sun and torch
-    // light_data.a contains our Ambient Occlusion factor (0.0 = solid shadow, 1.0 = open air)
-    float ao = mix(0.2, 1.0, light_data.a); // Map AO curve purely from alpha
 
-    // Combine intensities footprint
-    vec3 final_light = clamp(light_data.rgb, 0.02, 1.5) * var_light * ao;
-    color.rgb *= final_light;
 
-    // Apply Fog (Per-fragment)
-    lowp float dist = length(var_view_pos);
-    lowp float fog_factor = clamp((fog_params.y - dist) / (fog_params.y - fog_params.x), 0.0, 1.0);
+    vec4 light_data = bilinear_light(var_pos + var_normal * 0.5, var_normal);
+    color.rgb *= clamp(light_data.rgb, 0.02, 1.5)
+               * var_light
+               * mix(0.2, 1.0, light_data.a);
+
+
+    lowp float fog_factor = clamp(
+        (fog_params.y - (-var_view_pos.z)) / (fog_params.y - fog_params.x),
+        0.0, 1.0);
     color.rgb = mix(fog_color.rgb, color.rgb, fog_factor);
 
-    // Output final color (force alpha to 1.0 for solid blocks)
     out_fragColor = vec4(color.rgb, 1.0);
 }
