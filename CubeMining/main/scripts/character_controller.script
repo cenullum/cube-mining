@@ -146,11 +146,11 @@ local function update_camera(self, dt)
         local right = vmath.rotate(rot_y, vmath.vector3(1, 0, 0))
         local side_vel = vmath.dot(self.velocity, right)
 
-        local target_tilt = -side_vel * self.tilt_intensity                 -- negative for leaning into it
-        self.current_tilt = vmath.lerp(0.1, self.current_tilt, target_tilt) -- Using fixed lerp factor for simplicity or self.sway_smoothness * dt
+        local target_tilt = -side_vel * self.tilt_intensity -- negative for leaning into it
+        self.current_tilt = vmath.lerp(math.min(self.sway_smoothness * dt, 1.0), self.current_tilt, target_tilt)
         roll = self.current_tilt
     else
-        self.current_tilt = vmath.lerp(0.1, self.current_tilt, 0)
+        self.current_tilt = vmath.lerp(math.min(self.sway_smoothness * dt, 1.0), self.current_tilt, 0)
         roll = self.current_tilt
     end
 
@@ -171,9 +171,9 @@ local function update_camera(self, dt)
 
         -- Move forward based on forward velocity
         local target_lean = forward_vel * self.lean_intensity
-        self.current_lean = vmath.lerp(0.1, self.current_lean, target_lean)
+        self.current_lean = vmath.lerp(math.min(self.sway_smoothness * dt, 1.0), self.current_lean, target_lean)
     else
-        self.current_lean = vmath.lerp(0.1, self.current_lean, 0)
+        self.current_lean = vmath.lerp(math.min(self.sway_smoothness * dt, 1.0), self.current_lean, 0)
     end
 
     local forward = vmath.rotate(rot, vmath.vector3(0, 0, -1))
@@ -294,7 +294,7 @@ function update(self, dt)
         -- Compensate GO position so feet stay at the same level when eye_offset changes
         local prev_eye_height = self.current_eye_height
         local target_eye = self.sneaking and self.sneak_eye_height or self.eye_height
-        self.current_eye_height = vmath.lerp(0.15, self.current_eye_height, target_eye)
+        self.current_eye_height = vmath.lerp(math.min(15.0 * dt, 1.0), self.current_eye_height, target_eye)
         if math.abs(self.current_eye_height - target_eye) < 0.001 then
             self.current_eye_height = target_eye
         end
@@ -313,8 +313,8 @@ function update(self, dt)
         local target_vel_z = wish_dir.z * speed
 
         -- Accelerate towards target velocity
-        self.velocity.x = vmath.lerp(0.1, self.velocity.x, target_vel_x)
-        self.velocity.z = vmath.lerp(0.1, self.velocity.z, target_vel_z)
+        self.velocity.x = vmath.lerp(math.min(10.0 * dt, 1.0), self.velocity.x, target_vel_x)
+        self.velocity.z = vmath.lerp(math.min(10.0 * dt, 1.0), self.velocity.z, target_vel_z)
 
         -- Gravity
         self.velocity.y = self.velocity.y + self.gravity * dt
@@ -329,35 +329,45 @@ function update(self, dt)
         self.velocity = new_vel
 
         -- Sneak edge detection (post-movement — AABB based)
-        -- Checks if the new bounding box has ANY ground block below it.
-        -- If none, the move is reverted.
-        if self.sneaking and grounded then
-            local hx = self.size.x * 0.5 - 0.05
-            local hz = self.size.z * 0.5 - 0.05
-            local y = new_feet_pos.y
-            local check_y = y - 0.1
+        -- Checks if we step off an edge and reverts the axis that caused it.
+        -- Uses self.grounded (prev frame) to ensure we were already on ground.
+        if self.sneaking and self.grounded and self.velocity.y <= 0 then
+            -- Use a stricter buffer (0.11) than physics (0.1) so we stop before physics drops us
+            local hx = self.size.x * 0.5 - 0.11
+            local hz = self.size.z * 0.5 - 0.11
+            local check_y = feet_pos.y - 0.05
 
-            -- Check X movement
-            if new_feet_pos.x ~= feet_pos.x then
-                local x_safe = voxel_engine.check_collision(
-                    new_feet_pos.x - hx, check_y, feet_pos.z - hz,
-                    new_feet_pos.x + hx, y, feet_pos.z + hz
-                )
-                if not x_safe then
-                    new_feet_pos.x = feet_pos.x
-                    self.velocity.x = 0
-                end
+            -- Check X movement (using base Z)
+            local safe_x = voxel_engine.check_collision(
+                new_feet_pos.x - hx, check_y, feet_pos.z - hz,
+                new_feet_pos.x + hx, feet_pos.y, feet_pos.z + hz
+            )
+            -- If not safe (meaning it did NOT collide with ground, so it's empty air), revert X
+            if not safe_x then
+                new_feet_pos.x = feet_pos.x
+                self.velocity.x = 0
             end
 
-            -- Check Z movement
-            if new_feet_pos.z ~= feet_pos.z then
-                local z_safe = voxel_engine.check_collision(
+            -- Check Z movement (using new X, to allow diagonal slide along an edge)
+            local safe_z = voxel_engine.check_collision(
+                new_feet_pos.x - hx, check_y, new_feet_pos.z - hz,
+                new_feet_pos.x + hx, feet_pos.y, new_feet_pos.z + hz
+            )
+            if not safe_z then
+                new_feet_pos.z = feet_pos.z
+                self.velocity.z = 0
+            end
+
+            -- If we were dropped by physics, but reverting our X/Z prevented the fall:
+            if not grounded then
+                local safe = voxel_engine.check_collision(
                     new_feet_pos.x - hx, check_y, new_feet_pos.z - hz,
-                    new_feet_pos.x + hx, y, new_feet_pos.z + hz
+                    new_feet_pos.x + hx, feet_pos.y, new_feet_pos.z + hz
                 )
-                if not z_safe then
-                    new_feet_pos.z = feet_pos.z
-                    self.velocity.z = 0
+                if safe then
+                    new_feet_pos.y = feet_pos.y
+                    self.velocity.y = 0
+                    grounded = true
                 end
             end
         end
@@ -366,9 +376,10 @@ function update(self, dt)
         local new_eye_pos = new_feet_pos + self.eye_offset
         go.set_position(new_eye_pos)
 
-        -- Export state for hand_slot_manager (on-demand calculations)
+        -- Export state for hand_slot_manager & performance overlay (on-demand calculations)
         _G.player_eye_height = self.current_eye_height
         _G.player_size = self.size
+        _G.player_sneaking = self.sneaking
 
         -- Landing Sound & Bounce
         if grounded and not self.grounded and impact_vel_y < -2.0 then
@@ -512,11 +523,9 @@ function update(self, dt)
 
     -- Update Hand Item Light
     local eye_pos = go.get_position()
-    local grid_size = _G.grid_size or 16
-    local offset = -grid_size / 2 + 0.5
-    local px = math.floor(eye_pos.x - offset + 0.5)
-    local py = math.floor(eye_pos.y - offset + 0.5)
-    local pz = math.floor(eye_pos.z - 490 + 0.5)
+    local px = math.floor(eye_pos.x)
+    local py = math.floor(eye_pos.y)
+    local pz = math.floor(eye_pos.z)
 
     -- 1. Lighting calculation with caching (Offloaded to C++)
     if px ~= self.last_px or py ~= self.last_py or pz ~= self.last_pz then
@@ -537,7 +546,7 @@ function update(self, dt)
     -- Fog color and clear color is now handled by GPU (render script and shaders)
     -- We just calculate the depth factor for clear color here (or move it to render script)
     local surface_y = grid_size - 1
-    local player_grid_y = (eye_pos.y - offset)
+    local player_grid_y = eye_pos.y
     local depth_below_surface = surface_y - player_grid_y
     local depth_factor = math.max(0, math.min(1, depth_below_surface / 5.0))
 
@@ -670,12 +679,11 @@ function on_input(self, action_id, action)
         -- Spawn 16x16 mice grid around center
         local grid_size = 16
         local spacing = 1.0
-        local offset = (grid_size * spacing) / 2.0
 
         for x = 0, grid_size - 1 do
             for z = 0, grid_size - 1 do
-                local spawn_x = center_pos.x - offset + (x * spacing)
-                local spawn_z = center_pos.z - offset + (z * spacing)
+                local spawn_x = center_pos.x + (x * spacing)
+                local spawn_z = center_pos.z + (z * spacing)
                 local spawn_pos_mouse = vmath.vector3(spawn_x, center_pos.y, spawn_z)
                 factory.create(self.mouse_factory, spawn_pos_mouse, vmath.quat())
             end

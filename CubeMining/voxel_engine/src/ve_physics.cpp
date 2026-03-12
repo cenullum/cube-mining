@@ -4,88 +4,226 @@
 #include <vector>
 #include <algorithm>
 
-bool CheckCollision(float min_x, float min_y, float min_z, float max_x, float max_y, float max_z) {
-    float offset = (float)g_grid_size / -2.0f + 0.5f;
-    float origin_x = offset;
-    float origin_y = offset;
-    float origin_z = 490.0f;
 
-    // Add small epsilon to avoid being stuck on boundaries
-    int start_x = (int)floorf(min_x - origin_x + 0.501f);
-    int end_x   = (int)floorf(max_x - origin_x + 0.499f);
-    int start_y = (int)floorf(min_y - origin_y + 0.501f);
-    int end_y   = (int)floorf(max_y - origin_y + 0.499f);
-    int start_z = (int)floorf(min_z - origin_z + 0.501f);
-    int end_z   = (int)floorf(max_z - origin_z + 0.499f);
 
-    for (int x = start_x; x <= end_x; x++) {
-        for (int y = start_y; y <= end_y; y++) {
-            for (int z = start_z; z <= end_z; z++) {
+// ─────────────────────────────────────────────────────────────────────────────
+// CheckCollision: tests if the AABB overlaps any solid voxel.
+// Epsilons are symmetric: a face exactly on a voxel boundary does NOT collide.
+// ─────────────────────────────────────────────────────────────────────────────
+bool CheckCollision(float min_x, float min_y, float min_z,
+                    float max_x, float max_y, float max_z) {
+    // Inset by a tiny epsilon so a face *exactly* on a voxel edge doesn't count.
+    // This prevents the player from sticking when sliding along a flat wall.
+    const float E = 0.001f;
+
+    int x0 = (int)floorf(min_x + E + 0.5f),  x1 = (int)floorf(max_x - E + 0.5f);
+    int y0 = (int)floorf(min_y + E + 0.5f),  y1 = (int)floorf(max_y - E + 0.5f);
+    int z0 = (int)floorf(min_z + E + 0.5f),  z1 = (int)floorf(max_z - E + 0.5f);
+
+    for (int x = x0; x <= x1; x++)
+        for (int y = y0; y <= y1; y++)
+            for (int z = z0; z <= z1; z++)
                 if (IsSolid(x, y, z)) return true;
-            }
-        }
+
+    return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SnapFloor: after a downward Y collision, snap the AABB bottom to the exact
+// top surface of the voxel it landed on, eliminating float drift.
+// ─────────────────────────────────────────────────────────────────────────────
+static float SnapFloor(float feet_y) {
+    // Top surface of block y is y + 0.5.
+    // Index of the block below feet_y:
+    int iy = (int)floorf(feet_y - 0.05f + 0.5f);
+    return (float)iy + 0.5f;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SnapCeiling: after an upward Y collision, snap the AABB top to the ceiling.
+// ─────────────────────────────────────────────────────────────────────────────
+static float SnapCeiling(float feet_y, float height) {
+    float head_grid_y = feet_y + height;
+    // Bottom surface of block y is y - 0.5.
+    // Index of the block above head:
+    int iy = (int)floorf(head_grid_y + 0.05f + 0.5f);
+    float snapped_head = (float)iy - 0.5f;
+    return snapped_head - height;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TryStepUp: when walking into a wall, try to climb steps up to max_step_height.
+// Returns true if the step was successful, and updates pos.
+// This is the key technique to avoid snagging on voxel edges while walking.
+// ─────────────────────────────────────────────────────────────────────────────
+static bool TryStepUp(dmVMath::Vector3& pos, const dmVMath::Vector3& vel,
+                      float half_x, float half_z, float height,
+                      float dt_step, float max_step_height) {
+    // Only attempt step-up for horizontal movement on the ground
+    float dx = vel.getX() * dt_step;
+    float dz = vel.getZ() * dt_step;
+    if (fabsf(dx) < 1e-6f && fabsf(dz) < 1e-6f) return false;
+
+    // Do not step up if we are visibly falling. Floor snapping handles landing.
+    if (vel.getY() < -0.5f) return false;
+
+    // Try stepping up in small increments
+    const int STEP_SUBSTEPS = 4;
+    for (int i = 1; i <= STEP_SUBSTEPS; i++) {
+        float step_y = pos.getY() + max_step_height * ((float)i / STEP_SUBSTEPS);
+
+        // Check if lifted position is clear (room for the player above the step)
+        bool lifted_clear = !CheckCollision(
+            pos.getX() - half_x, step_y, pos.getZ() - half_z,
+            pos.getX() + half_x, step_y + height, pos.getZ() + half_z
+        );
+        if (!lifted_clear) continue;
+
+        // Check if moved-forward position at lifted height is also clear
+        bool forward_clear = !CheckCollision(
+            pos.getX() + dx - half_x, step_y, pos.getZ() + dz - half_z,
+            pos.getX() + dx + half_x, step_y + height, pos.getZ() + dz + half_z
+        );
+        if (!forward_clear) continue;
+
+        // Check there is ground to stand on after the step
+        bool has_ground = CheckCollision(
+            pos.getX() + dx - half_x, step_y - 0.05f, pos.getZ() + dz - half_z,
+            pos.getX() + dx + half_x, step_y,          pos.getZ() + dz + half_z
+        );
+        if (!has_ground) continue;
+
+        // Step succeeded: lift and move forward
+        pos.setY(step_y);
+        pos.setX(pos.getX() + dx);
+        pos.setZ(pos.getZ() + dz);
+        return true;
     }
     return false;
 }
 
-void MoveAndSlide(dmVMath::Vector3& pos, dmVMath::Vector3& vel, const dmVMath::Vector3& size, float dt, bool& is_grounded) {
-    is_grounded = false;
-    float step_size = 0.4f;
-    float total_dist = dmVMath::Length(vel * dt);
-    int steps = (int)ceilf(total_dist / step_size);
-    if (steps < 1) steps = 1;
+// ─────────────────────────────────────────────────────────────────────────────
+// Depenetrate: if the player is already inside a voxel (e.g. from world edits
+// or a previous frame bug), push them out along Y first, then X/Z.
+// ─────────────────────────────────────────────────────────────────────────────
+static void Depenetrate(dmVMath::Vector3& pos, const dmVMath::Vector3& size) {
+    float hx = size.getX() * 0.5f;
+    float hz = size.getZ() * 0.5f;
+    float h  = size.getY();
 
+    if (!CheckCollision(pos.getX()-hx, pos.getY(), pos.getZ()-hz,
+                        pos.getX()+hx, pos.getY()+h, pos.getZ()+hz))
+        return; // not stuck, nothing to do
+
+    // Try pushing up in small increments (most common case: slightly in a floor)
+    for (int i = 1; i <= 8; i++) {
+        float try_y = pos.getY() + i * 0.125f;
+        if (!CheckCollision(pos.getX()-hx, try_y, pos.getZ()-hz,
+                            pos.getX()+hx, try_y+h, pos.getZ()+hz)) {
+            pos.setY(try_y);
+            return;
+        }
+    }
+
+    // Fallback: try pushing in each cardinal direction
+    const float offsets[4][2] = {{0.25f,0},{-0.25f,0},{0,0.25f},{0,-0.25f}};
+    for (auto& o : offsets) {
+        float tx = pos.getX() + o[0];
+        float tz = pos.getZ() + o[1];
+        if (!CheckCollision(tx-hx, pos.getY(), tz-hz,
+                            tx+hx, pos.getY()+h, tz+hz)) {
+            pos.setX(tx);
+            pos.setZ(tz);
+            return;
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MoveAndSlide: axis-separated AABB sweep with step-up, snapping & depenetration.
+//
+// Key differences from the old version:
+//  - NO shrink buffers on any axis (they caused clipping into voxels)
+//  - Position snapped to voxel boundaries on collision (stops float drift)
+//  - Step-up for smooth traversal over single-voxel height changes
+//  - Depenetration at the start of each frame
+// ─────────────────────────────────────────────────────────────────────────────
+void MoveAndSlide(dmVMath::Vector3& pos, dmVMath::Vector3& vel,
+                  const dmVMath::Vector3& size, float dt, bool& is_grounded) {
+    is_grounded = false;
+
+    float hx = size.getX() * 0.5f;
+    float hz = size.getZ() * 0.5f;
+    float h  = size.getY();
+
+    // Push the player out if they somehow ended up inside a solid voxel
+    Depenetrate(pos, size);
+
+    // Sub-stepping: prevents tunneling through thin walls at high speed
+    float speed = dmVMath::Length(vel);
+    int steps = (int)ceilf(speed * dt / 0.4f);
+    if (steps < 1) steps = 1;
+    if (steps > 20) steps = 20; // safety cap
     float dt_step = dt / (float)steps;
-    float half_x = size.getX() * 0.5f;
-    float half_z = size.getZ() * 0.5f;
 
     for (int s = 0; s < steps; s++) {
+
+        // ── X axis ──────────────────────────────────────────────────────────
         float dx = vel.getX() * dt_step;
-        if (dx != 0) {
-            float next_x = pos.getX() + dx;
-            // Check collision with a small vertical offset (0.1f) to avoid hitting the ground the NPC is standing on
-            if (CheckCollision(next_x - half_x, pos.getY() + 0.1f, pos.getZ() - half_z,
-                               next_x + half_x, pos.getY() + size.getY() - 0.1f, pos.getZ() + half_z)) {
-                vel.setX(0);
+        if (fabsf(dx) > 1e-7f) {
+            float nx = pos.getX() + dx;
+            if (CheckCollision(nx-hx, pos.getY(), pos.getZ()-hz,
+                               nx+hx, pos.getY()+h, pos.getZ()+hz)) {
+                // Try to step over a 1-voxel obstacle before giving up
+                if (!TryStepUp(pos, vel, hx, hz, h, dt_step, 0.3f)) {
+                    vel.setX(0);
+                }
             } else {
-                pos.setX(next_x);
+                pos.setX(nx);
             }
         }
 
+        // ── Z axis ──────────────────────────────────────────────────────────
         float dz = vel.getZ() * dt_step;
-        if (dz != 0) {
-            float next_z = pos.getZ() + dz;
-            if (CheckCollision(pos.getX() - half_x, pos.getY() + 0.1f, next_z - half_z,
-                               pos.getX() + half_x, pos.getY() + size.getY() - 0.1f, next_z + half_z)) {
-                vel.setZ(0);
+        if (fabsf(dz) > 1e-7f) {
+            float nz = pos.getZ() + dz;
+            if (CheckCollision(pos.getX()-hx, pos.getY(), nz-hz,
+                               pos.getX()+hx, pos.getY()+h, nz+hz)) {
+                if (!TryStepUp(pos, vel, hx, hz, h, dt_step, 0.3f)) {
+                    vel.setZ(0);
+                }
             } else {
-                pos.setZ(next_z);
+                pos.setZ(nz);
             }
         }
 
+        // ── Y axis ──────────────────────────────────────────────────────────
         float dy = vel.getY() * dt_step;
-        if (dy != 0) {
-            float next_y = pos.getY() + dy;
-            float check_min_y = next_y;
-            float check_max_y = next_y + size.getY();
-            if (dy > 0) check_min_y += 0.01f; // Skip floor slightly when jumping
-            else if (dy < 0) check_max_y -= 0.01f; // Skip ceiling slightly when falling
-
-            // Check collision with a small horizontal buffer (0.1f) to avoid snagging on walls while jumping/falling
-            if (CheckCollision(pos.getX() - half_x + 0.1f, check_min_y, pos.getZ() - half_z + 0.1f,
-                               pos.getX() + half_x - 0.1f, check_max_y, pos.getZ() + half_z - 0.1f)) {
-                if (vel.getY() < 0) is_grounded = true;
+        if (fabsf(dy) > 1e-7f) {
+            float ny = pos.getY() + dy;
+            if (CheckCollision(pos.getX()-hx, ny, pos.getZ()-hz,
+                               pos.getX()+hx, ny+h, pos.getZ()+hz)) {
+                if (vel.getY() < 0) {
+                    is_grounded = true;
+                    // Snap feet to the exact top of the voxel below us.
+                    // This eliminates the float drift that slowly pushes us into the floor.
+                    pos.setY(SnapFloor(pos.getY()));
+                } else {
+                    // Hit ceiling: snap head down
+                    pos.setY(SnapCeiling(pos.getY(), h));
+                }
                 vel.setY(0);
             } else {
-                pos.setY(next_y);
+                pos.setY(ny);
             }
         }
     }
 
+    // ── Ground proximity check (no Y movement this frame but standing still) ──
     if (!is_grounded && vel.getY() <= 0) {
-        float check_dist = 0.05f;
-        if (CheckCollision(pos.getX() - half_x + 0.1f, pos.getY() - check_dist, pos.getZ() - half_z + 0.1f,
-                          pos.getX() + half_x - 0.1f, pos.getY(), pos.getZ() + half_z - 0.1f)) {
+        const float GROUND_PROBE = 0.05f;
+        if (CheckCollision(pos.getX()-hx, pos.getY()-GROUND_PROBE, pos.getZ()-hz,
+                           pos.getX()+hx, pos.getY(),              pos.getZ()+hz)) {
             is_grounded = true;
             vel.setY(0);
         }
@@ -113,14 +251,13 @@ int Lua_Explosion(lua_State* L) {
     dmVMath::Vector3 center = *dmScript::ToVector3(L, 1);
     float radius = (float)luaL_checknumber(L, 2);
     float base_damage = (float)luaL_checknumber(L, 3);
-    float offset = (float)g_grid_size / -2.0f + 0.5f;
 
-    int min_x = (int)floorf(center.getX() - offset - radius + 0.5f);
-    int max_x = (int)ceilf(center.getX() - offset + radius + 0.5f);
-    int min_y = (int)floorf(center.getY() - offset - radius + 0.5f);
-    int max_y = (int)ceilf(center.getY() - offset + radius + 0.5f);
-    int min_z = (int)floorf(center.getZ() - 490.0f - radius + 0.5f);
-    int max_z = (int)ceilf(center.getZ() - 490.0f + radius + 0.5f);
+    int min_x = (int)floorf(center.getX() - radius + 0.5f);
+    int max_x = (int)floorf(center.getX() + radius + 0.5f);
+    int min_y = (int)floorf(center.getY() - radius + 0.5f);
+    int max_y = (int)floorf(center.getY() + radius + 0.5f);
+    int min_z = (int)floorf(center.getZ() - radius + 0.5f);
+    int max_z = (int)floorf(center.getZ() + radius + 0.5f);
 
     std::set<uint64_t> touched_chunks;
     float r_sq = radius * radius;
@@ -129,9 +266,9 @@ int Lua_Explosion(lua_State* L) {
     for (int x = min_x; x <= max_x; ++x) {
         for (int y = min_y; y <= max_y; ++y) {
             for (int z = min_z; z <= max_z; ++z) {
-                float dx = (float)x + offset - center.getX();
-                float dy = (float)y + offset - center.getY();
-                float dz = (float)z + 490.0f - center.getZ();
+                float dx = (float)x - center.getX();
+                float dy = (float)y - center.getY();
+                float dz = (float)z - center.getZ();
                 if (dx*dx + dy*dy + dz*dz <= r_sq) {
                     if (GetBlock(x, y, z) != 0) {
                         SetBlock(x, y, z, 0); world_modified = true;
@@ -181,9 +318,8 @@ int Lua_ShootRay(lua_State* L) {
 
     struct Hit { float dist; uint64_t npc_id; bool is_block; dmVMath::Vector3 pos; dmVMath::Vector3 normal; };
     std::vector<Hit> hits;
-    float offset = (float)g_grid_size / -2.0f + 0.5f;
 
-    dmVMath::Vector3 ray_grid = dmVMath::Vector3(origin.getX() - offset, origin.getY() - offset, origin.getZ() - 490.0f);
+    dmVMath::Vector3 ray_grid = origin;
     dmVMath::Vector3 step(dir.getX() > 0 ? 1 : -1, dir.getY() > 0 ? 1 : -1, dir.getZ() > 0 ? 1 : -1);
     dmVMath::Vector3 delta(fabsf(1.0f / (dir.getX() + 1e-9f)), fabsf(1.0f / (dir.getY() + 1e-9f)), fabsf(1.0f / (dir.getZ() + 1e-9f)));
     int ix = (int)floorf(ray_grid.getX() + 0.5f), iy = (int)floorf(ray_grid.getY() + 0.5f), iz = (int)floorf(ray_grid.getZ() + 0.5f);

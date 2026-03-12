@@ -23,9 +23,7 @@ local v_vec3            = vmath.vector3
 local v_vec4            = vmath.vector4
 local v_quat            = vmath.quat
 local m_min             = math.min
-local m_max             = math.max
 local m_sin             = math.sin
-local m_rad             = math.rad
 
 -- Performance: Constant vectors
 local VEC_UP            = v_vec3(0, 1, 0)
@@ -361,7 +359,6 @@ function update(self, dt)
     local inv_cam_rot = v_conj(cam_rot)
 
     local speed = g.player_speed or 0
-    local sprinting = g.player_sprinting or false
     local grounded = g.player_grounded ~= false -- Default to true if nil
     local ads_active = self.ads_active
 
@@ -587,9 +584,7 @@ function on_input(self, action_id, action)
                     local p_min = feet_pos - vmath.vector3(half_size.x, 0, half_size.z)
                     local p_max = feet_pos + vmath.vector3(half_size.x, p_size.y, half_size.z)
 
-                    local grid_size = _G.grid_size or 16
-                    local offset = -grid_size / 2 + 0.5
-                    local b_pos = vmath.vector3(offset + nx, offset + ny, 490 + nz)
+                    local b_pos = vmath.vector3(nx, ny, nz)
                     local b_min = b_pos - vmath.vector3(0.49, 0.49, 0.49)
                     local b_max = b_pos + vmath.vector3(0.49, 0.49, 0.49)
 

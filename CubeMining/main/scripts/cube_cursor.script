@@ -17,10 +17,7 @@ local function get_targeted_cube(ray_start, ray_dir, max_dist)
         local hit = hits[1]
         if hit.is_block then
             local gx, gy, gz = hit.pos.x, hit.pos.y, hit.pos.z
-            local grid_size = _G.grid_size or 16
-            local offset = -grid_size / 2 + 0.5
-            local cx, cy, cz = offset + gx, offset + gy, 490 + gz
-            return vmath.vector3(cx, cy, cz), gx, gy, gz, hit.normal
+            return vmath.vector3(gx, gy, gz), gx, gy, gz, hit.normal
         end
     end
     return nil

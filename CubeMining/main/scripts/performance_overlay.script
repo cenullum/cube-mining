@@ -286,7 +286,26 @@ function update(self, dt)
         math.deg(math.atan2(2 * (cam_rot.w * cam_rot.z + cam_rot.x * cam_rot.y),
             1 - 2 * (cam_rot.y * cam_rot.y + cam_rot.z * cam_rot.z))))
 
+    local state_str = "Airborne"
+    if _G.player_grounded then
+        if _G.player_sneaking then
+            state_str = "Sneaking"
+        elseif _G.player_sprinting then
+            state_str = "Sprinting"
+        else
+            state_str = "Walking"
+        end
+    end
+
+    if _G.is_freecam then
+        state_str = "Freecam"
+    end
+
+    local grounded_str = _G.player_grounded and "true" or "false"
+
     local cam_lines = {
+        string.format("STATE: %s", state_str),
+        string.format("GROUNDED: %s", grounded_str),
         string.format("CAM POS: %.2f, %.2f, %.2f", cam_pos.x, cam_pos.y, cam_pos.z),
         string.format("CAM ROT: %.1f, %.1f, %.1f", ce.x, ce.y, ce.z)
     }

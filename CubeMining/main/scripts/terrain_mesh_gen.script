@@ -47,8 +47,7 @@ _G.world_build_times = {}
 
 local function create_mesh(self)
     local grid_size = self.grid_size or 16
-    local offset = -grid_size / 2 + 0.5
-    local pos = vmath.vector3(offset, offset, 490)
+    local pos = vmath.vector3(0, 0, 0)
 
     local object = {}
     object.go_id = factory.create(self.mesh_prefab, pos)
@@ -186,10 +185,10 @@ local function create_chunk(self)
     self.light_texture    = resource.create_texture("/assets/textures/light_map.texturec", self.light_tex_params)
     go.set(mesh_go.mesh_url, H_TEXTURE2, self.light_texture)
 
-    self.buf             = buf
-    self.mesh_url        = mesh_go.mesh_url
-    _G.world_voxel_mesh_url  = mesh_go.mesh_url
-    self.buffer_resource = resource.create_buffer(string.format(PATCH_BUFFER, 7), { buffer = buf })
+    self.buf                = buf
+    self.mesh_url           = mesh_go.mesh_url
+    _G.world_voxel_mesh_url = mesh_go.mesh_url
+    self.buffer_resource    = resource.create_buffer(string.format(PATCH_BUFFER, 7), { buffer = buf })
     go.set(self.mesh_url, H_VERTICES, self.buffer_resource)
 
     self.max_verts = max_verts
@@ -279,10 +278,9 @@ function on_message(self, message_id, message, sender)
         if gx and gy and gz and grid_size then
             local b_id = voxel_engine.get_block(gx, gy, gz)
             if b_id ~= 0 and b_id ~= 2 then
-                local offset = -grid_size / 2 + 0.5
-                TEMP_POS.x = offset + gx
-                TEMP_POS.y = offset + gy
-                TEMP_POS.z = 490 + gz
+                TEMP_POS.x = gx
+                TEMP_POS.y = gy
+                TEMP_POS.z = gz
 
                 local b_def = voxel_engine.get_block_info(b_id)
                 if b_def and b_def.break_sound then
@@ -311,15 +309,13 @@ function on_message(self, message_id, message, sender)
                     voxel_engine.set_block(gx, gy, gz, target_id)
 
                     if target_id == 12 and self.torch_factory then
-                        local offset = -grid_size / 2 + 0.5
-                        local pos = vmath.vector3(offset + gx, offset + gy, 490 + gz)
+                        local pos = vmath.vector3(gx, gy, gz)
                         local t_id = factory.create(self.torch_factory, pos)
                         self.block_entities[gx .. "_" .. gy .. "_" .. gz] = t_id
                         pcall(function() go.set(msg.url(nil, t_id, "model"), "tint", vmath.vector4(1, 1, 1, 1)) end)
                         sm.play(sm.place, 1.0, pos)
                     else
-                        local offset = -grid_size / 2 + 0.5
-                        local pos = vmath.vector3(offset + gx, offset + gy, 490 + gz)
+                        local pos = vmath.vector3(gx, gy, gz)
                         sm.play(sm.place, 1.0, pos)
                     end
 
@@ -334,7 +330,6 @@ function on_message(self, message_id, message, sender)
         local modified = false
 
         if center_gx and center_gy and center_gz and grid_size then
-            local offset = -grid_size / 2 + 0.5
             for gx = center_gx - radius, center_gx + radius do
                 for gy = center_gy - radius, center_gy + radius do
                     for gz = center_gz - radius, center_gz + radius do
@@ -350,9 +345,9 @@ function on_message(self, message_id, message, sender)
                                         pcall(go.delete, self.block_entities[e_key])
                                         self.block_entities[e_key] = nil
                                     end
-                                    TEMP_POS.x = offset + gx
-                                    TEMP_POS.y = offset + gy
-                                    TEMP_POS.z = 490 + gz
+                                    TEMP_POS.x = gx
+                                    TEMP_POS.y = gy
+                                    TEMP_POS.z = gz
                                     sm.play(sm.stone_debris, 1.0, TEMP_POS)
                                 end
                                 modified = true
@@ -369,7 +364,6 @@ function on_message(self, message_id, message, sender)
         local blocks = message.blocks
         local modified = false
         if blocks and grid_size then
-            local offset = -grid_size / 2 + 0.5
             for _, b in ipairs(blocks) do
                 local gx, gy, gz, target_id = b.gx, b.gy, b.gz, b.id or 0
                 if gx and gy and gz then
@@ -385,9 +379,9 @@ function on_message(self, message_id, message, sender)
                                     go.delete(self.block_entities[e_key])
                                     self.block_entities[e_key] = nil
                                 end
-                                TEMP_POS.x = offset + gx
-                                TEMP_POS.y = offset + gy
-                                TEMP_POS.z = 490 + gz
+                                TEMP_POS.x = gx
+                                TEMP_POS.y = gy
+                                TEMP_POS.z = gz
                                 sm.play(sm.stone_debris, 1.0, TEMP_POS)
                             end
                             modified = true

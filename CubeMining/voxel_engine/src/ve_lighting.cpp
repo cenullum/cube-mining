@@ -100,10 +100,9 @@ void perform_lighting_pass(uint8_t* blocks, uint8_t* sun_light_data, uint8_t* so
 
 int Lua_GetAmbientLight(lua_State* L) {
     dmVMath::Vector3 pos = *dmScript::ToVector3(L, 1);
-    float offset = (float)g_grid_size / -2.0f + 0.5f;
-    int x = (int)floorf(pos.getX() - offset + 0.5f);
-    int y = (int)floorf(pos.getY() - offset + 0.5f);
-    int z = (int)floorf(pos.getZ() - 490.0f + 0.5f);
+    int x = (int)floorf(pos.getX() + 0.5f);
+    int y = (int)floorf(pos.getY() + 0.5f);
+    int z = (int)floorf(pos.getZ() + 0.5f);
 
     float sun_f = 1.0f, source_f = 0.0f;
     if (x >= 0 && x < g_grid_size && y >= 0 && y < g_grid_size && z >= 0 && z < g_grid_size) {

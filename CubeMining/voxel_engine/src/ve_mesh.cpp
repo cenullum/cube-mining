@@ -110,7 +110,7 @@ void execute_mesh_generation_pipeline(const uint8_t* world_blocks, const uint8_t
                     }
 
                     float p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z, p4x, p4y, p4z;
-                    float off=-0.5f;
+                    float off = -0.5f;
                     if (face_direction == 1) {
                         p1x=u_idx+off;       p1y=v_idx+off;        p1z=slice_idx+1+off;
                         p2x=u_idx+width+off; p2y=v_idx+off;        p2z=slice_idx+1+off;

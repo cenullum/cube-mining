@@ -205,9 +205,8 @@ function update(self)
 
     -- Altitude-based Fog/Clear Color (Sync with Shader)
     local grid_size = _G.grid_size or 16
-    local offset = -grid_size * 0.5 + 0.5
     local surface_y = grid_size - 1
-    local player_grid_y = camera_world_pos.y - offset
+    local player_grid_y = camera_world_pos.y
     local depth_factor = math.max(0, math.min(1, (surface_y - player_grid_y) / 5.0))
 
     local sky_r, sky_g, sky_b = 0.67, 0.79, 0.98

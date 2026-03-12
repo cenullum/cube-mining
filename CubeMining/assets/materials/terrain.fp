@@ -66,7 +66,7 @@ void main()
     vec4 color = texture(texture0, atlas_uv) * vec4(tint.xyz * tint.w, tint.w);
 
     if (break_info.y > 0.5) {
-        vec3 grid_pos = round(var_pos - var_normal * 0.05); // floor(x+0.5) yerine round
+        vec3 grid_pos = round(var_pos - var_normal * 0.05);
         if (all(lessThan(abs(grid_pos - break_pos.xyz), vec3(0.01)))) {
 
             vec3 an     = abs(var_normal);
