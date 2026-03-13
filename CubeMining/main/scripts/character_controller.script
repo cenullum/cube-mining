@@ -324,55 +324,13 @@ function update(self, dt)
 
         -- Physics Step
         local impact_vel_y = self.velocity.y
-        local new_feet_pos, new_vel, grounded = voxel_engine.move_and_slide(feet_pos, self.velocity, self.size, dt)
+        local new_feet_pos, new_vel, grounded = voxel_engine.move_and_slide(feet_pos, self.velocity, self.size, dt,
+            self.sneaking and self.grounded)
 
         self.velocity = new_vel
 
-        -- Sneak edge detection (post-movement — AABB based)
-        -- Checks if we step off an edge and reverts the axis that caused it.
-        -- Uses self.grounded (prev frame) to ensure we were already on ground.
-        if self.sneaking and self.grounded and self.velocity.y <= 0 then
-            -- Use a stricter buffer (0.11) than physics (0.1) so we stop before physics drops us
-            local hx = self.size.x * 0.5 - 0.11
-            local hz = self.size.z * 0.5 - 0.11
-            local check_y = feet_pos.y - 0.05
-
-            -- Check X movement (using base Z)
-            local safe_x = voxel_engine.check_collision(
-                new_feet_pos.x - hx, check_y, feet_pos.z - hz,
-                new_feet_pos.x + hx, feet_pos.y, feet_pos.z + hz
-            )
-            -- If not safe (meaning it did NOT collide with ground, so it's empty air), revert X
-            if not safe_x then
-                new_feet_pos.x = feet_pos.x
-                self.velocity.x = 0
-            end
-
-            -- Check Z movement (using new X, to allow diagonal slide along an edge)
-            local safe_z = voxel_engine.check_collision(
-                new_feet_pos.x - hx, check_y, new_feet_pos.z - hz,
-                new_feet_pos.x + hx, feet_pos.y, new_feet_pos.z + hz
-            )
-            if not safe_z then
-                new_feet_pos.z = feet_pos.z
-                self.velocity.z = 0
-            end
-
-            -- If we were dropped by physics, but reverting our X/Z prevented the fall:
-            if not grounded then
-                local safe = voxel_engine.check_collision(
-                    new_feet_pos.x - hx, check_y, new_feet_pos.z - hz,
-                    new_feet_pos.x + hx, feet_pos.y, new_feet_pos.z + hz
-                )
-                if safe then
-                    new_feet_pos.y = feet_pos.y
-                    self.velocity.y = 0
-                    grounded = true
-                end
-            end
-        end
-
         -- Update EYES based on new FEET
+        -- Position is not set by voxel_engine.cpp like npcs so we need to set it manually
         local new_eye_pos = new_feet_pos + self.eye_offset
         go.set_position(new_eye_pos)
 

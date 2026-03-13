@@ -94,6 +94,13 @@ function init(self)
     self.color_target = vmath.vector4(0, 1, 0, 0.2)
     self.color_red = vmath.vector4(1, 0, 0, 1)
     self.color_blue = vmath.vector4(0, 0.5, 1, 1)
+
+
+    self.color_tan = vmath.vector4(0.7, 0.5, 0.4, 1.0)
+    self.color_light_green = vmath.vector4(0.5, 0.8, 0.5, 1.0)
+    self.color_teal = vmath.vector4(0.0, 0.6, 0.5, 1.0)
+    self.color_red_orange = vmath.vector4(1.0, 0.3, 0.1, 1.0)
+
     self.vec_offset = vmath.vector3(0, 0, 0)
 
     -- Logical size (fallback)
@@ -139,7 +146,7 @@ function update(self, dt)
         msg.post("@render:", H_DRAW_DEBUG_TEXT, {
             text = line,
             position = self.vec_offset,
-            color = self.color_green
+            color = self.color_tan
         })
     end
 
@@ -157,7 +164,7 @@ function update(self, dt)
     msg.post("@render:", H_DRAW_DEBUG_TEXT, {
         text = status_text,
         position = self.vec_offset,
-        color = self.color_green
+        color = self.color_light_green
     })
 
     if self.mode == 0 then return end
@@ -268,7 +275,7 @@ function update(self, dt)
         msg.post("@render:", H_DRAW_DEBUG_TEXT, {
             text = line,
             position = self.vec_offset,
-            color = self.color_green
+            color = self.color_teal
         })
     end
 
@@ -303,11 +310,13 @@ function update(self, dt)
 
     local grounded_str = _G.player_grounded and "true" or "false"
 
+    local vel = _G.player_velocity or vmath.vector3()
     local cam_lines = {
         string.format("STATE: %s", state_str),
         string.format("GROUNDED: %s", grounded_str),
         string.format("CAM POS: %.2f, %.2f, %.2f", cam_pos.x, cam_pos.y, cam_pos.z),
-        string.format("CAM ROT: %.1f, %.1f, %.1f", ce.x, ce.y, ce.z)
+        string.format("CAM ROT: %.1f, %.1f, %.1f", ce.x, ce.y, ce.z),
+        string.format("VELO: %.2f, %.2f, %.2f", vel.x, vel.y, vel.z)
     }
 
     for i, line in ipairs(cam_lines) do
@@ -316,7 +325,7 @@ function update(self, dt)
         msg.post("@render:", H_DRAW_DEBUG_TEXT, {
             text = line,
             position = self.vec_offset,
-            color = self.color_green
+            color = self.color_blue
         })
     end
 
@@ -336,8 +345,8 @@ function update(self, dt)
 
         local graph_width_scaled = 240 * scale_x
         local graph_height_scaled = 80 * scale_y
-        local graph_x_scaled = x_start * scale_x
-        local graph_y_scaled = (y_start + 10) * scale_y
+        local graph_x_scaled = 20 -- Sol alt
+        local graph_y_scaled = 10 -- 10 pixel yukarıda
 
         local max_graph_fps = 144
         local step_x = graph_width_scaled / (self.max_graph_samples - 1)
@@ -411,7 +420,7 @@ function update(self, dt)
         msg.post("@render:", H_DRAW_DEBUG_TEXT, {
             text = string.format("DEBUG EDGES: %d / %d", drawn_count, edges and #edges or 0),
             position = self.vec_offset,
-            color = self.color_green
+            color = self.color_red_orange
         })
     end
 end

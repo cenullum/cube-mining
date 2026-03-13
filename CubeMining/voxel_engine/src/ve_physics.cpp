@@ -149,7 +149,8 @@ static void Depenetrate(dmVMath::Vector3& pos, const dmVMath::Vector3& size) {
 //  - Depenetration at the start of each frame
 // ─────────────────────────────────────────────────────────────────────────────
 void MoveAndSlide(dmVMath::Vector3& pos, dmVMath::Vector3& vel,
-                  const dmVMath::Vector3& size, float dt, bool& is_grounded) {
+                  const dmVMath::Vector3& size, float dt, bool& is_grounded,
+                  bool sneaking) {
     is_grounded = false;
 
     float hx = size.getX() * 0.5f;
@@ -158,6 +159,52 @@ void MoveAndSlide(dmVMath::Vector3& pos, dmVMath::Vector3& vel,
 
     // Push the player out if they somehow ended up inside a solid voxel
     Depenetrate(pos, size);
+
+    // ── SNEAK EDGE PREVENTION (pre-movement, before any physics) ──────────
+    if (sneaking) {
+        const float PROBE_DOWN = 0.1f;
+        // FULL hx/hz used, No inset (Minecraft style)
+        bool currently_grounded = CheckCollision(
+            pos.getX() - hx, pos.getY() - PROBE_DOWN, pos.getZ() - hz,
+            pos.getX() + hx, pos.getY(),               pos.getZ() + hz
+        );
+
+        if (currently_grounded) {
+            if (vel.getY() < 0.0f) vel.setY(0.0f);
+
+            float dx = vel.getX() * dt;
+            float dz = vel.getZ() * dt;
+
+            if (fabsf(dx) > 1e-5f || fabsf(dz) > 1e-5f) {
+                float nx = pos.getX() + dx;
+                float nz = pos.getZ() + dz;
+
+                // Test combined movement (X+Z) first
+                bool combined_safe = CheckCollision(
+                    nx - hx, pos.getY() - PROBE_DOWN, nz - hz,
+                    nx + hx, pos.getY(),               nz + hz
+                );
+
+                if (!combined_safe) {
+                    // Combined failed, try X axis independently
+                    bool x_safe = CheckCollision(
+                        nx - hx, pos.getY() - PROBE_DOWN, pos.getZ() - hz,
+                        nx + hx, pos.getY(),               pos.getZ() + hz
+                    );
+                    if (!x_safe) vel.setX(0);
+
+                    // Try Z axis independently (using potentially updated X velocity)
+                    float updated_nx = pos.getX() + vel.getX() * dt;
+                    bool z_safe = CheckCollision(
+                        updated_nx - hx, pos.getY() - PROBE_DOWN, nz - hz,
+                        updated_nx + hx, pos.getY(),               nz + hz
+                    );
+                    if (!z_safe) vel.setZ(0);
+                }
+            }
+        }
+    }
+    // ── END SNEAK EDGE PREVENTION ─────────────────────────────────────────
 
     // Sub-stepping: prevents tunneling through thin walls at high speed
     float speed = dmVMath::Length(vel);
@@ -392,8 +439,9 @@ int Lua_ShootRay(lua_State* L) {
 int Lua_MoveAndSlide(lua_State* L) {
     dmVMath::Vector3 pos = *dmScript::ToVector3(L, 1), vel = *dmScript::ToVector3(L, 2), size = *dmScript::ToVector3(L, 3);
     float dt = (float)luaL_checknumber(L, 4);
+    bool sneaking = lua_toboolean(L, 5);
     bool grounded = false;
-    MoveAndSlide(pos, vel, size, dt, grounded);
+    MoveAndSlide(pos, vel, size, dt, grounded, sneaking);
     dmScript::PushVector3(L, pos); dmScript::PushVector3(L, vel); lua_pushboolean(L, grounded);
     return 3;
 }

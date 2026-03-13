@@ -109,7 +109,7 @@ int Lua_UnregisterNPC(lua_State* L);
 
 // Prototypes - Physics
 bool CheckCollision(float min_x, float min_y, float min_z, float max_x, float max_y, float max_z);
-void MoveAndSlide(dmVMath::Vector3& pos, dmVMath::Vector3& vel, const dmVMath::Vector3& size, float dt, bool& is_grounded);
+void MoveAndSlide(dmVMath::Vector3& pos, dmVMath::Vector3& vel, const dmVMath::Vector3& size, float dt, bool& is_grounded, bool sneaking = false);
 bool RayAABBIntersection(const dmVMath::Vector3& ray_origin, const dmVMath::Vector3& ray_dir, const dmVMath::Vector3& box_min, const dmVMath::Vector3& box_max, float& t_out);
 int Lua_Explosion(lua_State* L);
 int Lua_ShootRay(lua_State* L);
