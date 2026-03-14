@@ -7,6 +7,47 @@ local math = math
 local hash = hash
 local sm = require "main.scripts.sound_manager"
 
+local H_DRAW_LINE = hash("draw_line")
+local COLOR_DEBUG = vmath.vector4(1, 1, 0, 1)
+
+local function draw_debug_aabb(self)
+    if _G.performance_mode ~= 2 then return end
+
+    local pos = go.get_position(self.id)
+    local sx, sy, sz = self.size.x, self.size.y, self.size.z
+    local hx, hz = sx * 0.5, sz * 0.5
+
+    local x0, x1 = pos.x - hx, pos.x + hx
+    local y0, y1 = pos.y, pos.y + sy
+    local z0, z1 = pos.z - hz, pos.z + hz
+
+    -- 8 corners
+    local p1 = vmath.vector3(x0, y0, z0)
+    local p2 = vmath.vector3(x1, y0, z0)
+    local p3 = vmath.vector3(x1, y0, z1)
+    local p4 = vmath.vector3(x0, y0, z1)
+    local p5 = vmath.vector3(x0, y1, z0)
+    local p6 = vmath.vector3(x1, y1, z0)
+    local p7 = vmath.vector3(x1, y1, z1)
+    local p8 = vmath.vector3(x0, y1, z1)
+
+    -- Bottom
+    msg.post("@render:", H_DRAW_LINE, { start_point = p1, end_point = p2, color = COLOR_DEBUG })
+    msg.post("@render:", H_DRAW_LINE, { start_point = p2, end_point = p3, color = COLOR_DEBUG })
+    msg.post("@render:", H_DRAW_LINE, { start_point = p3, end_point = p4, color = COLOR_DEBUG })
+    msg.post("@render:", H_DRAW_LINE, { start_point = p4, end_point = p1, color = COLOR_DEBUG })
+    -- Top
+    msg.post("@render:", H_DRAW_LINE, { start_point = p5, end_point = p6, color = COLOR_DEBUG })
+    msg.post("@render:", H_DRAW_LINE, { start_point = p6, end_point = p7, color = COLOR_DEBUG })
+    msg.post("@render:", H_DRAW_LINE, { start_point = p7, end_point = p8, color = COLOR_DEBUG })
+    msg.post("@render:", H_DRAW_LINE, { start_point = p8, end_point = p5, color = COLOR_DEBUG })
+    -- Verticals
+    msg.post("@render:", H_DRAW_LINE, { start_point = p1, end_point = p5, color = COLOR_DEBUG })
+    msg.post("@render:", H_DRAW_LINE, { start_point = p2, end_point = p6, color = COLOR_DEBUG })
+    msg.post("@render:", H_DRAW_LINE, { start_point = p3, end_point = p7, color = COLOR_DEBUG })
+    msg.post("@render:", H_DRAW_LINE, { start_point = p4, end_point = p8, color = COLOR_DEBUG })
+end
+
 
 function M.init(self)
     self.id = go.get_id()
@@ -114,6 +155,8 @@ function M.update(self, dt)
         end
         pcall(function() go.set(self.model_url, "tint", final_tint) end)
     end
+
+    draw_debug_aabb(self)
 end
 
 return M

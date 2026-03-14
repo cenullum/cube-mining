@@ -112,7 +112,7 @@ function init(self)
         "WASD: Move",
         "Shift: Sprint",
         "Space: Jump/Up",
-        "CTRL: Down",
+        "CTRL: Sneaking/Down",
         "P: Fly/Walk Mode",
         "1 / 2: Next/Prev Item",
         "LClick: Break/Shoot",
