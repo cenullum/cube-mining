@@ -91,6 +91,14 @@ This project was inspired by the [Meshes-In-Defold](https://github.com/mozok/Mes
   - [Put Cube](https://pixabay.com/sound-effects/film-special-effects-put-item-83043/)
   - [Landing](https://pixabay.com/sound-effects/film-special-effects-land2-43790/)
   - [Jumping](https://pixabay.com/sound-effects/film-special-effects-jumplanding-398256/)
+- **Footstep Sounds** (Sourced from [GDC Sonnis Bundle](https://gdc.sonniss.com/#downloads) - [License](https://sonniss.com/gdc-bundle-license/)):
+  - `289_Foley_Footsteps_Rocks_Sneaker_Jump_Land_On_Two_Feet_Close.wav`
+  - `SNEAKER PLASTIC FLOOR MAT FOOTSTEP WALKING.wav`
+  - `169_Foley_Footsteps_Grass_Sneaker_Walk_Fast_Run_Jog_Close.wav`
+
+
+
+
 
 ## Contributing
 

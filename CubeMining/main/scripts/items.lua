@@ -37,7 +37,8 @@ M.definitions = {
         },
         health = 10,
         hit_sound = "hit",
-        break_sound = "stone_debris"
+        break_sound = "stone_debris",
+        footstep_type = "stone"
     },
     [2] = {
         name = "unbreakable",
@@ -62,7 +63,8 @@ M.definitions = {
         },
         health = 15,
         hit_sound = "hit",
-        break_sound = "stone_debris"
+        break_sound = "stone_debris",
+        footstep_type = "stone"
     },
     [5] = {
         name = "grass",
@@ -76,7 +78,8 @@ M.definitions = {
         },
         health = 5,
         hit_sound = "hit",
-        break_sound = "stone_debris"
+        break_sound = "stone_debris",
+        footstep_type = "grass"
     },
     [6] = {
         name = "dirt",
@@ -88,7 +91,8 @@ M.definitions = {
         },
         health = 5,
         hit_sound = "hit",
-        break_sound = "stone_debris"
+        break_sound = "stone_debris",
+        footstep_type = "dirt"
     },
 
     -- Items (remapped to 10+ to avoid collision)

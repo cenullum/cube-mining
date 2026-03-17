@@ -101,3 +101,123 @@ components {
   id: "landing"
   component: "/assets/sounds/landing.sound"
 }
+components {
+  id: "stone_footstep-01"
+  component: "/assets/sounds/stone_footsteps/stone_footstep-01.sound"
+}
+components {
+  id: "stone_footstep-02"
+  component: "/assets/sounds/stone_footsteps/stone_footstep-02.sound"
+}
+components {
+  id: "stone_footstep-03"
+  component: "/assets/sounds/stone_footsteps/stone_footstep-03.sound"
+}
+components {
+  id: "stone_footstep-04"
+  component: "/assets/sounds/stone_footsteps/stone_footstep-04.sound"
+}
+components {
+  id: "stone_footstep-05"
+  component: "/assets/sounds/stone_footsteps/stone_footstep-05.sound"
+}
+components {
+  id: "stone_footstep-06"
+  component: "/assets/sounds/stone_footsteps/stone_footstep-06.sound"
+}
+components {
+  id: "stone_footstep-07"
+  component: "/assets/sounds/stone_footsteps/stone_footstep-07.sound"
+}
+components {
+  id: "stone_footstep-08"
+  component: "/assets/sounds/stone_footsteps/stone_footstep-08.sound"
+}
+components {
+  id: "stone_footstep-09"
+  component: "/assets/sounds/stone_footsteps/stone_footstep-09.sound"
+}
+components {
+  id: "stone_footstep-10"
+  component: "/assets/sounds/stone_footsteps/stone_footstep-10.sound"
+}
+components {
+  id: "grass_footstep-01"
+  component: "/assets/sounds/grass_footsteps/grass_footstep-01.sound"
+}
+components {
+  id: "grass_footstep-02"
+  component: "/assets/sounds/grass_footsteps/grass_footstep-02.sound"
+}
+components {
+  id: "grass_footstep-03"
+  component: "/assets/sounds/grass_footsteps/grass_footstep-03.sound"
+}
+components {
+  id: "grass_footstep-04"
+  component: "/assets/sounds/grass_footsteps/grass_footstep-04.sound"
+}
+components {
+  id: "grass_footstep-05"
+  component: "/assets/sounds/grass_footsteps/grass_footstep-05.sound"
+}
+components {
+  id: "grass_footstep-06"
+  component: "/assets/sounds/grass_footsteps/grass_footstep-06.sound"
+}
+components {
+  id: "grass_footstep-07"
+  component: "/assets/sounds/grass_footsteps/grass_footstep-07.sound"
+}
+components {
+  id: "grass_footstep-08"
+  component: "/assets/sounds/grass_footsteps/grass_footstep-08.sound"
+}
+components {
+  id: "grass_footstep-09"
+  component: "/assets/sounds/grass_footsteps/grass_footstep-09.sound"
+}
+components {
+  id: "grass_footstep-10"
+  component: "/assets/sounds/grass_footsteps/grass_footstep-10.sound"
+}
+components {
+  id: "dirt_footstep-01"
+  component: "/assets/sounds/dirt_footsteps/dirt_footstep-01.sound"
+}
+components {
+  id: "dirt_footstep-02"
+  component: "/assets/sounds/dirt_footsteps/dirt_footstep-02.sound"
+}
+components {
+  id: "dirt_footstep-03"
+  component: "/assets/sounds/dirt_footsteps/dirt_footstep-03.sound"
+}
+components {
+  id: "dirt_footstep-04"
+  component: "/assets/sounds/dirt_footsteps/dirt_footstep-04.sound"
+}
+components {
+  id: "dirt_footstep-08"
+  component: "/assets/sounds/dirt_footsteps/dirt_footstep-08.sound"
+}
+components {
+  id: "dirt_footstep_-01"
+  component: "/assets/sounds/dirt_footsteps/dirt_footstep_-01.sound"
+}
+components {
+  id: "dirt_footstep_-04"
+  component: "/assets/sounds/dirt_footsteps/dirt_footstep_-04.sound"
+}
+components {
+  id: "dirt_footstep_-06"
+  component: "/assets/sounds/dirt_footsteps/dirt_footstep_-06.sound"
+}
+components {
+  id: "dirt_footstep_-08"
+  component: "/assets/sounds/dirt_footsteps/dirt_footstep_-08.sound"
+}
+components {
+  id: "dirt_footstep_-09"
+  component: "/assets/sounds/dirt_footsteps/dirt_footstep_-09.sound"
+}

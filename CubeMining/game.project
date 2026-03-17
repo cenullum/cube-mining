@@ -38,3 +38,6 @@ max_count = 1024
 [mesh]
 max_count = 512
 
+[sound]
+max_component_count = 128
+

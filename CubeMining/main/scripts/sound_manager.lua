@@ -60,6 +60,61 @@ local REVERSE_NAMES = {
 local sound_cooldowns = {}
 local MIN_COOLDOWN = 0.04 -- 40ms between same sound triggers
 
+-- Dynamic footstep sounds separated by material
+local footstep_sounds = {
+    stone = {
+        "stone_footstep-01", "stone_footstep-02", "stone_footstep-03", "stone_footstep-04", "stone_footstep-05",
+        "stone_footstep-06", "stone_footstep-07", "stone_footstep-08", "stone_footstep-09", "stone_footstep-10"
+    },
+    grass = {
+        "grass_footstep-01", "grass_footstep-02", "grass_footstep-03", "grass_footstep-04", "grass_footstep-05",
+        "grass_footstep-06", "grass_footstep-07", "grass_footstep-08", "grass_footstep-09", "grass_footstep-10"
+    },
+    dirt = {
+        "dirt_footstep-01", "dirt_footstep-02", "dirt_footstep-03", "dirt_footstep-04", "dirt_footstep-08",
+        "dirt_footstep_-01", "dirt_footstep_-04", "dirt_footstep_-06", "dirt_footstep_-08", "dirt_footstep_-09"
+    }
+}
+
+-- Keep track of the last played footstep for each material to avoid immediate repetition
+local last_footstep = {}
+
+--- Registers new footstep sounds for a specific material dynamically
+---@param material string
+---@param sound_list table Array of sound component names
+function M.register_footsteps(material, sound_list)
+    footstep_sounds[material] = sound_list
+end
+
+--- Plays a dynamic footstep sound based on material
+---@param material string|nil The block material (defaults to "stone")
+---@param position vector3 world position of the feet for 3D sound
+---@param gain number|nil Optional volume
+function M.play_footstep(material, position, gain)
+    material = material or "stone"
+    local sounds = footstep_sounds[material] or footstep_sounds["stone"]
+    
+    if not sounds or #sounds == 0 then return end
+    
+    local sound_name
+    if #sounds > 1 then
+        local index = math_random(1, #sounds)
+        sound_name = sounds[index]
+        if sound_name == last_footstep[material] then
+            index = (index % #sounds) + 1
+            sound_name = sounds[index]
+        end
+    else
+        sound_name = sounds[1]
+    end
+    
+    last_footstep[material] = sound_name
+    
+    -- Speed variation gives slightly varying pitch to each footstep
+    M.play(sound_name, gain or 0.8, position, nil, 0.15)
+end
+
+
 --- Plays a sound by its ID with throttling, spatial support, and pitch variation.
 ---@param sound_id string|hash The name of the sound component (e.g., "bomb", "swing")
 ---@param gain number|nil Optional volume gain (0.0 to 1.0), default 1.0

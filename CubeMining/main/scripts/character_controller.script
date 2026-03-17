@@ -10,6 +10,8 @@ local factory = factory
 local hash = hash
 local math = math
 local sm = require "main.scripts.sound_manager"
+local items = require "main.scripts.items"
+
 
 -- Pre-hashed strings for optimization
 local H_ACQUIRE_INPUT_FOCUS = hash("acquire_input_focus")
@@ -115,7 +117,8 @@ function init(self)
     self.pitch = euler.x
     self.grounded = true
 
-    self.grounded = true
+    -- Walk sound tracking
+    self.distance_walked = 0
 end
 
 local function update_camera(self, dt)
@@ -363,6 +366,46 @@ function update(self, dt)
         _G.player_sprinting = self.sprinting
         _G.player_grounded = grounded
         _G.player_velocity = self.velocity
+
+        -- Footstep logic
+        if grounded and hvel > 0.5 then
+            self.distance_walked = self.distance_walked + (hvel * dt)
+            
+            -- Adjust stride distance based on movement state
+            -- Multipliers: Sprint (~1.5x), Sneak (~0.4x), Walk (1x)
+            -- We scale distance slightly less than speed to make the rhythm feel "pushed" during sprint
+            local step_distance = 1.8
+            if self.sprinting then
+                step_distance = 2.5
+            elseif self.sneaking then
+                step_distance = 1.2
+            end
+            
+            if self.distance_walked >= step_distance then
+                self.distance_walked = self.distance_walked % step_distance
+                
+                -- Feet position
+                local foot_pos = eye_pos - self.eye_offset
+                
+                -- Gain adjustments
+                local step_gain = 0.8
+                if self.sneaking then step_gain = 0.3 end
+                if self.sprinting then step_gain = 1.0 end
+                
+                -- Detect material beneath feet
+                local check_pos = vmath.vector3(foot_pos.x, foot_pos.y - 0.1, foot_pos.z)
+                local b_id = voxel_engine.get_block(check_pos.x, check_pos.y, check_pos.z)
+                local b_def = items.definitions[b_id]
+
+                local material = b_def and b_def.footstep_type or "stone"
+                
+                sm.play_footstep(material, foot_pos, step_gain)
+
+            end
+        elseif not grounded then
+            -- Reset slightly when not grounded so landing/moving resets rhythm safely
+            self.distance_walked = 0
+        end
 
         -- Sprint FOV: only when actually moving
         if self.sprinting then
