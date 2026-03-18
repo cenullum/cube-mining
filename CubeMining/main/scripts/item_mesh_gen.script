@@ -236,7 +236,7 @@ local function update_hand_model(self)
         if item.visual == "voxel" then
             if self.held_mesh_url then msg.post(self.held_mesh_url, "enable") end
             local res = self.item_buffers[self.current_item]
-            if res then go.set(self.held_mesh_url, H_VERTICES, res) end
+            if res and self.held_mesh_url then go.set(self.held_mesh_url, H_VERTICES, res) end
             _G.held_mesh_id = self.held_mesh_id
             _G.hand_base_pos = self.base_hand_pos
             _G.hand_base_rot = self.cam_rot
@@ -261,7 +261,7 @@ local function update_hand_model(self)
                 build_block_mesh(self, self.current_block, b_def)
             end
             local res = self.block_buffers[self.current_block]
-            if res then go.set(self.held_mesh_url, H_VERTICES, res) end
+            if res and self.held_mesh_url then go.set(self.held_mesh_url, H_VERTICES, res) end
 
             local qx = vmath.quat_rotation_x(math_rad(15))
             local qy = vmath.quat_rotation_y(math_rad(-45))
@@ -304,20 +304,33 @@ function init(self)
                 local meta = { image = img, texture = atlas_res.texture, u = 0, v = 0, w = 1, h = 1 }
 
                 for i, anim in ipairs(atlas_res.animations) do
-                    local anim_id = type(anim.id) == "string" and hash(anim.id) or anim.id
-                    if anim_id == hash(item.name) then
-                        local geom = atlas_res.geometries[anim.frame_start]
-                        local min_u, max_u, min_v, max_v = math_huge, -math_huge, math_huge, -math_huge
-                        for j = 1, #geom.uvs, 2 do
-                            local u, v = geom.uvs[j], geom.uvs[j + 1]
-                            min_u = math_min(min_u, u); max_u = math_max(max_u, u)
-                            min_v = math_min(min_v, v); max_v = math_max(max_v, v)
+                    local anim_id = (type(anim.id) == "string") and hash(anim.id) or anim.id
+                    local matched = (anim_id == hash(item.name))
+                    if not matched and type(anim.id) == "string" then
+                        local basename = anim.id:match("([^/]+)%.%w+$") or anim.id:match("([^/]+)$")
+                        matched = (basename == item.name)
+                    end
+                    
+                    if matched then
+                        local geom_index = anim.frame_start
+                        -- Handle 0-based vs 1-based indexing from engine
+                        local geom = atlas_res.geometries[geom_index] or atlas_res.geometries[geom_index + 1]
+                        
+                        if geom then
+                            local min_u, max_u, min_v, max_v = math_huge, -math_huge, math_huge, -math_huge
+                            for j = 1, #geom.uvs, 2 do
+                                local u, v = geom.uvs[j], geom.uvs[j + 1]
+                                min_u = math_min(min_u, u); max_u = math_max(max_u, u)
+                                min_v = math_min(min_v, v); max_v = math_max(max_v, v)
+                            end
+                            meta.u = min_u / tex_info.width
+                            meta.v = (tex_info.height - max_v) / tex_info.height
+                            meta.w = (max_u - min_u) / tex_info.width
+                            meta.h = (max_v - min_v) / tex_info.height
+                            break
+                        else
+                            print("WARNING: No geometry found for animation " .. item.name .. " (frame_start: " .. tostring(anim.frame_start) .. ")")
                         end
-                        meta.u = min_u / tex_info.width
-                        meta.v = (tex_info.height - max_v) / tex_info.height
-                        meta.w = (max_u - min_u) / tex_info.width
-                        meta.h = (max_v - min_v) / tex_info.height
-                        break
                     end
                 end
                 build_voxel_mesh(self, id, item.name, meta)
