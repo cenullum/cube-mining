@@ -1,0 +1,36 @@
+-- particle.script
+-- This script handles the sampling of a small sub-region of a block texture.
+-- It uses the block_id passed in scale.z from the C++ particle engine.
+
+function init(self)
+    -- Disable until enabled by C++
+    msg.post("#model", "disable")
+end
+
+function on_message(self, message_id, message, sender)
+    if message_id == hash("enable") then
+        local block_id = math.floor(go.get(".", "scale.z") + 0.5)
+        if block_id > 0 then
+            local b_def = voxel_engine.get_block_info(block_id)
+            if b_def and b_def.uvs and b_def.uvs[1] then
+                local uv = b_def.uvs[1]
+                
+                -- Pick a random 1/4th sub-region of the block texture
+                local sub_scale = 0.25
+                local offset_u = math.random() * (uv.w * (1.0 - sub_scale))
+                local offset_v = math.random() * (uv.h * (1.0 - sub_scale))
+
+                local atlas_bounds = vmath.vector4(
+                    uv.u + offset_u,
+                    uv.v + offset_v,
+                    uv.w * sub_scale,
+                    uv.h * sub_scale
+                )
+                model.set_constant("#model", "atlas_bounds", atlas_bounds)
+            end
+        end
+        msg.post("#model", "enable")
+    elseif message_id == hash("disable") then
+        msg.post("#model", "disable")
+    end
+end

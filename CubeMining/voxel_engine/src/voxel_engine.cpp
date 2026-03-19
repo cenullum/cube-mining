@@ -81,6 +81,8 @@ static int Lua_ShutdownVoxelEngine(lua_State* L) {
         g_mutex = 0; 
     }
     
+    ShutdownParticles();
+    
     free(g_vertex_positions);   g_vertex_positions = 0;
     free(g_vertex_uvs_base);    g_vertex_uvs_base = 0;
     free(g_vertex_uvs_local);   g_vertex_uvs_local = 0;
@@ -150,14 +152,19 @@ static int Lua_PollMeshBuffer(lua_State* L) {
     return 5;
 }
 
-
-
 static const luaL_reg Module_methods[] = {
-    {"init", Lua_InitializeVoxelEngine}, {"shutdown", Lua_ShutdownVoxelEngine}, {"register_block", Lua_RegisterBlockType}, {"get_block_info", Lua_GetBlockInfo}, {"set_block", Lua_SetBlockInWorld}, {"get_block", Lua_GetBlockFromWorld}, {"get_ambient_light", Lua_GetAmbientLight}, {"get_max_vertices", Lua_GetMaxVertices}, {"request_mesh_update", Lua_RequestAsyncMeshUpdate}, {"poll_mesh_buffer", Lua_PollMeshBuffer}, {"get_debug_quads", Lua_GetMeshDebugQuads}, {"update_light_buffer", Lua_UpdateLightBuffer}, {"recalc_lighting_sync", Lua_PerformLightingPassSync}, {"move_and_slide", Lua_MoveAndSlide}, {"check_collision", Lua_CheckCollision}, {"register_npc", Lua_RegisterNPC}, {"unregister_npc", Lua_UnregisterNPC}, {"explode", Lua_Explosion}, {"shoot", Lua_ShootRay}, {0, 0}
+    {"init", Lua_InitializeVoxelEngine}, {"shutdown", Lua_ShutdownVoxelEngine}, {"register_block", Lua_RegisterBlockType}, {"get_block_info", Lua_GetBlockInfo}, {"set_block", Lua_SetBlockInWorld}, {"get_block", Lua_GetBlockFromWorld}, {"get_ambient_light", Lua_GetAmbientLight}, {"get_max_vertices", Lua_GetMaxVertices}, {"request_mesh_update", Lua_RequestAsyncMeshUpdate}, {"poll_mesh_buffer", Lua_PollMeshBuffer}, {"get_debug_quads", Lua_GetMeshDebugQuads}, {"update_light_buffer", Lua_UpdateLightBuffer}, {"recalc_lighting_sync", Lua_PerformLightingPassSync}, {"move_and_slide", Lua_MoveAndSlide}, {"check_collision", Lua_CheckCollision}, {"register_npc", Lua_RegisterNPC}, {"unregister_npc", Lua_UnregisterNPC}, {"explode", Lua_Explosion}, {"shoot", Lua_ShootRay}, {"spawn_block_particles", Lua_SpawnBlockParticles}, {"register_particle", Lua_RegisterParticle}, {0, 0}
 };
 
 static dmExtension::Result AppInit(dmExtension::AppParams* params) { return dmExtension::RESULT_OK; }
-static dmExtension::Result Init(dmExtension::Params* params) { luaL_register(params->m_L, LIB_NAME, Module_methods); lua_pop(params->m_L, 1); return dmExtension::RESULT_OK; }
+static dmExtension::Result Init(dmExtension::Params* params) { 
+    luaL_register(params->m_L, LIB_NAME, Module_methods); 
+    lua_pop(params->m_L, 1); 
+    
+    InitParticles();
+    
+    return dmExtension::RESULT_OK; 
+}
 static uint64_t g_last_time = 0;
 static dmExtension::Result UpdateExtension(dmExtension::Params* params) {
     if (g_grid_size == 0) return dmExtension::RESULT_OK;
@@ -170,6 +177,10 @@ static dmExtension::Result UpdateExtension(dmExtension::Params* params) {
     g_last_time = now;
     
     UpdateAllNPCs(dt);
+    
+    // Passing a dummy camera position for LOD optimization for now.
+    UpdateParticles(dt);
+    
     return dmExtension::RESULT_OK;
 }
 static dmExtension::Result Finalize(dmExtension::Params* params) { return dmExtension::RESULT_OK; }

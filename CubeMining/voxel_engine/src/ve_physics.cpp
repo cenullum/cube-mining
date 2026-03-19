@@ -4,7 +4,20 @@
 #include <vector>
 #include <algorithm>
 
+dmVMath::Vector3 g_player_pos(0,0,0);
 
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CheckPointCollision: tests if a specific point is inside a solid voxel
+// Useful for particles and items.
+// ─────────────────────────────────────────────────────────────────────────────
+bool CheckPointCollision(float x, float y, float z) {
+    int ix = (int)floorf(x + 0.5f);
+    int iy = (int)floorf(y + 0.5f);
+    int iz = (int)floorf(z + 0.5f);
+    return IsSolid(ix, iy, iz);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CheckCollision: tests if the AABB overlaps any solid voxel.
@@ -150,7 +163,10 @@ static void Depenetrate(dmVMath::Vector3& pos, const dmVMath::Vector3& size) {
 // ─────────────────────────────────────────────────────────────────────────────
 void MoveAndSlide(dmVMath::Vector3& pos, dmVMath::Vector3& vel,
                   const dmVMath::Vector3& size, float dt, bool& is_grounded,
-                  bool sneaking) {
+                  bool sneaking, bool is_player) {
+    if (is_player) {
+        g_player_pos = pos;
+    }
     is_grounded = false;
 
     float hx = size.getX() * 0.5f;
@@ -317,8 +333,11 @@ int Lua_Explosion(lua_State* L) {
                 float dy = (float)y - center.getY();
                 float dz = (float)z - center.getZ();
                 if (dx*dx + dy*dy + dz*dz <= r_sq) {
-                    if (GetBlock(x, y, z) != 0) {
-                        SetBlock(x, y, z, 0); world_modified = true;
+                    uint8_t b_id = GetBlock(x, y, z);
+                    if (b_id != 0) {
+                        SetBlock(x, y, z, 0); 
+                        SpawnBlockParticles(x, y, z, (int)b_id);
+                        world_modified = true;
                         uint64_t key = ((uint64_t)(x >> 4 & 0xFFFF) << 32) | ((uint64_t)(y >> 4 & 0xFFFF) << 16) | (uint64_t)(z >> 4 & 0xFFFF);
                         touched_chunks.insert(key);
                     }
@@ -440,8 +459,9 @@ int Lua_MoveAndSlide(lua_State* L) {
     dmVMath::Vector3 pos = *dmScript::ToVector3(L, 1), vel = *dmScript::ToVector3(L, 2), size = *dmScript::ToVector3(L, 3);
     float dt = (float)luaL_checknumber(L, 4);
     bool sneaking = lua_toboolean(L, 5);
+    bool is_player = lua_toboolean(L, 6); // New 6th argument
     bool grounded = false;
-    MoveAndSlide(pos, vel, size, dt, grounded, sneaking);
+    MoveAndSlide(pos, vel, size, dt, grounded, sneaking, is_player);
     dmScript::PushVector3(L, pos); dmScript::PushVector3(L, vel); lua_pushboolean(L, grounded);
     return 3;
 }

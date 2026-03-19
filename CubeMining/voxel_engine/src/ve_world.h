@@ -4,6 +4,7 @@
 #include <vector>
 #include <map>
 #include <cstdint>
+#include "ve_particle.h"
 
 // Constants
 extern const int MAX_GRID_SIZE;
@@ -69,6 +70,7 @@ extern int g_light_mode;
 extern std::vector<NPCInfo> g_npcs;
 extern std::vector<DebugQuad> g_debug_quads;
 extern bool g_debug_enabled;
+extern dmVMath::Vector3 g_player_pos;
 
 // Prototypes - Engine/Thread
 void TriggerAsyncMeshUpdate();
@@ -108,8 +110,9 @@ int Lua_RegisterNPC(lua_State* L);
 int Lua_UnregisterNPC(lua_State* L);
 
 // Prototypes - Physics
+bool CheckPointCollision(float x, float y, float z);
 bool CheckCollision(float min_x, float min_y, float min_z, float max_x, float max_y, float max_z);
-void MoveAndSlide(dmVMath::Vector3& pos, dmVMath::Vector3& vel, const dmVMath::Vector3& size, float dt, bool& is_grounded, bool sneaking = false);
+void MoveAndSlide(dmVMath::Vector3& pos, dmVMath::Vector3& vel, const dmVMath::Vector3& size, float dt, bool& is_grounded, bool sneaking = false, bool is_player = false);
 bool RayAABBIntersection(const dmVMath::Vector3& ray_origin, const dmVMath::Vector3& ray_dir, const dmVMath::Vector3& box_min, const dmVMath::Vector3& box_max, float& t_out);
 int Lua_Explosion(lua_State* L);
 int Lua_ShootRay(lua_State* L);

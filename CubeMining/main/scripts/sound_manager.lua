@@ -91,6 +91,7 @@ end
 ---@param position vector3 world position of the feet for 3D sound
 ---@param gain number|nil Optional volume
 function M.play_footstep(material, position, gain)
+    if material == "air" then return end
     material = material or "stone"
     local sounds = footstep_sounds[material] or footstep_sounds["stone"]
     

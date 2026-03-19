@@ -1,0 +1,28 @@
+local vmath             = vmath
+local pool_size = 1000
+
+go.property("game_atlas", resource.atlas())
+
+function init(self)
+    -- Start up particle pool and pass them to C++ memory automatically
+    -- We pass the collection socket so C++ can post messages to the right GOs
+    local socket = msg.url().socket
+    local atlas = resource.get_atlas(self.game_atlas)
+    local texture0 = hash(atlas.texture)
+
+    for i = 1, pool_size do
+        -- Spawn far away and disabled initially
+
+        local random_x = math.random(-10, 10)
+        local random_z = math.random(-10, 10)
+        local id = factory.create("#particle_factory", vmath.vector3(random_x, 15,random_z))
+        
+        -- Assign the terrain atlas texture to the particle's model
+        local model_url = msg.url(nil, id, "model")
+        go.set(model_url, "texture0", texture0)
+
+        local hash_id = hash("particle_" .. i)
+        voxel_engine.register_particle(hash_id, id, socket)
+    end
+    print("Particle Manager: Registered " .. pool_size .. " particles to C++ pool.")
+end

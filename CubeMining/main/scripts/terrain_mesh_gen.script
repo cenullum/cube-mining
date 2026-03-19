@@ -314,6 +314,7 @@ function on_message(self, message_id, message, sender)
                 end
 
                 voxel_engine.set_block(gx, gy, gz, 0)
+                voxel_engine.spawn_block_particles(gx, gy, gz, b_id)
 
                 local e_key = gx .. "_" .. gy .. "_" .. gz
                 if self.block_entities[e_key] then
@@ -373,6 +374,7 @@ function on_message(self, message_id, message, sender)
                                     TEMP_POS.y = gy
                                     TEMP_POS.z = gz
                                     sm.play(sm.stone_debris, 1.0, TEMP_POS)
+                                    voxel_engine.spawn_block_particles(gx, gy, gz, current_id)
                                 end
                                 modified = true
                             end
@@ -407,6 +409,7 @@ function on_message(self, message_id, message, sender)
                                 TEMP_POS.y = gy
                                 TEMP_POS.z = gz
                                 sm.play(sm.stone_debris, 1.0, TEMP_POS)
+                                voxel_engine.spawn_block_particles(gx, gy, gz, current_id)
                             end
                             modified = true
                         end

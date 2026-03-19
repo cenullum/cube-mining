@@ -16,4 +16,7 @@ embedded_components {
   "  }\n"
   "}\n"
   ""
+  position {
+    y: 2.0
+  }
 }

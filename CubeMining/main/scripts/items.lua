@@ -23,7 +23,8 @@ M.definitions = {
         visual = "block",
         type = "block",
         transparent = true,
-        is_placeable = false
+        is_placeable = false,
+        footstep_type = "air"--there will no sound
     },
     [1] = {
         name = "stone",

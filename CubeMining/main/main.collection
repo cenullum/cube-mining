@@ -25,6 +25,18 @@ instances {
   id: "sounds"
   prototype: "/main/sounds.go"
 }
+instances {
+  id: "particle_manager"
+  prototype: "/main/particle_manager.go"
+  component_properties {
+    id: "particle_manager"
+    properties {
+      id: "game_atlas"
+      value: "/assets/images/game.atlas"
+      type: PROPERTY_TYPE_HASH
+    }
+  }
+}
 scale_along_z: 1
 embedded_instances {
   id: "hand_torch"

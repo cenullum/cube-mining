@@ -328,7 +328,7 @@ function update(self, dt)
         -- Physics Step
         local impact_vel_y = self.velocity.y
         local new_feet_pos, new_vel, grounded = voxel_engine.move_and_slide(feet_pos, self.velocity, self.size, dt,
-            self.sneaking and self.grounded)
+            self.sneaking and self.grounded, true)
 
         self.velocity = new_vel
 
@@ -400,6 +400,11 @@ function update(self, dt)
                 local material = b_def and b_def.footstep_type or "stone"
                 
                 sm.play_footstep(material, foot_pos, step_gain)
+
+                -- Sprint particles: Spawn particles under feet matching the block texture
+                if self.sprinting and b_id ~= 0 then
+                    voxel_engine.spawn_block_particles(check_pos.x, check_pos.y, check_pos.z, b_id)
+                end
 
             end
         elseif not grounded then
