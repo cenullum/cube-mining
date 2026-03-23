@@ -232,7 +232,8 @@ function update(self)
     render.enable_state(render.STATE_DEPTH_TEST)
     render.enable_state(render.STATE_CULL_FACE)
     render.set_cull_face(render.FACE_BACK)
-    render.disable_state(render.STATE_BLEND)
+    render.enable_state(render.STATE_BLEND)
+    render.set_blend_func(render.BLEND_SRC_ALPHA, render.BLEND_ONE_MINUS_SRC_ALPHA)
     render.draw(model_pred, { constants = gpu_constants })
 
     -- 3. Transparent Pass

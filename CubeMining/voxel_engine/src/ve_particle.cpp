@@ -237,7 +237,7 @@ void SpawnBlockParticles(float x, float y, float z, int block_id) {
   emitter.timer = 0;
   emitter.spawn_rate = 0.0f;
 
-  emitter.config.lifetime = 5.0f;
+  emitter.config.lifetime = 3.0f;
   emitter.config.initial_velocity = dmVMath::Vector3(0, 3.5f, 0);
   emitter.config.velocity_randomness = 2.5f;
   emitter.config.gravity = -12.0f;

@@ -11,20 +11,21 @@ M.definitions = {
     -- visual: "block" (voxel mesh), "voxel" (2D to 3D item), or "model" (3D prefab)
     -- is_placeable: Boolean, if true, the item can be placed into the world grid as a voxel
     -- faces: UV mapping for voxel faces (top, bottom, side) or {all}
-    -- transparent: Boolean, if true, the block is considered non-opaque
+    -- render_type: 0 = Opaque (Solid), 1 = Transparent (Non-Solid), 2 = Semi-Transparent (Non-Solid)
     -- light_level: Emission level (0-15)
     -- light_color: Emission color (vmath.vector3)
     -- health: Durability of the block (mining hits required)
     -- hit_sound: Sound played when hitting the block
     -- break_sound: Sound played when the block is destroyed
+    -- greedy_mesh: Boolean, if false, greedy meshing is disabled
 
     [0] = {
         name = "air",
         visual = "block",
         type = "block",
-        transparent = true,
+        render_type = 1,
         is_placeable = false,
-        footstep_type = "air"--there will no sound
+        footstep_type = "air" --there will no sound
     },
     [1] = {
         name = "stone",
@@ -95,6 +96,37 @@ M.definitions = {
         break_sound = "stone_debris",
         footstep_type = "dirt"
     },
+    [7] = {
+        name = "sand",
+        visual = "block",
+        type = "block",
+        is_placeable = true,
+        faces = {
+            all = "sand"
+        },
+        health = 5,
+        hit_sound = "hit",
+        break_sound = "stone_debris",
+        footstep_type = "dirt"
+    },
+    [8] = {
+        name = "water",
+        visual = "block",
+        type = "block",
+        render_type = 2,
+        greedy_mesh = false,
+        is_placeable = true,
+        faces = {
+            all = "water"
+        },
+        health = 3,
+        hit_sound = "hit",
+        break_sound = "stone_debris",
+        footstep_type = "dirt"
+    },
+
+
+
 
     -- Items (remapped to 10+ to avoid collision)
     -- mining_power: Damage dealt to blocks per hit
@@ -108,7 +140,7 @@ M.definitions = {
         mining_power = 1,
         damage_power = 1,
         is_placeable = true,
-        transparent = true,
+        render_type = 1,
         light_level = 15,
         light_color = vmath and vmath.vector3(1.0, 0.9, 0.6) or nil,
         health = 1,

@@ -26,7 +26,7 @@ void perform_lighting_pass(uint8_t* blocks, uint8_t* sun_light_data, uint8_t* so
             for (int y = side_length - 1; y >= 0; y--) {
                 int cur_idx = calculate_block_index(x, y, z, side_length);
                 uint8_t block_id = blocks[cur_idx];
-                if (g_block_defs[block_id].registered && !g_block_defs[block_id].transparent) {
+                if (g_block_defs[block_id].registered && g_block_defs[block_id].render_type == 0) {
                     current_sun_light = 0;
                 }
                 sun_light_data[cur_idx] = current_sun_light;
@@ -59,7 +59,7 @@ void perform_lighting_pass(uint8_t* blocks, uint8_t* sun_light_data, uint8_t* so
             
             int n_idx = calculate_block_index(nx, ny, nz, side_length);
             uint8_t neighbor_id = blocks[n_idx];
-            bool is_transparent = !g_block_defs[neighbor_id].registered || g_block_defs[neighbor_id].transparent;
+            bool is_transparent = !g_block_defs[neighbor_id].registered || (g_block_defs[neighbor_id].render_type >= 1);
             
             if (is_transparent && source_light_data[n_idx] < current_level - 1) {
                 source_light_data[n_idx] = current_level - 1;
@@ -86,7 +86,7 @@ void perform_lighting_pass(uint8_t* blocks, uint8_t* sun_light_data, uint8_t* so
             
             int n_idx = calculate_block_index(nx, ny, nz, side_length);
             uint8_t neighbor_id = blocks[n_idx];
-            bool is_transparent = !g_block_defs[neighbor_id].registered || g_block_defs[neighbor_id].transparent;
+            bool is_transparent = !g_block_defs[neighbor_id].registered || (g_block_defs[neighbor_id].render_type >= 1);
             
             if (is_transparent && sun_light_data[n_idx] < current_level - 1) {
                 sun_light_data[n_idx] = current_level - 1;

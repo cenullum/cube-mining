@@ -1,5 +1,5 @@
-name: "terrain"
-tags: "model"
+name: "terrain_trans"
+tags: "transparent"
 vertex_program: "/assets/materials/terrain.vp"
 fragment_program: "/assets/materials/terrain.fp"
 vertex_space: VERTEX_SPACE_LOCAL

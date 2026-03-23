@@ -22,6 +22,7 @@ go.property("breaking_texture", resource.texture("/assets/images/effects/breakin
 local TEMP_POS = vmath.vector3()
 
 local H_MESH = hash("mesh")
+local H_MESH_TRANS = hash("mesh_trans")
 local H_POSITION = hash("position")
 local H_TEXCOORD0 = hash("texcoord0")
 local H_TEXCOORD1 = hash("texcoord1")
@@ -128,11 +129,6 @@ local function register_blocks(self)
     -- Register each block with C++ engine
     for id, def in pairs(items.definitions) do
         if def.visual == "block" or def.is_placeable then
-            local transparent = def.transparent or false
-            local solid = true
-            if transparent then solid = false end
-            if def.solid ~= nil then solid = def.solid end
-
             local uvs = nil
             if def.faces then
                 uvs = {}
@@ -163,13 +159,13 @@ local function register_blocks(self)
 
             voxel_engine.register_block(
                 id,
-                transparent,
-                solid,
+                def.render_type or 0,
                 def.light_level or 0,
                 def.name,
                 def.hit_sound or "",
                 def.break_sound or "",
-                uvs
+                uvs,
+                (def.greedy_mesh ~= false)
             )
         end
     end
@@ -181,8 +177,14 @@ local function create_chunk(self)
     _G.grid_size = grid_size
 
     local atlas = resource.get_atlas(self.game_atlas)
-    go.set(mesh_go.mesh_url, H_TEXTURE0, hash(atlas.texture))
-    go.set(mesh_go.mesh_url, H_TEXTURE1, self.breaking_texture)
+    
+    self.mesh_url = msg.url(nil, mesh_go.go_id, H_MESH)
+    self.trans_mesh_url = msg.url(nil, mesh_go.go_id, H_MESH_TRANS)
+
+    go.set(self.mesh_url, H_TEXTURE0, hash(atlas.texture))
+    go.set(self.mesh_url, H_TEXTURE1, self.breaking_texture)
+    go.set(self.trans_mesh_url, H_TEXTURE0, hash(atlas.texture))
+    go.set(self.trans_mesh_url, H_TEXTURE1, self.breaking_texture)
 
     -- Allocate initial buffer matching the C++ max size
     local max_verts       = voxel_engine.get_max_vertices()
@@ -190,7 +192,7 @@ local function create_chunk(self)
         { name = H_POSITION,  type = buffer.VALUE_TYPE_FLOAT32, count = 3 },
         { name = H_TEXCOORD0, type = buffer.VALUE_TYPE_FLOAT32, count = 4 }, -- base_uv, unit_size
         { name = H_TEXCOORD1, type = buffer.VALUE_TYPE_FLOAT32, count = 4 }, -- local_uv, quad_size
-        { name = H_TEXCOORD2, type = buffer.VALUE_TYPE_FLOAT32, count = 1 }  -- face_id
+        { name = H_TEXCOORD2, type = buffer.VALUE_TYPE_FLOAT32, count = 2 }  -- face_id, block_id
     })
 
     -- Allocate Light Texture Buffer
@@ -209,11 +211,14 @@ local function create_chunk(self)
     self.light_texture    = resource.create_texture("/assets/textures/light_map.texturec", self.light_tex_params)
     go.set(mesh_go.mesh_url, H_TEXTURE2, self.light_texture)
 
-    self.buf                = buf
-    self.mesh_url           = mesh_go.mesh_url
-    _G.world_voxel_mesh_url = mesh_go.mesh_url
-    self.buffer_resource    = resource.create_buffer(string.format(PATCH_BUFFER, 7), { buffer = buf })
+    self.mesh_url           = self.mesh_url
+    _G.world_voxel_mesh_url = self.mesh_url
+    
+    self.buffer_resource    = resource.create_buffer(string.format(PATCH_BUFFER, "opaque"), { buffer = buf })
+    self.trans_buffer_resource = resource.create_buffer(string.format(PATCH_BUFFER, "trans"), { buffer = buf }) -- Initial empty
+    
     go.set(self.mesh_url, H_VERTICES, self.buffer_resource)
+    go.set(self.trans_mesh_url, H_VERTICES, self.trans_buffer_resource)
 
     self.max_verts = max_verts
 
@@ -221,6 +226,9 @@ local function create_chunk(self)
     voxel_engine.recalc_lighting_sync()
     voxel_engine.update_light_buffer(self.light_buffer)
     resource.set_texture(self.light_texture, self.light_tex_params, self.light_buffer)
+    
+    go.set(self.mesh_url, H_TEXTURE2, self.light_texture)
+    go.set(self.trans_mesh_url, H_TEXTURE2, self.light_texture)
 
     request_mesh_update(self)
 end
@@ -246,13 +254,26 @@ function init(self)
 end
 
 function update(self, dt)
-    -- Poll for mesh results from the worker thread
-    local buf, vc, fc, qc, b_time = voxel_engine.poll_mesh_buffer()
-    if buf then
-        -- Note: vc is current active verts, but buf has max_verts size to match resource
-        print("terrain_mesh_gen: Applying mesh... verts=" .. vc .. " time=" .. string.format("%.2f", b_time) .. "ms")
+    self.time = (self.time or 0) + dt
+    if self.mesh_url then
+        pcall(function() go.set(self.mesh_url, hash("time"), vmath.vector4(self.time, 0, 0, 0)) end)
+    end
+    if self.trans_mesh_url then
+        pcall(function() go.set(self.trans_mesh_url, hash("time"), vmath.vector4(self.time, 0, 0, 0)) end)
+    end
 
-        resource.set_buffer(self.buffer_resource, buf)
+    -- Poll for mesh results from the worker thread
+    local obuf, ovc, ofc, oqc, tbuf, tvc, tfc, tqc, b_time = voxel_engine.poll_mesh_buffer()
+    if obuf or tbuf then
+        -- Note: vc is current active v-count, but buffer resources might be larger
+        if obuf then
+            resource.set_buffer(self.buffer_resource, obuf)
+        end
+        if tbuf then
+            resource.set_buffer(self.trans_buffer_resource, tbuf)
+        end
+        
+        print("terrain_mesh_gen: Applying mesh... opaque=" .. (ovc or 0) .. " trans=" .. (tvc or 0) .. " time=" .. string.format("%.2f", b_time) .. "ms")
 
         -- Update light texture to match newest lighting pass
         voxel_engine.update_light_buffer(self.light_buffer)
@@ -281,8 +302,8 @@ function update(self, dt)
         end
         _G.cached_mesh_edges = edges
 
-        _G.stats_faces = fc
-        _G.stats_vertices = vc
+        _G.stats_faces = (ofc or 0) + (tfc or 0)
+        _G.stats_vertices = (ovc or 0) + (tvc or 0)
 
         _G.stats_mesh_build_time = b_time
         table.insert(_G.world_build_times, b_time)
@@ -435,6 +456,11 @@ function on_message(self, message_id, message, sender)
 end
 
 function final(self)
-    resource.release(string.format(PATCH_BUFFER, 7))
+    if self.buffer_resource then
+        resource.release(self.buffer_resource)
+    end
+    if self.trans_buffer_resource then
+        resource.release(self.trans_buffer_resource)
+    end
     voxel_engine.shutdown()
 end

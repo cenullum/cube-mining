@@ -9,6 +9,7 @@ in mediump vec2 var_quad_size;      // Quad size in blocks
 in mediump vec3 var_view_pos;       // View-space position
 in mediump vec3 var_pos;            // Local position for block breaking
 in mediump vec3 var_normal;         // Reconstructed normal
+in mediump float var_block_id;      // Block ID
 
 // --- Fragment Output ---
 out vec4 out_fragColor;
@@ -98,6 +99,10 @@ void main()
         (fog_params.y - (-var_view_pos.z)) / (fog_params.y - fog_params.x),
         0.0, 1.0);
     color.rgb = mix(fog_color.rgb, color.rgb, fog_factor);
+    
+    if (var_block_id > 7.5 && var_block_id < 8.5) {
+        color.a = 0.6;
+    }
 
-    out_fragColor = vec4(color.rgb, 1.0);
+    out_fragColor = vec4(color.rgb, color.a);
 }

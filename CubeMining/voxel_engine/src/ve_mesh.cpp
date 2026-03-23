@@ -5,19 +5,30 @@
 void alloc_mesh_buffers(int grid_size) {
     uint32_t max_quads = grid_size * grid_size * grid_size * 3;
     uint32_t max_verts = max_quads * 6;
+    
     g_vertex_positions   = (float*)realloc(g_vertex_positions,   max_verts * 3 * sizeof(float));
     g_vertex_uvs_base    = (float*)realloc(g_vertex_uvs_base,    max_verts * 4 * sizeof(float));
     g_vertex_uvs_local   = (float*)realloc(g_vertex_uvs_local,   max_verts * 4 * sizeof(float));
-    g_vertex_face_ids    = (float*)realloc(g_vertex_face_ids,    max_verts * 1 * sizeof(float));
+    g_vertex_face_ids    = (float*)realloc(g_vertex_face_ids,    max_verts * 2 * sizeof(float));
+
+    g_trans_vertex_positions = (float*)realloc(g_trans_vertex_positions, max_verts * 3 * sizeof(float));
+    g_trans_vertex_uvs_base  = (float*)realloc(g_trans_vertex_uvs_base,  max_verts * 4 * sizeof(float));
+    g_trans_vertex_uvs_local = (float*)realloc(g_trans_vertex_uvs_local, max_verts * 4 * sizeof(float));
+    g_trans_vertex_face_ids  = (float*)realloc(g_trans_vertex_face_ids,  max_verts * 2 * sizeof(float));
 }
 
 static void append_quad_to_mesh_buffers(int quad_idx, float p1x, float p1y, float p1z, float p2x, float p2y, float p2z,
     float p3x, float p3y, float p3z, float p4x, float p4y, float p4z,
-    const UVData* uv_data, int quad_width, int quad_height, int face_direction) {
+    const UVData* uv_data, int quad_width, int quad_height, int face_direction, uint16_t block_id, bool is_transparent) {
+
+    float* pos_ptr   = is_transparent ? g_trans_vertex_positions : g_vertex_positions;
+    float* uvb_ptr   = is_transparent ? g_trans_vertex_uvs_base  : g_vertex_uvs_base;
+    float* uvl_ptr   = is_transparent ? g_trans_vertex_uvs_local : g_vertex_uvs_local;
+    float* face_ptr  = is_transparent ? g_trans_vertex_face_ids  : g_vertex_face_ids;
 
     int base_v3 = quad_idx * 18;
     int base_v4 = quad_idx * 24;
-    int base_v1 = quad_idx * 6;
+    int base_v2 = quad_idx * 12;
     
     float px[4] = {p1x, p2x, p3x, p4x};
     float py[4] = {p1y, p2y, p3y, p4y};
@@ -31,21 +42,22 @@ static void append_quad_to_mesh_buffers(int quad_idx, float p1x, float p1y, floa
         int idx = indices[i];
         int v_off = i;
         
-        g_vertex_positions[base_v3 + v_off * 3 + 0] = px[idx];
-        g_vertex_positions[base_v3 + v_off * 3 + 1] = py[idx];
-        g_vertex_positions[base_v3 + v_off * 3 + 2] = pz[idx];
+        pos_ptr[base_v3 + v_off * 3 + 0] = px[idx];
+        pos_ptr[base_v3 + v_off * 3 + 1] = py[idx];
+        pos_ptr[base_v3 + v_off * 3 + 2] = pz[idx];
 
-        g_vertex_uvs_base[base_v4 + v_off * 4 + 0] = uv_data->u;
-        g_vertex_uvs_base[base_v4 + v_off * 4 + 1] = uv_data->v;
-        g_vertex_uvs_base[base_v4 + v_off * 4 + 2] = uv_data->w;
-        g_vertex_uvs_base[base_v4 + v_off * 4 + 3] = uv_data->h;
+        uvb_ptr[base_v4 + v_off * 4 + 0] = uv_data->u;
+        uvb_ptr[base_v4 + v_off * 4 + 1] = uv_data->v;
+        uvb_ptr[base_v4 + v_off * 4 + 2] = uv_data->w;
+        uvb_ptr[base_v4 + v_off * 4 + 3] = uv_data->h;
 
-        g_vertex_uvs_local[base_v4 + v_off * 4 + 0] = lux[idx];
-        g_vertex_uvs_local[base_v4 + v_off * 4 + 1] = luy[idx];
-        g_vertex_uvs_local[base_v4 + v_off * 4 + 2] = (float)quad_width;
-        g_vertex_uvs_local[base_v4 + v_off * 4 + 3] = (float)quad_height;
+        uvl_ptr[base_v4 + v_off * 4 + 0] = lux[idx];
+        uvl_ptr[base_v4 + v_off * 4 + 1] = luy[idx];
+        uvl_ptr[base_v4 + v_off * 4 + 2] = (float)quad_width;
+        uvl_ptr[base_v4 + v_off * 4 + 3] = (float)quad_height;
 
-        g_vertex_face_ids[base_v1 + v_off] = (float)face_direction;
+        face_ptr[base_v2 + v_off * 2 + 0] = (float)face_direction;
+        face_ptr[base_v2 + v_off * 2 + 1] = (float)block_id;
     }
 
     if (g_debug_enabled) {
@@ -64,6 +76,7 @@ void execute_mesh_generation_pipeline(const uint8_t* world_blocks, const uint8_t
 
     uint64_t start_time = dmTime::GetTime();
     int current_quad_index = 0, total_face_count = 0;
+    int trans_quad_index = 0, trans_face_count = 0;
     static uint32_t greedy_mask[64 * 64];
 
     g_debug_quads.clear();
@@ -84,13 +97,31 @@ void execute_mesh_generation_pipeline(const uint8_t* world_blocks, const uint8_t
 
                     if (x < 0 || x >= side_length || y < 0 || y >= side_length || z < 0 || z >= side_length) continue;
                     uint8_t current_id = world_blocks[calculate_block_index(x, y, z, side_length)];
-                    if (current_id == 0 || !g_block_defs[current_id].registered || g_block_defs[current_id].transparent) continue;
+                    if (current_id == 0 || !g_block_defs[current_id].registered) continue;
+                    
+                    int cur_render = g_block_defs[current_id].render_type;
+
+                    // Skip meshing for fully transparent blocks (like Air or Torch)
+                    if (cur_render == 1) continue;
 
                     uint8_t neighbor_id = (nx < 0 || nx >= side_length || ny < 0 || ny >= side_length || nz < 0 || nz >= side_length) ? 0 : world_blocks[calculate_block_index(nx, ny, nz, side_length)];
-                    bool neighbor_is_transparent = (neighbor_id == 0) || !g_block_defs[neighbor_id].registered || g_block_defs[neighbor_id].transparent;
-                    if (!neighbor_is_transparent) continue;
+                    
+                    int neighbor_render = (neighbor_id == 0) || !g_block_defs[neighbor_id].registered ? 1 : g_block_defs[neighbor_id].render_type;
+                    bool neighbor_is_transparent = (neighbor_render >= 1);
 
-                    greedy_mask[v_idx * side_length + u_idx] = (uint32_t)current_id | (1U << 30);
+                    bool should_draw = false;
+                    if (cur_render == 2) {
+                        // Semi-transparent blocks: draw if neighbor is not the same block
+                        if (current_id != neighbor_id) should_draw = true;
+                    } else {
+                        // Opaque blocks: draw if neighbor is transparent (Air, Water, etc)
+                        if (neighbor_is_transparent) should_draw = true;
+                    }
+
+                    if (!should_draw) continue;
+
+                    uint32_t mask_bit = (cur_render == 2) ? (1U << 31) : (1U << 30);
+                    greedy_mask[v_idx * side_length + u_idx] = (uint32_t)current_id | mask_bit;
                 }
             }
 
@@ -100,13 +131,17 @@ void execute_mesh_generation_pipeline(const uint8_t* world_blocks, const uint8_t
                     if (!mask_val) continue;
 
                     uint16_t block_id = (uint16_t)(mask_val & 0xFFFF);
+                    bool is_semi = (mask_val & (1U << 31)) != 0;
+                    bool can_greedy = g_block_defs[block_id].greedy_mesh;
                     
                     int width = 1, height = 1;
-                    while (u_idx + width < side_length && greedy_mask[v_idx * side_length + u_idx + width] == mask_val) width++;
-                    bool can_merge_row = true;
-                    while (v_idx + height < side_length && can_merge_row) {
-                        for (int r = 0; r < width; r++) { if (greedy_mask[(v_idx + height) * side_length + u_idx + r] != mask_val) { can_merge_row = false; break; } }
-                        if (can_merge_row) height++;
+                    if (can_greedy) {
+                        while (u_idx + width < side_length && greedy_mask[v_idx * side_length + u_idx + width] == mask_val) width++;
+                        bool can_merge_row = true;
+                        while (v_idx + height < side_length && can_merge_row) {
+                            for (int r = 0; r < width; r++) { if (greedy_mask[(v_idx + height) * side_length + u_idx + r] != mask_val) { can_merge_row = false; break; } }
+                            if (can_merge_row) height++;
+                        }
                     }
 
                     float p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z, p4x, p4y, p4z;
@@ -143,18 +178,28 @@ void execute_mesh_generation_pipeline(const uint8_t* world_blocks, const uint8_t
                         p4x=slice_idx+off;   p4y=v_idx+height+off; p4z=u_idx+off;
                     }
 
-                    append_quad_to_mesh_buffers(current_quad_index, p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z, p4x, p4y, p4z, &g_block_defs[block_id].uvs[face_direction], width, height, face_direction);
-                    current_quad_index++;
+                    if (is_semi) {
+                        append_quad_to_mesh_buffers(trans_quad_index, p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z, p4x, p4y, p4z, &g_block_defs[block_id].uvs[face_direction], width, height, face_direction, block_id, true);
+                        trans_quad_index++; trans_face_count++;
+                    } else {
+                        append_quad_to_mesh_buffers(current_quad_index, p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z, p4x, p4y, p4z, &g_block_defs[block_id].uvs[face_direction], width, height, face_direction, block_id, false);
+                        current_quad_index++; total_face_count++;
+                    }
+
                     for (int r=0; r<height; r++) for (int c=0; c<width; c++) greedy_mask[(v_idx+r)*side_length + u_idx+c] = 0;
-                    total_face_count++;
                 }
             }
         }
     }
 
-    g_result_quad_count   = current_quad_index;
-    g_result_face_count   = total_face_count;
-    g_result_vertex_count = current_quad_index * 6;
+    g_result_quad_count     = current_quad_index;
+    g_result_face_count     = total_face_count;
+    g_result_vertex_count   = current_quad_index * 6;
+
+    g_trans_result_quad_count   = trans_quad_index;
+    g_trans_result_face_count   = trans_face_count;
+    g_trans_result_vertex_count = trans_quad_index * 6;
+
     g_result_build_time   = (dmTime::GetTime() - start_time) / 1000.0;
 }
 

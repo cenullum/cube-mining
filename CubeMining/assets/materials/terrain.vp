@@ -3,7 +3,7 @@
 in highp vec4 position;     // Local vertex position (x, y, z)
 in mediump vec4 texcoord0;  // x,y = base_uv, z,w = unit_uv_size
 in mediump vec4 texcoord1;  // x,y = local_uv (0..1), z,w = quad_size (width, height)
-in mediump float texcoord2; // face_id (1..6)
+in mediump vec4 texcoord2; // x: face_id, y: block_id
 
 // --- Outputs ---
 out mediump vec2 var_texcoord0;     // Tiling coordinate
@@ -14,6 +14,7 @@ out mediump vec2 var_quad_size;     // Quad size in blocks
 out mediump vec3 var_view_pos;      // Position in view space
 out mediump vec3 var_pos;           // Position for block breaking
 out mediump vec3 var_normal;        // Reconstructed normal
+out mediump float var_block_id;     // Block ID
 
 // --- Uniforms ---
 uniform vs_uniforms
@@ -22,6 +23,7 @@ uniform vs_uniforms
     uniform mediump mat4 mtx_proj;
     uniform mediump mat4 mtx_normal;
     uniform mediump vec4 light;
+    uniform mediump vec4 time;
 };
 
 void main()
@@ -36,11 +38,19 @@ void main()
         vec3( 1,  0,  0),  // 5: +X
         vec3(-1,  0,  0)   // 6: -X
     );
-    int fid = int(texcoord2 + 0.5);
+    int fid = int(texcoord2.x + 0.5);
     vec3 n  = face_normals[clamp(fid, 0, 6)];
+
+    int block_id = int(texcoord2.y + 0.5);
 
     // Standard position transformation
     vec4 p = mtx_worldview * position;
+    
+    if (block_id == 8) {
+        // Full voxel wave animation
+        float wave = sin(time.x * 2.5 + position.x * 1.5 + position.z * 1.5) * 0.08;
+        p.y += wave - 0.07;
+    }
     
     // Calculate diffuse lighting (Axis aligned)
     float diff = max(dot(n, normalize(light.xyz)), 0.0);
@@ -55,6 +65,7 @@ void main()
     var_view_pos = p.xyz;
     var_pos = position.xyz;
     var_normal = n;
+    var_block_id = texcoord2.y;
 
     gl_Position = mtx_proj * p;
 }
