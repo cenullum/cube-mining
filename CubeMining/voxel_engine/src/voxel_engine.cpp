@@ -32,7 +32,7 @@ static void WorkerThreadLoop(void *arg) {
       g_worker_result_ready = true;
       dmMutex::Unlock(g_mutex);
     }
-    dmTime::Sleep(1000); // 1ms
+    dmTime::Sleep(10); // 0.01ms
   }
 }
 
@@ -223,6 +223,7 @@ static const luaL_reg Module_methods[] = {
     {"shoot", Lua_ShootRay},
     {"spawn_block_particles", Lua_SpawnBlockParticles},
     {"register_particle", Lua_RegisterParticle},
+    {"get_particle_init_data", Lua_GetParticleInitData},
     {0, 0}};
 
 static dmExtension::Result AppInit(dmExtension::AppParams *params) {
@@ -250,6 +251,13 @@ static dmExtension::Result UpdateExtension(dmExtension::Params *params) {
   g_last_time = now;
 
   UpdateAllNPCs(dt);
+
+  // Process deferred particles if lighting is ready
+  dmMutex::Lock(g_mutex);
+  bool ready = g_worker_result_ready;
+  dmMutex::Unlock(g_mutex);
+
+  ProcessPendingSpawns(ready);
 
   // Passing a dummy camera position for LOD optimization for now.
   UpdateParticles(dt);

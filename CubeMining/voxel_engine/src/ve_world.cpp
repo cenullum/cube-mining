@@ -171,6 +171,7 @@ int Lua_SetBlockInWorld(lua_State *L) {
       z = luaL_checkinteger(L, 3);
   int id = luaL_checkinteger(L, 4);
   SetBlock(x, y, z, (uint8_t)id);
+  TriggerAsyncMeshUpdate();
   return 0;
 }
 

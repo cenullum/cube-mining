@@ -1,6 +1,9 @@
 #pragma once
 #include <dmsdk/sdk.h>
 #include <vector>
+#include <unordered_map>
+
+extern std::unordered_map<dmhash_t, int> g_particle_id_map;
 
 const int MAX_PARTICLES = 10000;
 
@@ -12,6 +15,14 @@ struct ParticleEmitterInfo {
     float atlas_bounds[4]; 
     float start_scale[2];
     int block_id;
+    float light_tint[4];
+};
+
+struct PendingSpawn {
+    float x, y, z;
+    int block_id;
+    int frames_waiting;
+    bool must_wait;
 };
 
 struct ParticleEmitter {
@@ -41,14 +52,17 @@ struct Particle {
     float atlas_bounds[4];
     float scale[2];
     int block_id;
+    float light_tint[4];
 };
 
 extern std::vector<ParticleEmitter> g_emitters;
-extern Particle* g_particles; // dynamic allocation
+extern Particle g_particles[MAX_PARTICLES]; 
 
 void InitParticles();
 void ShutdownParticles();
 void UpdateParticles(float dt);
-void SpawnBlockParticles(float x, float y, float z, int block_id);
+void ProcessPendingSpawns(bool ready);
+void SpawnBlockParticles(float x, float y, float z, int block_id, bool must_wait = false);
 int Lua_SpawnBlockParticles(lua_State* L);
 int Lua_RegisterParticle(lua_State* L);
+int Lua_GetParticleInitData(lua_State* L);

@@ -293,6 +293,61 @@ void MoveAndSlide(dmVMath::Vector3& pos, dmVMath::Vector3& vel,
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ParticlePhysicsStep: Simulates a particle with bouncing. Point-based continuous
+// pseudo-sweep using sub-stepping to correctly resolve corner bounces.
+// ─────────────────────────────────────────────────────────────────────────────
+void ParticlePhysicsStep(dmVMath::Vector3& pos, dmVMath::Vector3& vel, float dt, float bounce, float friction) {
+    // Sub-stepping to avoid skipping blocks and to resolve corner hits properly
+    // This prevents the infinite loop bug where a particle enters multiple planes seamlessly
+    float speed = dmVMath::Length(vel);
+    int steps = (int)ceilf(speed * dt / 0.4f);
+    if (steps < 1) steps = 1;
+    if (steps > 20) steps = 20;
+    float dt_step = dt / (float)steps;
+
+    for (int s = 0; s < steps; s++) {
+        // X axis
+        float dx = vel.getX() * dt_step;
+        if (fabsf(dx) > 1e-7f) {
+            float nx = pos.getX() + dx;
+            if (CheckPointCollision(nx, pos.getY(), pos.getZ())) {
+                vel.setX(vel.getX() * -bounce);
+                vel.setY(vel.getY() * friction);
+                vel.setZ(vel.getZ() * friction);
+            } else {
+                pos.setX(nx);
+            }
+        }
+
+        // Y axis
+        float dy = vel.getY() * dt_step;
+        if (fabsf(dy) > 1e-7f) {
+            float ny = pos.getY() + dy;
+            if (CheckPointCollision(pos.getX(), ny, pos.getZ())) {
+                vel.setY(vel.getY() * -bounce);
+                vel.setX(vel.getX() * friction);
+                vel.setZ(vel.getZ() * friction);
+            } else {
+                pos.setY(ny);
+            }
+        }
+
+        // Z axis
+        float dz = vel.getZ() * dt_step;
+        if (fabsf(dz) > 1e-7f) {
+            float nz = pos.getZ() + dz;
+            if (CheckPointCollision(pos.getX(), pos.getY(), nz)) {
+                vel.setZ(vel.getZ() * -bounce);
+                vel.setX(vel.getX() * friction);
+                vel.setY(vel.getY() * friction);
+            } else {
+                pos.setZ(nz);
+            }
+        }
+    }
+}
+
 bool RayAABBIntersection(const dmVMath::Vector3& ray_origin, const dmVMath::Vector3& ray_dir, 
                                const dmVMath::Vector3& box_min, const dmVMath::Vector3& box_max, float& t_out) {
     float t1 = (box_min.getX() - ray_origin.getX()) / (ray_dir.getX() + 1e-6f);

@@ -21,8 +21,7 @@ function init(self)
         local model_url = msg.url(nil, id, "model")
         go.set(model_url, "texture0", texture0)
 
-        local hash_id = hash("particle_" .. i)
-        voxel_engine.register_particle(hash_id, id, socket)
+        voxel_engine.register_particle(id, id, socket)
     end
     print("Particle Manager: Registered " .. pool_size .. " particles to C++ pool.")
 end

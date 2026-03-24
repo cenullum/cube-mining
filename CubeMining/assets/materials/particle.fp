@@ -9,6 +9,7 @@ uniform mediump sampler2D texture0; // the terrain atlas
 
 uniform fs_uniforms {
     mediump vec4 atlas_bounds; // x, y: start UV; z, w: UV width/height
+    mediump vec4 light_tint;
 };
 
 void main()
@@ -25,5 +26,5 @@ void main()
         discard;
     }
     
-    out_fragColor = tex_color * var_color;
+    out_fragColor = tex_color * var_color * vec4(light_tint.rgb, 1.0);
 }

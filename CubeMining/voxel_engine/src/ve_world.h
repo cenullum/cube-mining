@@ -139,6 +139,8 @@ bool RayAABBIntersection(const dmVMath::Vector3 &ray_origin,
                          const dmVMath::Vector3 &ray_dir,
                          const dmVMath::Vector3 &box_min,
                          const dmVMath::Vector3 &box_max, float &t_out);
+void ParticlePhysicsStep(dmVMath::Vector3 &pos, dmVMath::Vector3 &vel, float dt,
+                         float bounce, float friction);
 int Lua_Explosion(lua_State *L);
 int Lua_ShootRay(lua_State *L);
 int Lua_MoveAndSlide(lua_State *L);
