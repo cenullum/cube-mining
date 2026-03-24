@@ -57,6 +57,8 @@ struct Particle {
 
 extern std::vector<ParticleEmitter> g_emitters;
 extern Particle g_particles[MAX_PARTICLES]; 
+extern std::vector<int> g_active_particles;
+extern std::vector<int> g_inactive_particles;
 
 void InitParticles();
 void ShutdownParticles();

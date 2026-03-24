@@ -8,6 +8,9 @@ std::vector<PendingSpawn> g_pending_spawns;
 Particle g_particles[MAX_PARTICLES];
 std::unordered_map<dmhash_t, int> g_particle_id_map; // Defined the map
 
+std::vector<int> g_active_particles;
+std::vector<int> g_inactive_particles;
+
 static float RandomFloat(float min, float max) {
   float r = (float)rand() / (float)RAND_MAX;
   return min + r * (max - min);
@@ -17,6 +20,10 @@ void InitParticles() {
   // g_particles is now a static array, no allocation needed.
   // Initialize its members.
   g_particle_id_map.clear(); // Clear map on init
+  g_active_particles.clear();
+  g_inactive_particles.clear();
+  g_active_particles.reserve(MAX_PARTICLES);
+  g_inactive_particles.reserve(MAX_PARTICLES);
   for (int i = 0; i < MAX_PARTICLES; ++i) {
     g_particles[i].active = false;
     g_particles[i].instance = 0;
@@ -30,77 +37,74 @@ void ShutdownParticles() {
   g_emitters.clear();
   g_pending_spawns.clear();  // Clear pending spawns on shutdown
   g_particle_id_map.clear(); // Clear map on shutdown
+  g_active_particles.clear();
+  g_inactive_particles.clear();
 }
 
 static void SpawnParticle(ParticleEmitter &emitter) {
-  // g_particles is now a static array, always available.
-  // No need for `if (!g_particles)` check.
+  if (g_inactive_particles.empty())
+    return;
 
-  for (int i = 0; i < MAX_PARTICLES; ++i) {
-    if (!g_particles[i].active && g_particles[i].instance != 0) {
-      g_particles[i].active = true;
+  int i = g_inactive_particles.back();
+  g_inactive_particles.pop_back();
 
-      // Random scatter around spawn point
-      g_particles[i].pos =
-          emitter.pos + dmVMath::Vector3(RandomFloat(-0.4f, 0.4f),
-                                         RandomFloat(-0.4f, 0.4f),
-                                         RandomFloat(-0.4f, 0.4f));
+  g_particles[i].active = true;
+  g_active_particles.push_back(i);
 
-      // Velocity randomness
-      float rnd_x =
-          RandomFloat(-1.0f, 1.0f) * emitter.config.velocity_randomness;
-      float rnd_y =
-          RandomFloat(-0.5f, 1.0f) * emitter.config.velocity_randomness;
-      float rnd_z =
-          RandomFloat(-1.0f, 1.0f) * emitter.config.velocity_randomness;
+  // Random scatter around spawn point
+  g_particles[i].pos =
+      emitter.pos + dmVMath::Vector3(RandomFloat(-0.4f, 0.4f),
+                                     RandomFloat(-0.4f, 0.4f),
+                                     RandomFloat(-0.4f, 0.4f));
 
-      g_particles[i].vel = emitter.config.initial_velocity +
-                           dmVMath::Vector3(rnd_x, rnd_y, rnd_z);
-      g_particles[i].lifetime =
-          emitter.config.lifetime * RandomFloat(0.8f, 1.2f);
-      g_particles[i].initial_lifetime = g_particles[i].lifetime;
-      g_particles[i].gravity = emitter.config.gravity;
+  // Velocity randomness
+  float rnd_x =
+      RandomFloat(-1.0f, 1.0f) * emitter.config.velocity_randomness;
+  float rnd_y =
+      RandomFloat(-0.5f, 1.0f) * emitter.config.velocity_randomness;
+  float rnd_z =
+      RandomFloat(-1.0f, 1.0f) * emitter.config.velocity_randomness;
 
-      g_particles[i].block_id = emitter.config.block_id;
-      for (int k = 0; k < 4; k++)
-        g_particles[i].light_tint[k] = emitter.config.light_tint[k];
-      for (int k = 0; k < 2; k++)
-        g_particles[i].scale[k] = emitter.config.start_scale[k];
+  g_particles[i].vel = emitter.config.initial_velocity +
+                       dmVMath::Vector3(rnd_x, rnd_y, rnd_z);
+  g_particles[i].lifetime =
+      emitter.config.lifetime * RandomFloat(0.8f, 1.2f);
+  g_particles[i].initial_lifetime = g_particles[i].lifetime;
+  g_particles[i].gravity = emitter.config.gravity;
 
-      // Calculate individual random UV fragments
-      UVData uv = g_block_defs[g_particles[i].block_id].uvs[1];
-      float sub_scale = 0.25f;
-      float offset_u = RandomFloat(0.0f, uv.w * (1.0f - sub_scale));
-      float offset_v = RandomFloat(0.0f, uv.h * (1.0f - sub_scale));
+  g_particles[i].block_id = emitter.config.block_id;
+  for (int k = 0; k < 4; k++)
+    g_particles[i].light_tint[k] = emitter.config.light_tint[k];
+  for (int k = 0; k < 2; k++)
+    g_particles[i].scale[k] = emitter.config.start_scale[k];
 
-      g_particles[i].atlas_bounds[0] = uv.u + offset_u;
-      g_particles[i].atlas_bounds[1] = uv.v + offset_v;
-      g_particles[i].atlas_bounds[2] = uv.w * sub_scale;
-      g_particles[i].atlas_bounds[3] = uv.h * sub_scale;
+  // Calculate individual random UV fragments
+  UVData uv = g_block_defs[g_particles[i].block_id].uvs[1];
+  float sub_scale = 0.25f;
+  float offset_u = RandomFloat(0.0f, uv.w * (1.0f - sub_scale));
+  float offset_v = RandomFloat(0.0f, uv.h * (1.0f - sub_scale));
 
-      // Send Enable message
+  g_particles[i].atlas_bounds[0] = uv.u + offset_u;
+  g_particles[i].atlas_bounds[1] = uv.v + offset_v;
+  g_particles[i].atlas_bounds[2] = uv.w * sub_scale;
+  g_particles[i].atlas_bounds[3] = uv.h * sub_scale;
 
-      // Send Enable message
-      dmMessage::URL receiver;
-      dmMessage::ResetURL(&receiver);
-      receiver.m_Socket = g_particles[i].socket;
-      receiver.m_Path = dmGameObject::GetIdentifier(g_particles[i].instance);
-      dmMessage::Post(0, &receiver, dmHashString64("enable"), 0, 0, 0, 0, 0, 0);
+  // Send Enable message
+  dmMessage::URL receiver;
+  dmMessage::ResetURL(&receiver);
+  receiver.m_Socket = g_particles[i].socket;
+  receiver.m_Path = dmGameObject::GetIdentifier(g_particles[i].instance);
+  dmMessage::Post(0, &receiver, dmHashString64("enable"), 0, 0, 0, 0, 0, 0);
 
-      // Set visuals in Defold
-      // Use scale.x, scale.y for size and scale.z for block_id (passed to Lua
-      // script)
-      dmVMath::Vector3 scale(g_particles[i].scale[0], g_particles[i].scale[1],
-                             (float)g_particles[i].block_id);
-      dmGameObject::SetScale(g_particles[i].instance, scale);
-      dmGameObject::SetPosition(g_particles[i].instance,
-                                dmVMath::Point3(g_particles[i].pos.getX(),
-                                                g_particles[i].pos.getY(),
-                                                g_particles[i].pos.getZ()));
-
-      break;
-    }
-  }
+  // Set visuals in Defold
+  // Use scale.x, scale.y for size and scale.z for block_id (passed to Lua script)
+  dmVMath::Vector3 scale(g_particles[i].scale[0], g_particles[i].scale[1],
+                         (float)g_particles[i].block_id);
+  dmGameObject::SetScale(g_particles[i].instance, scale);
+  dmGameObject::SetPosition(g_particles[i].instance,
+                            dmVMath::Point3(g_particles[i].pos.getX(),
+                                            g_particles[i].pos.getY(),
+                                            g_particles[i].pos.getZ()));
 }
 
 void UpdateParticles(float dt) {
@@ -152,37 +156,39 @@ void UpdateParticles(float dt) {
   }
 
   // 2. Process active particles
-  for (int i = 0; i < MAX_PARTICLES; ++i) {
-    if (!g_particles[i].active)
-      continue;
+  for (size_t j = 0; j < g_active_particles.size();) {
+    int i = g_active_particles[j];
 
     // Lifetime
     g_particles[i].lifetime -= dt;
+    bool kill = false;
+
     if (g_particles[i].lifetime <= 0) {
-      g_particles[i].active = false;
-      dmMessage::URL receiver;
-      dmMessage::ResetURL(&receiver);
-      receiver.m_Socket = g_particles[i].socket;
-      receiver.m_Path = dmGameObject::GetIdentifier(g_particles[i].instance);
-      dmMessage::Post(0, &receiver, dmHashString64("disable"), 0, 0, 0, 0, 0,
-                      0);
-      dmGameObject::SetPosition(g_particles[i].instance,
-                                dmVMath::Point3(0, -1000, 0));
-      continue;
+      kill = true;
+    } else {
+      // Distance Culling (LOD)
+      float dist_sq = dmVMath::LengthSqr(cam_pos - g_particles[i].pos);
+      if (dist_sq > LOW_PRIORITY_DIST_SQ) {
+        kill = true;
+      }
     }
 
-    // Distance Culling (LOD)
-    float dist_sq = dmVMath::LengthSqr(cam_pos - g_particles[i].pos);
-    if (dist_sq > LOW_PRIORITY_DIST_SQ) {
+    if (kill) {
       g_particles[i].active = false;
       dmMessage::URL receiver;
       dmMessage::ResetURL(&receiver);
       receiver.m_Socket = g_particles[i].socket;
       receiver.m_Path = dmGameObject::GetIdentifier(g_particles[i].instance);
-      dmMessage::Post(0, &receiver, dmHashString64("disable"), 0, 0, 0, 0, 0,
-                      0);
+      dmMessage::Post(0, &receiver, dmHashString64("disable"), 0, 0, 0, 0, 0, 0);
       dmGameObject::SetPosition(g_particles[i].instance,
                                 dmVMath::Point3(0, -1000, 0));
+
+      // Remove from active list
+      g_inactive_particles.push_back(i);
+      if (j != g_active_particles.size() - 1) {
+        g_active_particles[j] = g_active_particles.back();
+      }
+      g_active_particles.pop_back();
       continue;
     }
 
@@ -194,6 +200,7 @@ void UpdateParticles(float dt) {
     dmVMath::Vector3 vel = g_particles[i].vel;
 
     // Collision (High precision only when close)
+    float dist_sq = dmVMath::LengthSqr(cam_pos - g_particles[i].pos);
     if (dist_sq <= MED_PRIORITY_DIST_SQ) {
       float bounce = 0.4f;
       float friction = 0.8f;
@@ -208,6 +215,7 @@ void UpdateParticles(float dt) {
                               dmVMath::Point3(g_particles[i].pos.getX(),
                                               g_particles[i].pos.getY(),
                                               g_particles[i].pos.getZ()));
+    j++;
   }
 }
 
@@ -225,6 +233,9 @@ int Lua_RegisterParticle(lua_State *L) {
       g_particles[i].instance = instance;
       g_particles[i].socket = socket;
       g_particles[i].active = false;
+      
+      // Add to inactive queue
+      g_inactive_particles.push_back(i);
 
       // Hide immediately
       dmMessage::URL receiver;
