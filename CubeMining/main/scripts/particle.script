@@ -13,7 +13,7 @@ function on_message(self, message_id, message, sender)
         
         -- print("Particle Init Data received", go.get_id(), u, v, w, h)
 
-        model.set_constant("#model", "atlas_bounds", vmath.vector4(u, v, w, h))
+        go.set("#model", "atlas_bounds", vmath.vector4(u, v, w, h))
         model.set_constant("#model", "light_tint", vmath.vector4(r, g, b, a))
 
         msg.post("#model", "enable")

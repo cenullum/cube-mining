@@ -5,7 +5,7 @@ embedded_components {
   "name: \"{{NAME}}\"\n"
   "materials {\n"
   "  name: \"default\"\n"
-  "  material: \"/assets/materials/particle.material\"\n"
+  "  material: \"/assets/materials/particle_instanced.material\"\n"
   "}\n"
   ""
 }
