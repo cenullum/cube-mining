@@ -108,11 +108,11 @@ int Lua_GetAmbientLight(lua_State* L) {
     if (x >= 0 && x < g_grid_size && y >= 0 && y < g_grid_size && z >= 0 && z < g_grid_size) {
         int idx = calculate_block_index(x, y, z, g_grid_size);
         sun_f = (float)g_sun_light[idx] / 15.0f;
-        source_f = ((float)g_source_light[idx] / 15.0f) * 1.5f;
+        source_f = (float)g_source_light[idx] / 15.0f;
     }
-    float r = fmaxf(0.02f, sun_f + source_f * 1.0f);
-    float g = fmaxf(0.02f, sun_f + source_f * 0.9f);
-    float b = fmaxf(0.02f, sun_f + source_f * 0.6f);
+    float r = fminf(1.0f, fmaxf(0.02f, sun_f + source_f * 1.0f));
+    float g = fminf(1.0f, fmaxf(0.02f, sun_f + source_f * 0.9f));
+    float b = fminf(1.0f, fmaxf(0.02f, sun_f + source_f * 0.6f));
     dmScript::PushVector4(L, dmVMath::Vector4(r, g, b, 1.0f));
     return 1;
 }

@@ -271,13 +271,9 @@ int Lua_RegisterParticle(lua_State *L) {
   return 0;
 }
 
-void SpawnBlockParticles(float x, float y, float z, int block_id,
+void SpawnBlockParticles(float x, float y, float z, int block_id, int count,
                          bool must_wait) {
-  g_pending_spawns.push_back({x, y, z, block_id, 0, must_wait});
-}
-
-void SpawnBlockParticles(float x, float y, float z, int block_id) {
-  SpawnBlockParticles(x, y, z, block_id, false);
+  g_pending_spawns.push_back({x, y, z, block_id, count, 0, must_wait});
 }
 
 void ProcessPendingSpawns(bool ready) {
@@ -293,7 +289,7 @@ void ProcessPendingSpawns(bool ready) {
       ParticleEmitter emitter = {};
       emitter.pos = dmVMath::Vector3(spawn.x, spawn.y, spawn.z);
       emitter.active = true;
-      emitter.emit_count = 15;
+      emitter.emit_count = spawn.count;
       emitter.loop = false;
       emitter.timer = 0;
       emitter.spawn_rate = 0.0f;
@@ -325,10 +321,10 @@ void ProcessPendingSpawns(bool ready) {
           lz >= 0 && lz < g_grid_size) {
         int idx = calculate_block_index(lx, ly, lz, g_grid_size);
         float sun_f = (float)g_sun_light[idx] / 15.0f;
-        float source_f = ((float)g_source_light[idx] / 15.0f) * 1.5f;
-        r = fmaxf(0.02f, sun_f + source_f * 1.0f);
-        g = fmaxf(0.02f, sun_f + source_f * 0.9f);
-        b = fmaxf(0.02f, sun_f + source_f * 0.6f);
+        float source_f = (float)g_source_light[idx] / 15.0f;
+        r = fminf(1.0f, fmaxf(0.02f, sun_f + source_f * 1.0f));
+        g = fminf(1.0f, fmaxf(0.02f, sun_f + source_f * 0.9f));
+        b = fminf(1.0f, fmaxf(0.02f, sun_f + source_f * 0.6f));
       }
       emitter.config.light_tint[0] = r;
       emitter.config.light_tint[1] = g;
@@ -353,8 +349,9 @@ int Lua_SpawnBlockParticles(lua_State *L) {
   float z = (float)luaL_checknumber(L, 3);
   int block_id = (int)luaL_checkinteger(L, 4);
   bool must_wait = lua_toboolean(L, 5);
+  int count = (int)luaL_optinteger(L, 6, 15);
 
-  SpawnBlockParticles(x, y, z, block_id, must_wait);
+  SpawnBlockParticles(x, y, z, block_id, count, must_wait);
   return 0;
 }
 

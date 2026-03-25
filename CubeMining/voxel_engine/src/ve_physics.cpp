@@ -391,7 +391,7 @@ int Lua_Explosion(lua_State* L) {
                     uint8_t b_id = GetBlock(x, y, z);
                     if (b_id != 0) {
                         SetBlock(x, y, z, 0); 
-                        SpawnBlockParticles(x, y, z, (int)b_id);
+                        SpawnBlockParticles(x, y, z, (int)b_id, 5);
                         world_modified = true;
                         uint64_t key = ((uint64_t)(x >> 4 & 0xFFFF) << 32) | ((uint64_t)(y >> 4 & 0xFFFF) << 16) | (uint64_t)(z >> 4 & 0xFFFF);
                         touched_chunks.insert(key);

@@ -21,6 +21,7 @@ struct ParticleEmitterInfo {
 struct PendingSpawn {
     float x, y, z;
     int block_id;
+    int count;
     int frames_waiting;
     bool must_wait;
 };
@@ -73,7 +74,7 @@ void InitParticles();
 void ShutdownParticles();
 void UpdateParticles(float dt);
 void ProcessPendingSpawns(bool ready);
-void SpawnBlockParticles(float x, float y, float z, int block_id, bool must_wait = false);
+void SpawnBlockParticles(float x, float y, float z, int block_id, int count = 15, bool must_wait = false);
 int Lua_SpawnBlockParticles(lua_State* L);
 int Lua_RegisterParticle(lua_State* L);
 int Lua_GetParticleInitData(lua_State* L);
