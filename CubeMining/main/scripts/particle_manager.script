@@ -10,6 +10,11 @@ function init(self)
     local atlas = resource.get_atlas(self.game_atlas)
     local texture0 = hash(atlas.texture)
 
+    self.particle_models = {}
+
+    -- Register this script as the central particle manager
+    voxel_engine.set_particle_manager(msg.url().socket, msg.url().path, msg.url().fragment)
+
     for i = 1, pool_size do
         -- Spawn far away and disabled initially
 
@@ -19,9 +24,31 @@ function init(self)
         
         -- Assign the terrain atlas texture to the particle's model
         local model_url = msg.url(nil, id, "model")
+        self.particle_models[id] = model_url
         go.set(model_url, "texture0", texture0)
 
         voxel_engine.register_particle(id, id, socket)
     end
     print("Particle Manager: Registered " .. pool_size .. " particles to C++ pool.")
+end
+
+function on_message(self, message_id, message, sender)
+    if message_id == hash("particle_events") then
+        local events = voxel_engine.pull_particle_events()
+        for i = 1, #events do
+            local e = events[i]
+            local model_url = self.particle_models[e.id]
+            if model_url then
+                if e.type == 1 then
+                    -- Enable
+                    go.set(model_url, "atlas_bounds", vmath.vector4(e.u, e.v, e.w, e.h))
+                    model.set_constant(model_url, "light_tint", vmath.vector4(e.r, e.g, e.b, e.a))
+                    msg.post(model_url, "enable")
+                else
+                    -- Disable
+                    msg.post(model_url, "disable")
+                end
+            end
+        end
+    end
 end

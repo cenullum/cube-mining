@@ -9,7 +9,3 @@ embedded_components {
   "}\n"
   ""
 }
-components {
-  id: "script"
-  component: "/main/scripts/particle.script"
-}

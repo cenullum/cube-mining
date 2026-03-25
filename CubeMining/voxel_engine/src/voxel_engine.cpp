@@ -224,6 +224,8 @@ static const luaL_reg Module_methods[] = {
     {"spawn_block_particles", Lua_SpawnBlockParticles},
     {"register_particle", Lua_RegisterParticle},
     {"get_particle_init_data", Lua_GetParticleInitData},
+    {"set_particle_manager", Lua_SetParticleManager},
+    {"pull_particle_events", Lua_PullParticleEvents},
     {0, 0}};
 
 static dmExtension::Result AppInit(dmExtension::AppParams *params) {

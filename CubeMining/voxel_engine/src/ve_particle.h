@@ -55,10 +55,19 @@ struct Particle {
     float light_tint[4];
 };
 
+struct ParticleEvent {
+    int type; // 1 = spawn, 0 = despawn
+    dmhash_t id;
+    float u, v, w, h;
+    float r, g, b, a;
+};
+
 extern std::vector<ParticleEmitter> g_emitters;
 extern Particle g_particles[MAX_PARTICLES]; 
 extern std::vector<int> g_active_particles;
 extern std::vector<int> g_inactive_particles;
+extern std::vector<ParticleEvent> g_particle_events;
+
 
 void InitParticles();
 void ShutdownParticles();
@@ -68,3 +77,5 @@ void SpawnBlockParticles(float x, float y, float z, int block_id, bool must_wait
 int Lua_SpawnBlockParticles(lua_State* L);
 int Lua_RegisterParticle(lua_State* L);
 int Lua_GetParticleInitData(lua_State* L);
+int Lua_PullParticleEvents(lua_State* L);
+int Lua_SetParticleManager(lua_State* L);

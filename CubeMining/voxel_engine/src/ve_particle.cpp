@@ -11,6 +11,11 @@ std::unordered_map<dmhash_t, int> g_particle_id_map; // Defined the map
 std::vector<int> g_active_particles;
 std::vector<int> g_inactive_particles;
 
+std::vector<ParticleEvent> g_particle_events;
+dmhash_t g_manager_socket = 0;
+dmhash_t g_manager_path = 0;
+dmhash_t g_manager_fragment = 0;
+
 static float RandomFloat(float min, float max) {
   float r = (float)rand() / (float)RAND_MAX;
   return min + r * (max - min);
@@ -89,12 +94,19 @@ static void SpawnParticle(ParticleEmitter &emitter) {
   g_particles[i].atlas_bounds[2] = uv.w * sub_scale;
   g_particles[i].atlas_bounds[3] = uv.h * sub_scale;
 
-  // Send Enable message
-  dmMessage::URL receiver;
-  dmMessage::ResetURL(&receiver);
-  receiver.m_Socket = g_particles[i].socket;
-  receiver.m_Path = dmGameObject::GetIdentifier(g_particles[i].instance);
-  dmMessage::Post(0, &receiver, dmHashString64("enable"), 0, 0, 0, 0, 0, 0);
+  // Add to batch event list instead of sending message directly
+  ParticleEvent ev;
+  ev.type = 1;
+  ev.id = g_particles[i].id;
+  ev.u = g_particles[i].atlas_bounds[0];
+  ev.v = g_particles[i].atlas_bounds[1];
+  ev.w = g_particles[i].atlas_bounds[2];
+  ev.h = g_particles[i].atlas_bounds[3];
+  ev.r = g_particles[i].light_tint[0];
+  ev.g = g_particles[i].light_tint[1];
+  ev.b = g_particles[i].light_tint[2];
+  ev.a = g_particles[i].light_tint[3];
+  g_particle_events.push_back(ev);
 
   // Set visuals in Defold
   // Use scale.x, scale.y for size and scale.z for block_id (passed to Lua script)
@@ -175,11 +187,10 @@ void UpdateParticles(float dt) {
 
     if (kill) {
       g_particles[i].active = false;
-      dmMessage::URL receiver;
-      dmMessage::ResetURL(&receiver);
-      receiver.m_Socket = g_particles[i].socket;
-      receiver.m_Path = dmGameObject::GetIdentifier(g_particles[i].instance);
-      dmMessage::Post(0, &receiver, dmHashString64("disable"), 0, 0, 0, 0, 0, 0);
+      ParticleEvent ev;
+      ev.type = 0;
+      ev.id = g_particles[i].id;
+      g_particle_events.push_back(ev);
       dmGameObject::SetPosition(g_particles[i].instance,
                                 dmVMath::Point3(0, -1000, 0));
 
@@ -217,6 +228,16 @@ void UpdateParticles(float dt) {
                                               g_particles[i].pos.getZ()));
     j++;
   }
+
+  // Final step: notify the manager if there are events this frame!
+  if (!g_particle_events.empty() && g_manager_socket != 0) {
+      dmMessage::URL receiver;
+      dmMessage::ResetURL(&receiver);
+      receiver.m_Socket = g_manager_socket;
+      receiver.m_Path = g_manager_path;
+      receiver.m_Fragment = g_manager_fragment;
+      dmMessage::Post(0, &receiver, dmHashString64("particle_events"), 0, 0, 0, 0, 0, 0);
+  }
 }
 
 int Lua_RegisterParticle(lua_State *L) {
@@ -237,13 +258,11 @@ int Lua_RegisterParticle(lua_State *L) {
       // Add to inactive queue
       g_inactive_particles.push_back(i);
 
-      // Hide immediately
-      dmMessage::URL receiver;
-      dmMessage::ResetURL(&receiver);
-      receiver.m_Socket = socket;
-      receiver.m_Path = dmGameObject::GetIdentifier(instance);
-      dmMessage::Post(0, &receiver, dmHashString64("disable"), 0, 0, 0, 0, 0,
-                      0);
+      // Add despawn event
+      ParticleEvent ev;
+      ev.type = 0;
+      ev.id = id;
+      g_particle_events.push_back(ev);
       dmGameObject::SetPosition(instance, dmVMath::Point3(0, -1000, 0));
 
       return 0;
@@ -363,3 +382,40 @@ int Lua_GetParticleInitData(lua_State *L) {
   lua_pushnumber(L, g_particles[i].atlas_bounds[3]);
   return 9;
 }
+
+int Lua_SetParticleManager(lua_State* L) {
+    g_manager_socket = dmScript::CheckHash(L, 1);
+    g_manager_path = dmScript::CheckHash(L, 2);
+    g_manager_fragment = dmScript::CheckHash(L, 3);
+    return 0;
+}
+
+int Lua_PullParticleEvents(lua_State* L) {
+    lua_newtable(L);
+    int count = 1;
+    for (const auto& ev : g_particle_events) {
+        lua_newtable(L);
+        lua_pushinteger(L, ev.type);
+        lua_setfield(L, -2, "type");
+        
+        dmScript::PushHash(L, ev.id);
+        lua_setfield(L, -2, "id");
+        
+        if (ev.type == 1) {
+            lua_pushnumber(L, ev.u); lua_setfield(L, -2, "u");
+            lua_pushnumber(L, ev.v); lua_setfield(L, -2, "v");
+            lua_pushnumber(L, ev.w); lua_setfield(L, -2, "w");
+            lua_pushnumber(L, ev.h); lua_setfield(L, -2, "h");
+            
+            lua_pushnumber(L, ev.r); lua_setfield(L, -2, "r");
+            lua_pushnumber(L, ev.g); lua_setfield(L, -2, "g");
+            lua_pushnumber(L, ev.b); lua_setfield(L, -2, "b");
+            lua_pushnumber(L, ev.a); lua_setfield(L, -2, "a");
+        }
+        
+        lua_rawseti(L, -2, count++);
+    }
+    g_particle_events.clear();
+    return 1;
+}
+
