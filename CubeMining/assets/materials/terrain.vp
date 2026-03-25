@@ -44,13 +44,13 @@ void main()
     int block_id = int(texcoord2.y + 0.5);
 
     // Standard position transformation
-    vec4 p = mtx_worldview * position;
-    
+    vec4 animated_pos = position;
     if (block_id == 8) {
         // Full voxel wave animation
         float wave = sin(time.x * 2.5 + position.x * 1.5 + position.z * 1.5) * 0.08;
-        p.y += wave - 0.07;
+        animated_pos.y += wave - 0.07;
     }
+    vec4 p = mtx_worldview * animated_pos;
     
     // Calculate diffuse lighting (Axis aligned)
     float diff = max(dot(n, normalize(light.xyz)), 0.0);

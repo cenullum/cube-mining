@@ -265,13 +265,9 @@ function update(self, dt)
     -- Poll for mesh results from the worker thread
     local obuf, ovc, ofc, oqc, tbuf, tvc, tfc, tqc, b_time = voxel_engine.poll_mesh_buffer()
     if obuf or tbuf then
-        -- Note: vc is current active v-count, but buffer resources might be larger
-        if obuf then
-            resource.set_buffer(self.buffer_resource, obuf)
-        end
-        if tbuf then
-            resource.set_buffer(self.trans_buffer_resource, tbuf)
-        end
+        -- Apply opaque and transparent buffers individually to minimize GPU overhead
+        if obuf then resource.set_buffer(self.buffer_resource, obuf) end
+        if tbuf then resource.set_buffer(self.trans_buffer_resource, tbuf) end
         
         print("terrain_mesh_gen: Applying mesh... opaque=" .. (ovc or 0) .. " trans=" .. (tvc or 0) .. " time=" .. string.format("%.2f", b_time) .. "ms")
 
@@ -302,17 +298,14 @@ function update(self, dt)
         end
         _G.cached_mesh_edges = edges
 
-        _G.stats_faces = (ofc or 0) + (tfc or 0)
-        _G.stats_vertices = (ovc or 0) + (tvc or 0)
+        _G.stats_faces = ofc + tfc
+        _G.stats_vertices = ovc + tvc
 
         _G.stats_mesh_build_time = b_time
         table.insert(_G.world_build_times, b_time)
         if #_G.world_build_times > 25 then
             table.remove(_G.world_build_times, 1)
         end
-    elseif vc == 0 then
-        -- Empty result (all air) handled by the fallback in the C++ extension returning buf=nil, vc=0
-        print("terrain_mesh_gen: Empty chunk result")
     end
 end
 
