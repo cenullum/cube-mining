@@ -1,7 +1,7 @@
 name: "main"
 instances {
   id: "camera"
-  prototype: "/main/camera.go"
+  prototype: "/assets/gameobjects/camera.go"
   children: "hand_bomb"
   children: "hand_torch"
   position {
@@ -19,20 +19,20 @@ instances {
 }
 instances {
   id: "cursor"
-  prototype: "/main/cursor.go"
+  prototype: "/assets/gameobjects/cursor.go"
 }
 instances {
   id: "sounds"
-  prototype: "/main/sounds.go"
+  prototype: "/assets/gameobjects/sounds.go"
 }
 instances {
   id: "particle_manager"
-  prototype: "/main/particle_manager.go"
+  prototype: "/assets/gameobjects/particle_manager.go"
   component_properties {
     id: "particle_manager"
     properties {
       id: "game_atlas"
-      value: "/assets/images/game.atlas"
+      value: "/game.atlas"
       type: PROPERTY_TYPE_HASH
     }
   }
@@ -83,7 +83,7 @@ embedded_instances {
   id: "root"
   data: "components {\n"
   "  id: \"main\"\n"
-  "  component: \"/main/scripts/terrain_mesh_gen.script\"\n"
+  "  component: \"/assets/scripts/terrain_mesh_gen.script\"\n"
   "  properties {\n"
   "    id: \"mesh_prefab\"\n"
   "    value: \"/root#mesh_prefab\"\n"
@@ -91,7 +91,7 @@ embedded_instances {
   "  }\n"
   "  properties {\n"
   "    id: \"game_atlas\"\n"
-  "    value: \"/assets/images/game.atlas\"\n"
+  "    value: \"/game.atlas\"\n"
   "    type: PROPERTY_TYPE_HASH\n"
   "  }\n"
   "  properties {\n"
@@ -107,18 +107,18 @@ embedded_instances {
   "}\n"
   "components {\n"
   "  id: \"performance_overlay\"\n"
-  "  component: \"/main/scripts/performance_overlay.script\"\n"
+  "  component: \"/assets/scripts/performance_overlay.script\"\n"
   "}\n"
   "embedded_components {\n"
   "  id: \"mesh_prefab\"\n"
   "  type: \"factory\"\n"
-  "  data: \"prototype: \\\"/main/square/mesh_prefab.go\\\"\\n"
+  "  data: \"prototype: \\\"/assets/gameobjects/mesh_prefab.go\\\"\\n"
   "\"\n"
   "}\n"
   "embedded_components {\n"
   "  id: \"torch_factory\"\n"
   "  type: \"factory\"\n"
-  "  data: \"prototype: \\\"/main/entity/torch.go\\\"\\n"
+  "  data: \"prototype: \\\"/assets/entity_gameobjects/torch.go\\\"\\n"
   "\"\n"
   "}\n"
   ""

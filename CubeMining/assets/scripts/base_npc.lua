@@ -5,7 +5,7 @@ local vmath = vmath
 local msg = msg
 local math = math
 local hash = hash
-local sm = require "main.scripts.sound_manager"
+local sm = require "assets.scripts.sound_manager"
 
 local H_DRAW_LINE = hash("draw_line")
 local COLOR_DEBUG = vmath.vector4(1, 1, 0, 1)

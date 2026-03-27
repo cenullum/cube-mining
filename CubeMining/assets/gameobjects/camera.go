@@ -1,6 +1,6 @@
 components {
   id: "camera_script"
-  component: "/main/scripts/character_controller.script"
+  component: "/assets/scripts/character_controller.script"
   properties {
     id: "mouse_factory"
     value: "/camera#mouse_factory"
@@ -14,7 +14,7 @@ components {
 }
 components {
   id: "hand_slot_manager"
-  component: "/main/scripts/hand_slot_manager.script"
+  component: "/assets/scripts/hand_slot_manager.script"
   properties {
     id: "bomb_factory"
     value: "/camera#bomb_factory"
@@ -38,7 +38,7 @@ components {
 }
 components {
   id: "voxelizer"
-  component: "/main/scripts/item_mesh_gen.script"
+  component: "/assets/scripts/item_mesh_gen.script"
   properties {
     id: "mesh_prefab"
     value: "/camera#voxel_mesh_factory"
@@ -56,7 +56,7 @@ components {
   }
   properties {
     id: "game_atlas"
-    value: "/assets/images/game.atlas"
+    value: "/game.atlas"
     type: PROPERTY_TYPE_HASH
   }
 }
@@ -73,36 +73,36 @@ embedded_components {
 embedded_components {
   id: "voxel_mesh_factory"
   type: "factory"
-  data: "prototype: \"/main/voxel_mesh.go\"\n"
+  data: "prototype: \"/assets/gameobjects/voxel_mesh.go\"\n"
   ""
 }
 embedded_components {
   id: "mouse_factory"
   type: "factory"
-  data: "prototype: \"/main/entity/mouse.go\"\n"
+  data: "prototype: \"/assets/entity_gameobjects/mouse.go\"\n"
   ""
 }
 embedded_components {
   id: "bomb_factory"
   type: "factory"
-  data: "prototype: \"/main/entity/bomb.go\"\n"
+  data: "prototype: \"/assets/entity_gameobjects/bomb.go\"\n"
   ""
 }
 embedded_components {
   id: "torch_hand_factory"
   type: "factory"
-  data: "prototype: \"/main/entity/torch.go\"\n"
+  data: "prototype: \"/assets/entity_gameobjects/torch.go\"\n"
   ""
 }
 embedded_components {
   id: "pistol_shot_factory"
   type: "factory"
-  data: "prototype: \"/main/pistol_shot_emitter.go\"\n"
+  data: "prototype: \"/assets/gameobjects/pistol_shot_emitter.go\"\n"
   ""
 }
 embedded_components {
   id: "smg_shot_factory"
   type: "factory"
-  data: "prototype: \"/main/smg_shot_emitter.go\"\n"
+  data: "prototype: \"/assets/gameobjects/smg_shot_emitter.go\"\n"
   ""
 }

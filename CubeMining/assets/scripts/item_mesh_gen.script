@@ -15,7 +15,7 @@ local math_min = math.min
 local math_max = math.max
 local math_huge = math.huge
 
-local items_data = require "main.scripts.items"
+local items_data = require "assets.scripts.items"
 
 local H_POSITION = hash("position")
 local H_TEXCOORD0 = hash("texcoord0")

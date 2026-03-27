@@ -9,8 +9,8 @@ local window = window
 local factory = factory
 local hash = hash
 local math = math
-local sm = require "main.scripts.sound_manager"
-local items = require "main.scripts.items"
+local sm = require "assets.scripts.sound_manager"
+local items = require "assets.scripts.items"
 
 
 -- Pre-hashed strings for optimization

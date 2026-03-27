@@ -1,6 +1,6 @@
 components {
   id: "script"
-  component: "/main/scripts/mouse.script"
+  component: "/assets/scripts/mouse.script"
 }
 embedded_components {
   id: "model"

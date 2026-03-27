@@ -1,6 +1,6 @@
 components {
   id: "script"
-  component: "/main/scripts/bomb.script"
+  component: "/assets/scripts/bomb.script"
 }
 embedded_components {
   id: "model"
