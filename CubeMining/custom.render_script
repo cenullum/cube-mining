@@ -25,6 +25,7 @@ local MSG_USE_STRETCH_PROJ   = hash("use_stretch_projection")
 local MSG_USE_FIXED_PROJ     = hash("use_fixed_projection")
 local MSG_USE_FIXED_FIT_PROJ = hash("use_fixed_fit_projection")
 local MSG_SET_FOV            = hash("set_fov")
+local MSG_TOGGLE_FRUSTUM_DEBUG = hash("toggle_frustum_debug")
 
 --------------------------------------------------------------------------------
 -- Render State & Predicates (Local Scope for Performance)
@@ -61,6 +62,7 @@ local main_height            = 0
 local last_win_w             = 0
 local last_win_h             = 0
 local is_valid               = false
+local debug_frustum_culling = false -- Simplified: Single toggle, fixed FOV
 local camera_world_pos       = vmath.vector3(0, 0, 0)
 local gpu_constants          = nil -- Initialized in init()
 
@@ -110,9 +112,9 @@ local function calculate_stretched_projection(camera)
 end
 
 -- Perspective projection
-local function calculate_perspective_projection(camera)
+local function calculate_perspective_projection(camera, fov_override)
     local aspect = window_width / window_height
-    local fov = math.rad(camera.fov)
+    local fov = math.rad(fov_override or camera.fov)
     return vmath.matrix4_perspective(fov, aspect, camera.near, camera.far)
 end
 
@@ -228,21 +230,29 @@ function update(self)
     render.set_view(primary_camera.view)
     render.set_projection(primary_camera.proj)
 
+    -- Calculate Frustum for Culling
+    local frustum = primary_camera.proj * primary_camera.view
+    if debug_frustum_culling and primary_camera == world_cam and world_cam.proj_fn == calculate_perspective_projection then
+        -- Simplified: Fixed 35-degree culling FOV for visualization
+        local cull_proj = calculate_perspective_projection(world_cam, 2.0)
+        frustum = cull_proj * world_cam.view
+    end
+
     -- 2. Opaque Pass
     render.enable_state(render.STATE_DEPTH_TEST)
     render.enable_state(render.STATE_CULL_FACE)
     render.set_cull_face(render.FACE_BACK)
     render.enable_state(render.STATE_BLEND)
     render.set_blend_func(render.BLEND_SRC_ALPHA, render.BLEND_ONE_MINUS_SRC_ALPHA)
-    render.draw(model_pred, { constants = gpu_constants })
+    render.draw(model_pred, { constants = gpu_constants, frustum = frustum, frustum_planes = render.FRUSTUM_PLANES_SIDES})
 
     -- 3. Transparent Pass
     render.enable_state(render.STATE_BLEND)
     render.set_blend_func(render.BLEND_SRC_ALPHA, render.BLEND_ONE_MINUS_SRC_ALPHA)
-    render.draw(transparent_pred, { constants = gpu_constants })
+    render.draw(transparent_pred, { constants = gpu_constants, frustum = frustum, frustum_planes = render.FRUSTUM_PLANES_SIDES})
 
     -- Particle Pass
-    render.draw(particle_pred, { constants = gpu_constants })
+    render.draw(particle_pred, { constants = gpu_constants, frustum = frustum, frustum_planes = render.FRUSTUM_PLANES_SIDES})
     render.disable_state(render.STATE_BLEND)
 
     -- 4. Overlay Pass (Hand/Voxelizer)
@@ -297,5 +307,8 @@ function on_message(self, message_id, message)
             world_cam.proj_fn = calculate_perspective_projection
             update_camera_projection(world_cam)
         end
+    elseif message_id == MSG_TOGGLE_FRUSTUM_DEBUG then
+        debug_frustum_culling = not debug_frustum_culling
+        print("Frustum culling debug: " .. tostring(debug_frustum_culling))
     end
 end

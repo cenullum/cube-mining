@@ -87,3 +87,8 @@ key_trigger {
   input: KEY_C
   action: "test_spawn"
 }
+
+key_trigger {
+  input: KEY_F
+  action: "toggle_frustum"
+}

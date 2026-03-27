@@ -155,7 +155,8 @@ static int Lua_PollMeshBuffer(lua_State *L) {
   // Opaque Buffer
   if (v_count > 0 || g_last_opaque_vcount > 0) {
     dmBuffer::HBuffer opaque_buffer = 0;
-    dmBuffer::Result res = dmBuffer::Create(v_count, streams_decl, 4, &opaque_buffer);
+    dmBuffer::Result res =
+        dmBuffer::Create(v_count, streams_decl, 4, &opaque_buffer);
     if (res == dmBuffer::RESULT_OK && opaque_buffer) {
       if (v_count > 0) {
         copy_array_to_buffer_stream(opaque_buffer, dmHashString64("position"),
@@ -167,8 +168,20 @@ static int Lua_PollMeshBuffer(lua_State *L) {
         copy_array_to_buffer_stream(opaque_buffer, dmHashString64("texcoord2"),
                                     g_vertex_face_ids, v_count, 2);
       }
+
+      // Add AABB metadata for frustum culling
+      float aabb[6] = {-0.5f,
+                       -0.5f,
+                       -0.5f,
+                       (float)g_grid_size - 0.5f,
+                       (float)g_grid_size - 0.5f,
+                       (float)g_grid_size - 0.5f};
+      dmBuffer::SetMetaData(opaque_buffer, dmHashString64("AABB"), aabb, 6,
+                            dmBuffer::VALUE_TYPE_FLOAT32);
+
       dmBuffer::UpdateContentVersion(opaque_buffer);
-      dmScript::PushBuffer(L, dmScript::LuaHBuffer(opaque_buffer, dmScript::OWNER_LUA));
+      dmScript::PushBuffer(
+          L, dmScript::LuaHBuffer(opaque_buffer, dmScript::OWNER_LUA));
     } else {
       lua_pushnil(L);
     }
@@ -184,7 +197,8 @@ static int Lua_PollMeshBuffer(lua_State *L) {
   // Transparent Buffer
   if (tr_v_count > 0 || g_last_trans_vcount > 0) {
     dmBuffer::HBuffer trans_buffer = 0;
-    dmBuffer::Result res = dmBuffer::Create(tr_v_count, streams_decl, 4, &trans_buffer);
+    dmBuffer::Result res =
+        dmBuffer::Create(tr_v_count, streams_decl, 4, &trans_buffer);
     if (res == dmBuffer::RESULT_OK && trans_buffer) {
       if (tr_v_count > 0) {
         copy_array_to_buffer_stream(trans_buffer, dmHashString64("position"),
@@ -196,8 +210,20 @@ static int Lua_PollMeshBuffer(lua_State *L) {
         copy_array_to_buffer_stream(trans_buffer, dmHashString64("texcoord2"),
                                     g_trans_vertex_face_ids, tr_v_count, 2);
       }
+
+      // Add AABB metadata for frustum culling
+      float aabb[6] = {-0.5f,
+                       -0.5f,
+                       -0.5f,
+                       (float)g_grid_size - 0.5f,
+                       (float)g_grid_size - 0.5f,
+                       (float)g_grid_size - 0.5f};
+      dmBuffer::SetMetaData(trans_buffer, dmHashString64("AABB"), aabb, 6,
+                            dmBuffer::VALUE_TYPE_FLOAT32);
+
       dmBuffer::UpdateContentVersion(trans_buffer);
-      dmScript::PushBuffer(L, dmScript::LuaHBuffer(trans_buffer, dmScript::OWNER_LUA));
+      dmScript::PushBuffer(
+          L, dmScript::LuaHBuffer(trans_buffer, dmScript::OWNER_LUA));
     } else {
       lua_pushnil(L);
     }

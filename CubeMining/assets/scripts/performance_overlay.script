@@ -19,6 +19,7 @@ local window = window
 local H_DRAW_LINE = hash("draw_line")
 local H_DRAW_DEBUG_TEXT = hash("draw_debug_text")
 local H_TOGGLE_PERFORMANCE = hash("toggle_performance")
+local H_TOGGLE_FRUSTUM     = hash("toggle_frustum")
 local H_ACQUIRE_INPUT_FOCUS = hash("acquire_input_focus")
 
 -- Helper to convert logical screen coordinates to world coordinates fixed to the camera
@@ -122,7 +123,8 @@ function init(self)
         "Y: Spawn Mouse (Hold)",
         "M: Switch Metrics",
         "O: Toggle Ambient Occlusion",
-        "L: Toggle Lighting"
+        "L: Toggle Lighting",
+        "F: Toggle Frustum Debug"
     }
 
     -- Cache window size for optimization
@@ -154,10 +156,11 @@ function update(self, dt)
     local ao_str = (_G.ao_enabled ~= false) and "ON" or "OFF"
     local light_modes = { [0] = "FLAT", [1] = "SMOOTH", [2] = "OFF" }
     local light_str = light_modes[_G.light_mode or 0] or "FLAT"
+    local frustum_str = (_G.frustum_debug_active) and "ON (35 FOV)" or "OFF"
     local item_name = _G.held_item_name or "pickaxe"
     local ammo_text = _G.held_item_ammo or ""
     local status_text = "Held Item: " ..
-        item_name .. " " .. ammo_text .. "   AO: " .. ao_str .. "   Lighting: " .. light_str
+        item_name .. " " .. ammo_text .. "   AO: " .. ao_str .. "   Lighting: " .. light_str .. "   Frustum: " .. frustum_str
 
     self.vec_offset.x = self.width / 2 - 150
     self.vec_offset.y = self.height - 20
@@ -431,5 +434,8 @@ function on_input(self, action_id, action)
         _G.performance_mode = self.mode
         local modes = { "Off", "Text", "Text + Graph + Edges" }
         print("Performance overlay mode: " .. modes[self.mode + 1])
+    elseif action_id == H_TOGGLE_FRUSTUM and action.pressed then
+        _G.frustum_debug_active = not _G.frustum_debug_active
+        msg.post("@render:", "toggle_frustum_debug")
     end
 end
