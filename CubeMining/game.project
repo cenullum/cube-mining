@@ -1,6 +1,6 @@
 [bootstrap]
-main_collection = /main/main.collectionc
-render = /assets/render/custom.renderc
+main_collection = /main.collectionc
+render = /custom.renderc
 
 [script]
 shared_state = 1
@@ -36,11 +36,14 @@ max_debug_vertices = 1000000
 max_count = 1024
 
 [mesh]
-max_count = 512
+max_count = 10000
 
 [sound]
 max_component_count = 128
 
 [sprite]
 max_count = 10000
+
+[collection]
+max_instances = 64000
 
