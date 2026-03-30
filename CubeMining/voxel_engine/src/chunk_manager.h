@@ -19,6 +19,7 @@ struct Chunk {
     bool is_dirty;
     bool light_dirty;
     bool is_generated;
+    bool is_spawned;
 
     // Allocated slot in the global light texture atlas
     int light_tex_u, light_tex_v;
@@ -59,7 +60,7 @@ public:
     // Chunk caching
     static uint64_t GetChunkKey(int cx, int cy, int cz);
     static Chunk* GetChunk(int cx, int cy, int cz);
-    static Chunk* CreateChunk(int cx, int cy, int cz);
+    static Chunk* GetOrCreateChunk(int cx, int cy, int cz, bool spawn_in_lua = true);
     static void RemoveChunk(int cx, int cy, int cz);
     static void GenerateTerrain(Chunk* chunk);
 

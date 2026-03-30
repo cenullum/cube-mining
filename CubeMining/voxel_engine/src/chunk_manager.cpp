@@ -24,6 +24,7 @@ Chunk::Chunk(int x, int y, int z) : cx(x), cy(y), cz(z) {
   is_dirty = false;
   light_dirty = false;
   is_generated = false;
+  is_spawned = false;
   light_tex_u = -1;
   light_tex_v = -1;
 
@@ -148,23 +149,34 @@ void ChunkManager::FreeLightTextureSlot(Chunk *chunk) {
   chunk->light_tex_v = -1;
 }
 
-Chunk *ChunkManager::CreateChunk(int cx, int cy, int cz) {
-  Chunk *chunk = new Chunk(cx, cy, cz);
-  AllocateLightTextureSlot(chunk);
-
+Chunk *ChunkManager::GetOrCreateChunk(int cx, int cy, int cz, bool spawn_in_lua) {
+  uint64_t key = GetChunkKey(cx, cy, cz);
+  
   dmMutex::Lock(mutex);
-  active_chunks[GetChunkKey(cx, cy, cz)] = chunk;
+  auto it = active_chunks.find(key);
+  Chunk *chunk = (it != active_chunks.end()) ? it->second : nullptr;
   dmMutex::Unlock(mutex);
 
-  GenerateTerrain(chunk);
+  if (!chunk) {
+    chunk = new Chunk(cx, cy, cz);
+    dmMutex::Lock(mutex);
+    active_chunks[key] = chunk;
+    dmMutex::Unlock(mutex);
+    
+    GenerateTerrain(chunk);
+  }
 
-  // Notify Lua to spawn GameObject
-  PushLuaUpdate(ChunkUpdateType::SPAWN, cx, cy, cz, chunk);
+  if (spawn_in_lua && !chunk->is_spawned) {
+    chunk->is_spawned = true;
+    AllocateLightTextureSlot(chunk);
 
-  // Immediately queue for lighting and mesh
-  QueueLightingUpdate(chunk);
+    // Notify Lua to spawn GameObject
+    PushLuaUpdate(ChunkUpdateType::SPAWN, cx, cy, cz, chunk);
 
-  dmLogInfo("voxel_engine: Created Chunk(%d, %d, %d)", cx, cy, cz);
+    // Immediately queue for lighting and mesh
+    QueueLightingUpdate(chunk);
+  }
+
   return chunk;
 }
 
@@ -212,7 +224,8 @@ void ChunkManager::Update(float player_x, float player_y, float player_z) {
         int cz = center_cz + z;
         int dist_sq = x * x + y * y + z * z;
         if (dist_sq <= view_distance * view_distance * 3) {
-          if (!GetChunk(cx, cy, cz)) {
+          Chunk* c = GetChunk(cx, cy, cz);
+          if (!c || !c->is_spawned) {
             spawn_candidates.push_back({dist_sq, dmVMath::Vector3(cx, cy, cz)});
           }
         }
@@ -230,8 +243,8 @@ void ChunkManager::Update(float player_x, float player_y, float player_z) {
   for (auto &cand : spawn_candidates) {
     if (creations_this_frame > 2)
       break; // Throttle
-    CreateChunk((int)cand.second.getX(), (int)cand.second.getY(),
-                (int)cand.second.getZ());
+    GetOrCreateChunk((int)cand.second.getX(), (int)cand.second.getY(),
+                     (int)cand.second.getZ(), true);
     creations_this_frame++;
   }
 
@@ -259,6 +272,34 @@ void ChunkManager::Update(float player_x, float player_y, float player_z) {
 void ChunkManager::GenerateTerrain(Chunk *chunk) {
   chunk->is_empty = true;
   int water_level = 30;
+
+  int min_world_y = chunk->cy * CHUNK_SIZE;
+  int max_world_y = min_world_y + CHUNK_SIZE - 1;
+
+  // Max ground height is 64. Fast skip for chunks completely in the sky.
+  if (min_world_y > 64) {
+    chunk->is_generated = true;
+    return;
+  }
+
+  // Fast skip for chunks completely underground (min ground is 10, minus 3 dirt layers = 7).
+  if (max_world_y < 7) {
+    for (int x = 0; x < CHUNK_SIZE; x++) {
+      for (int z = 0; z < CHUNK_SIZE; z++) {
+        for (int y = 0; y < CHUNK_SIZE; y++) {
+          int world_y = min_world_y + y;
+          uint8_t block_id = 1; // Stone
+          if (world_y == 0) block_id = 2; // Bedrock
+          else if ((rand() % 100) < 5) block_id = 3; // Gold
+          chunk->blocks[x + z * CHUNK_SIZE + y * CHUNK_SIZE * CHUNK_SIZE] = block_id;
+        }
+      }
+    }
+    chunk->is_empty = false;
+    chunk->is_generated = true;
+    return;
+  }
+
   for (int x = 0; x < CHUNK_SIZE; x++) {
     for (int z = 0; z < CHUNK_SIZE; z++) {
       int world_x = chunk->cx * CHUNK_SIZE + x;
@@ -266,7 +307,7 @@ void ChunkManager::GenerateTerrain(Chunk *chunk) {
       int ground_y = CalculateGroundHeight(world_x, world_z, g_seed);
 
       for (int y = 0; y < CHUNK_SIZE; y++) {
-        int world_y = chunk->cy * CHUNK_SIZE + y;
+        int world_y = min_world_y + y;
         uint8_t block_id = 0;
 
         if (world_y == 0) {
@@ -293,9 +334,6 @@ void ChunkManager::GenerateTerrain(Chunk *chunk) {
     }
   }
   chunk->is_generated = true;
-  if (!chunk->is_empty) {
-    AllocateLightTextureSlot(chunk);
-  }
 }
 
 void ChunkManager::WorldToChunk(int x, int y, int z, int &cx, int &cy, int &cz,

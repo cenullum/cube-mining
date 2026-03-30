@@ -66,6 +66,16 @@ static void append_quad_to_mesh_buffers(Chunk* chunk, int quad_idx, float p1x, f
 
 void execute_mesh_generation_pipeline(Chunk* chunk) {
     if (!chunk) return;
+
+    // Pre-fetch 6 neighbors once to avoid thousands of mutex locks in the loops
+    Chunk* neighbors[7]; // Directions 1-6
+    neighbors[1] = ChunkManager::GetOrCreateChunk(chunk->cx, chunk->cy, chunk->cz + 1, false);
+    neighbors[2] = ChunkManager::GetOrCreateChunk(chunk->cx, chunk->cy, chunk->cz - 1, false);
+    neighbors[3] = ChunkManager::GetOrCreateChunk(chunk->cx, chunk->cy + 1, chunk->cz, false);
+    neighbors[4] = ChunkManager::GetOrCreateChunk(chunk->cx, chunk->cy - 1, chunk->cz, false);
+    neighbors[5] = ChunkManager::GetOrCreateChunk(chunk->cx + 1, chunk->cy, chunk->cz, false);
+    neighbors[6] = ChunkManager::GetOrCreateChunk(chunk->cx - 1, chunk->cy, chunk->cz, false);
+
     uint64_t start_time = dmTime::GetTime();
     int current_quad_index = 0, total_face_count = 0;
     int trans_quad_index = 0, trans_face_count = 0;
@@ -110,18 +120,11 @@ void execute_mesh_generation_pipeline(Chunk* chunk) {
                         
                         int ncx, ncy, ncz, nlx, nly, nlz;
                         ChunkManager::WorldToChunk(wnx, wny, wnz, ncx, ncy, ncz, nlx, nly, nlz);
-                        Chunk* nchunk = ChunkManager::GetChunk(ncx, ncy, ncz);
-                        if (!nchunk) {
-                            neighbor_chunk_missing = true; 
-                        } else {
-                            neighbor_id = nchunk->blocks[nlx + nlz * CHUNK_SIZE + nly * CHUNK_SIZE * CHUNK_SIZE];
-                        }
+                        Chunk* nchunk = neighbors[face_direction];
+                        neighbor_id = nchunk->blocks[nlx + nlz * CHUNK_SIZE + nly * CHUNK_SIZE * CHUNK_SIZE];
                     } else {
                         neighbor_id = chunk->blocks[nx + nz * CHUNK_SIZE + ny * CHUNK_SIZE * CHUNK_SIZE];
                     }
-
-                    // "bir chunk oluşturdun ve henüz yandaki chunk oluşmadıysa değen yüzeyleri oluşturmana gerek yok"
-                    if (neighbor_chunk_missing) continue; // assume solid or hidden boundary
 
                     int neighbor_render = (neighbor_id == 0) || !g_block_defs[neighbor_id].registered ? 1 : g_block_defs[neighbor_id].render_type;
                     bool neighbor_is_transparent = (neighbor_render >= 1);
