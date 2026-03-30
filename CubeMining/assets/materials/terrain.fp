@@ -28,15 +28,25 @@ uniform fs_uniforms
     mediump vec4 break_info; // x: frame, y: enabled, z: total_frames
     mediump vec4 break_pos;  // xyz: block grid coordinates
     mediump vec4 cam_pos;
+    mediump vec4 light_offset; // x,y: atlas start in pixels
 };
 
 vec4 sample_light(vec3 pc) {
-    // Clamp to chunk boundaries
-    pc = clamp(pc, vec3(0.0), vec3(15.0));
-    // Calculate 256x16 texture coordinates (u = x + z*16, v = y)
-    float u = (floor(pc.x) + 0.5 + floor(pc.z) * 16.0) / 256.0;
-    float v = (floor(pc.y) + 0.5) / 16.0;
-    return texture(texture2, vec2(u, v));
+    // pc ranges from roughly -0.5 to 16.5 at boundaries
+    // We add 1.0 because the padded block 0 is at offset +1.
+    float py = floor(pc.y + 1.0);
+    float px = floor(pc.x + 1.0);
+    float pz = floor(pc.z + 1.0);
+    
+    // Clamp to 0..17 just as a safeguard against precision artifacts
+    px = clamp(px, 0.0, 17.0);
+    py = clamp(py, 0.0, 17.0);
+    pz = clamp(pz, 0.0, 17.0);
+    
+    float tex_x = light_offset.x + px;
+    float tex_y = light_offset.y + py * 18.0 + pz;
+    
+    return texture(texture2, vec2((tex_x + 0.5) / 2048.0, (tex_y + 0.5) / 2048.0));
 }
 
 vec4 bilinear_light(vec3 pos, vec3 normal) {

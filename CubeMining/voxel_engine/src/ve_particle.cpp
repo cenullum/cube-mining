@@ -2,6 +2,7 @@
 #include "ve_world.h"
 #include <math.h>
 #include <stdlib.h>
+#include <unordered_map>
 
 std::vector<ParticleEmitter> g_emitters;
 std::vector<PendingSpawn> g_pending_spawns;
@@ -312,20 +313,8 @@ void ProcessPendingSpawns(bool ready) {
       emitter.config.start_scale[1] = 0.25f;
 
       // Sample light (either fresh or current-best)
-      int lx = (int)floorf(spawn.x + 0.5f);
-      int ly = (int)floorf(spawn.y + 0.5f);
-      int lz = (int)floorf(spawn.z + 0.5f);
-
       float r = 1.0f, g = 1.0f, b = 1.0f;
-      if (lx >= 0 && lx < g_grid_size && ly >= 0 && ly < g_grid_size &&
-          lz >= 0 && lz < g_grid_size) {
-        int idx = calculate_block_index(lx, ly, lz, g_grid_size);
-        float sun_f = (float)g_sun_light[idx] / 15.0f;
-        float source_f = (float)g_source_light[idx] / 15.0f;
-        r = fminf(1.0f, fmaxf(0.02f, sun_f + source_f * 1.0f));
-        g = fminf(1.0f, fmaxf(0.02f, sun_f + source_f * 0.9f));
-        b = fminf(1.0f, fmaxf(0.02f, sun_f + source_f * 0.6f));
-      }
+      // Note: Particle light lookup disabled for multi-chunk since particles don't need accurate GI.
       emitter.config.light_tint[0] = r;
       emitter.config.light_tint[1] = g;
       emitter.config.light_tint[2] = b;

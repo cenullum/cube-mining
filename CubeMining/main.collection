@@ -32,7 +32,7 @@ instances {
     id: "particle_manager"
     properties {
       id: "game_atlas"
-      value: "/game.atlas"
+      value: "/assets/images/game.atlas"
       type: PROPERTY_TYPE_HASH
     }
   }
@@ -91,7 +91,7 @@ embedded_instances {
   "  }\n"
   "  properties {\n"
   "    id: \"game_atlas\"\n"
-  "    value: \"/game.atlas\"\n"
+  "    value: \"/assets/images/game.atlas\"\n"
   "    type: PROPERTY_TYPE_HASH\n"
   "  }\n"
   "  properties {\n"
@@ -103,6 +103,11 @@ embedded_instances {
   "    id: \"torch_factory\"\n"
   "    value: \"/root#torch_factory\"\n"
   "    type: PROPERTY_TYPE_URL\n"
+  "  }\n"
+  "  properties {\n"
+  "    id: \"view_distance\"\n"
+  "    value: \"2.0\"\n"
+  "    type: PROPERTY_TYPE_NUMBER\n"
   "  }\n"
   "}\n"
   "components {\n"

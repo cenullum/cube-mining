@@ -1,35 +1,25 @@
 #include "ve_world.h"
+#include "chunk_manager.h"
 #include <stdlib.h>
 #include <string.h>
 
-void alloc_mesh_buffers(int grid_size) {
-    uint32_t max_quads = grid_size * grid_size * grid_size * 3;
-    uint32_t max_verts = max_quads * 6;
-    
-    g_vertex_positions   = (float*)realloc(g_vertex_positions,   max_verts * 3 * sizeof(float));
-    g_vertex_uvs_base    = (float*)realloc(g_vertex_uvs_base,    max_verts * 4 * sizeof(float));
-    g_vertex_uvs_local   = (float*)realloc(g_vertex_uvs_local,   max_verts * 4 * sizeof(float));
-    g_vertex_face_ids    = (float*)realloc(g_vertex_face_ids,    max_verts * 2 * sizeof(float));
-
-    g_trans_vertex_positions = (float*)realloc(g_trans_vertex_positions, max_verts * 3 * sizeof(float));
-    g_trans_vertex_uvs_base  = (float*)realloc(g_trans_vertex_uvs_base,  max_verts * 4 * sizeof(float));
-    g_trans_vertex_uvs_local = (float*)realloc(g_trans_vertex_uvs_local, max_verts * 4 * sizeof(float));
-    g_trans_vertex_face_ids  = (float*)realloc(g_trans_vertex_face_ids,  max_verts * 2 * sizeof(float));
-}
-
-static void append_quad_to_mesh_buffers(int quad_idx, float p1x, float p1y, float p1z, float p2x, float p2y, float p2z,
+static void append_quad_to_mesh_buffers(Chunk* chunk, int quad_idx, float p1x, float p1y, float p1z, float p2x, float p2y, float p2z,
     float p3x, float p3y, float p3z, float p4x, float p4y, float p4z,
     const UVData* uv_data, int quad_width, int quad_height, int face_direction, uint16_t block_id, bool is_transparent) {
 
-    float* pos_ptr   = is_transparent ? g_trans_vertex_positions : g_vertex_positions;
-    float* uvb_ptr   = is_transparent ? g_trans_vertex_uvs_base  : g_vertex_uvs_base;
-    float* uvl_ptr   = is_transparent ? g_trans_vertex_uvs_local : g_vertex_uvs_local;
-    float* face_ptr  = is_transparent ? g_trans_vertex_face_ids  : g_vertex_face_ids;
+    float* pos_ptr   = is_transparent ? chunk->trans_pos : chunk->opaque_pos;
+    float* uvb_ptr   = is_transparent ? chunk->trans_uvb : chunk->opaque_uvb;
+    float* uvl_ptr   = is_transparent ? chunk->trans_uvl : chunk->opaque_uvl;
+    float* face_ptr  = is_transparent ? chunk->trans_face : chunk->opaque_face;
 
     int base_v3 = quad_idx * 18;
     int base_v4 = quad_idx * 24;
     int base_v2 = quad_idx * 12;
     
+    // Offset local coords by chunk pos, so the spawned GameObject represents world pos directly? 
+    // Or keep them relative to chunk, and the GO will be positioned at chunk world coordinates.
+    // Defold GameObjects will be positioned at (cx*16, cy*16, cz*16).
+    // So vertex positions should be relative to chunk base (0..16).
     float px[4] = {p1x, p2x, p3x, p4x};
     float py[4] = {p1y, p2y, p3y, p4y};
     float pz[4] = {p1z, p2z, p3z, p4z};
@@ -61,32 +51,37 @@ static void append_quad_to_mesh_buffers(int quad_idx, float p1x, float p1y, floa
     }
 
     if (g_debug_enabled) {
+        float cx = chunk->cx * CHUNK_SIZE;
+        float cy = chunk->cy * CHUNK_SIZE;
+        float cz = chunk->cz * CHUNK_SIZE;
         DebugQuad dq;
-        dq.x1 = p1x; dq.y1 = p1y; dq.z1 = p1z;
-        dq.x2 = p2x; dq.y2 = p2y; dq.z2 = p2z;
-        dq.x3 = p3x; dq.y3 = p3y; dq.z3 = p3z;
-        dq.x4 = p4x; dq.y4 = p4y; dq.z4 = p4z;
+        dq.x1 = cx + p1x; dq.y1 = cy + p1y; dq.z1 = cz + p1z;
+        dq.x2 = cx + p2x; dq.y2 = cy + p2y; dq.z2 = cz + p2z;
+        dq.x3 = cx + p3x; dq.y3 = cy + p3y; dq.z3 = cz + p3z;
+        dq.x4 = cx + p4x; dq.y4 = cy + p4y; dq.z4 = cz + p4z;
         dq.dir = face_direction;
         g_debug_quads.push_back(dq);
     }
 }
 
-void execute_mesh_generation_pipeline(const uint8_t* world_blocks, const uint8_t* sun_light, const uint8_t* source_light,
-    int side_length, bool ao_enabled, int light_mode) {
-
+void execute_mesh_generation_pipeline(Chunk* chunk) {
+    if (!chunk) return;
     uint64_t start_time = dmTime::GetTime();
     int current_quad_index = 0, total_face_count = 0;
     int trans_quad_index = 0, trans_face_count = 0;
-    static uint32_t greedy_mask[64 * 64];
+    static uint32_t greedy_mask[CHUNK_SIZE * CHUNK_SIZE];
 
-    g_debug_quads.clear();
+    // Allocate max potential size to be safe, then we'll tell Lua the exact count.
+    // Max quads for 16x16x16 is 4096 * 3 = 12288 quads = 73728 verts.
+    uint32_t max_v = CHUNK_VOLUME * 3 * 6;
+    chunk->AllocateMeshBuffers(max_v);
 
     for (int face_direction = 1; face_direction <= 6; face_direction++) {
-        for (int slice_idx = 0; slice_idx < side_length; slice_idx++) {
-            memset(greedy_mask, 0, side_length * side_length * sizeof(uint32_t));
+        for (int slice_idx = 0; slice_idx < CHUNK_SIZE; slice_idx++) {
+            memset(greedy_mask, 0, CHUNK_SIZE * CHUNK_SIZE * sizeof(uint32_t));
 
-            for (int v_idx = 0; v_idx < side_length; v_idx++) {
-                for (int u_idx = 0; u_idx < side_length; u_idx++) {
+            for (int v_idx = 0; v_idx < CHUNK_SIZE; v_idx++) {
+                for (int u_idx = 0; u_idx < CHUNK_SIZE; u_idx++) {
                     int x, y, z, nx, ny, nz;
                     if (face_direction == 1)      { x = u_idx;     y = v_idx;     z = slice_idx; nx = x; ny = y; nz = z + 1; }
                     else if (face_direction == 2) { x = u_idx;     y = v_idx;     z = slice_idx; nx = x; ny = y; nz = z - 1; }
@@ -95,39 +90,59 @@ void execute_mesh_generation_pipeline(const uint8_t* world_blocks, const uint8_t
                     else if (face_direction == 5) { x = slice_idx; y = v_idx;     z = u_idx;     nx = x + 1; ny = y; nz = z; }
                     else                          { x = slice_idx; y = v_idx;     z = u_idx;     nx = x - 1; ny = y; nz = z; }
 
-                    if (x < 0 || x >= side_length || y < 0 || y >= side_length || z < 0 || z >= side_length) continue;
-                    uint8_t current_id = world_blocks[calculate_block_index(x, y, z, side_length)];
+                    if (x < 0 || x >= CHUNK_SIZE || y < 0 || y >= CHUNK_SIZE || z < 0 || z >= CHUNK_SIZE) continue;
+                    
+                    int local_idx = x + z * CHUNK_SIZE + y * CHUNK_SIZE * CHUNK_SIZE;
+                    uint8_t current_id = chunk->blocks[local_idx];
                     if (current_id == 0 || !g_block_defs[current_id].registered) continue;
                     
                     int cur_render = g_block_defs[current_id].render_type;
 
-                    // Skip meshing for fully transparent blocks (like Air or Torch)
                     if (cur_render == 1) continue;
 
-                    uint8_t neighbor_id = (nx < 0 || nx >= side_length || ny < 0 || ny >= side_length || nz < 0 || nz >= side_length) ? 0 : world_blocks[calculate_block_index(nx, ny, nz, side_length)];
-                    
+                    uint8_t neighbor_id = 0;
+                    bool neighbor_chunk_missing = false;
+
+                    if (nx < 0 || nx >= CHUNK_SIZE || ny < 0 || ny >= CHUNK_SIZE || nz < 0 || nz >= CHUNK_SIZE) {
+                        int wnx = chunk->cx * CHUNK_SIZE + nx;
+                        int wny = chunk->cy * CHUNK_SIZE + ny;
+                        int wnz = chunk->cz * CHUNK_SIZE + nz;
+                        
+                        int ncx, ncy, ncz, nlx, nly, nlz;
+                        ChunkManager::WorldToChunk(wnx, wny, wnz, ncx, ncy, ncz, nlx, nly, nlz);
+                        Chunk* nchunk = ChunkManager::GetChunk(ncx, ncy, ncz);
+                        if (!nchunk) {
+                            neighbor_chunk_missing = true; 
+                        } else {
+                            neighbor_id = nchunk->blocks[nlx + nlz * CHUNK_SIZE + nly * CHUNK_SIZE * CHUNK_SIZE];
+                        }
+                    } else {
+                        neighbor_id = chunk->blocks[nx + nz * CHUNK_SIZE + ny * CHUNK_SIZE * CHUNK_SIZE];
+                    }
+
+                    // "bir chunk oluşturdun ve henüz yandaki chunk oluşmadıysa değen yüzeyleri oluşturmana gerek yok"
+                    if (neighbor_chunk_missing) continue; // assume solid or hidden boundary
+
                     int neighbor_render = (neighbor_id == 0) || !g_block_defs[neighbor_id].registered ? 1 : g_block_defs[neighbor_id].render_type;
                     bool neighbor_is_transparent = (neighbor_render >= 1);
 
                     bool should_draw = false;
                     if (cur_render == 2) {
-                        // Semi-transparent blocks: draw if neighbor is not the same block
                         if (current_id != neighbor_id) should_draw = true;
                     } else {
-                        // Opaque blocks: draw if neighbor is transparent (Air, Water, etc)
                         if (neighbor_is_transparent) should_draw = true;
                     }
 
                     if (!should_draw) continue;
 
                     uint32_t mask_bit = (cur_render == 2) ? (1U << 31) : (1U << 30);
-                    greedy_mask[v_idx * side_length + u_idx] = (uint32_t)current_id | mask_bit;
+                    greedy_mask[v_idx * CHUNK_SIZE + u_idx] = (uint32_t)current_id | mask_bit;
                 }
             }
 
-            for (int v_idx = 0; v_idx < side_length; v_idx++) {
-                for (int u_idx = 0; u_idx < side_length; u_idx++) {
-                    uint32_t mask_val = greedy_mask[v_idx * side_length + u_idx];
+            for (int v_idx = 0; v_idx < CHUNK_SIZE; v_idx++) {
+                for (int u_idx = 0; u_idx < CHUNK_SIZE; u_idx++) {
+                    uint32_t mask_val = greedy_mask[v_idx * CHUNK_SIZE + u_idx];
                     if (!mask_val) continue;
 
                     uint16_t block_id = (uint16_t)(mask_val & 0xFFFF);
@@ -136,16 +151,19 @@ void execute_mesh_generation_pipeline(const uint8_t* world_blocks, const uint8_t
                     
                     int width = 1, height = 1;
                     if (can_greedy) {
-                        while (u_idx + width < side_length && greedy_mask[v_idx * side_length + u_idx + width] == mask_val) width++;
+                        while (u_idx + width < CHUNK_SIZE && greedy_mask[v_idx * CHUNK_SIZE + u_idx + width] == mask_val) width++;
                         bool can_merge_row = true;
-                        while (v_idx + height < side_length && can_merge_row) {
-                            for (int r = 0; r < width; r++) { if (greedy_mask[(v_idx + height) * side_length + u_idx + r] != mask_val) { can_merge_row = false; break; } }
+                        while (v_idx + height < CHUNK_SIZE && can_merge_row) {
+                            for (int r = 0; r < width; r++) { if (greedy_mask[(v_idx + height) * CHUNK_SIZE + u_idx + r] != mask_val) { can_merge_row = false; break; } }
                             if (can_merge_row) height++;
                         }
                     }
 
                     float p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z, p4x, p4y, p4z;
-                    float off = -0.5f;
+                    // Our vertices are chunk-relative, 0 to 16
+                    float off = -0.5f; // if blocks center at 0..15? The original code had 0..side_length-1 block indexing.
+                    // Actually let's keep the user's `off` to maintain exact alignment
+                    
                     if (face_direction == 1) {
                         p1x=u_idx+off;       p1y=v_idx+off;        p1z=slice_idx+1+off;
                         p2x=u_idx+width+off; p2y=v_idx+off;        p2z=slice_idx+1+off;
@@ -179,28 +197,29 @@ void execute_mesh_generation_pipeline(const uint8_t* world_blocks, const uint8_t
                     }
 
                     if (is_semi) {
-                        append_quad_to_mesh_buffers(trans_quad_index, p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z, p4x, p4y, p4z, &g_block_defs[block_id].uvs[face_direction], width, height, face_direction, block_id, true);
+                        append_quad_to_mesh_buffers(chunk, trans_quad_index, p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z, p4x, p4y, p4z, &g_block_defs[block_id].uvs[face_direction], width, height, face_direction, block_id, true);
                         trans_quad_index++; trans_face_count++;
                     } else {
-                        append_quad_to_mesh_buffers(current_quad_index, p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z, p4x, p4y, p4z, &g_block_defs[block_id].uvs[face_direction], width, height, face_direction, block_id, false);
+                        append_quad_to_mesh_buffers(chunk, current_quad_index, p1x, p1y, p1z, p2x, p2y, p2z, p3x, p3y, p3z, p4x, p4y, p4z, &g_block_defs[block_id].uvs[face_direction], width, height, face_direction, block_id, false);
                         current_quad_index++; total_face_count++;
                     }
 
-                    for (int r=0; r<height; r++) for (int c=0; c<width; c++) greedy_mask[(v_idx+r)*side_length + u_idx+c] = 0;
+                    for (int r=0; r<height; r++) for (int c=0; c<width; c++) greedy_mask[(v_idx+r)*CHUNK_SIZE + u_idx+c] = 0;
                 }
             }
         }
     }
 
-    g_result_quad_count     = current_quad_index;
-    g_result_face_count     = total_face_count;
-    g_result_vertex_count   = current_quad_index * 6;
+    chunk->opaque_quads     = current_quad_index;
+    chunk->opaque_faces     = total_face_count;
+    chunk->opaque_verts   = current_quad_index * 6;
 
-    g_trans_result_quad_count   = trans_quad_index;
-    g_trans_result_face_count   = trans_face_count;
-    g_trans_result_vertex_count = trans_quad_index * 6;
+    chunk->trans_quads   = trans_quad_index;
+    chunk->trans_faces   = trans_face_count;
+    chunk->trans_verts = trans_quad_index * 6;
 
-    g_result_build_time   = (dmTime::GetTime() - start_time) / 1000.0;
+    chunk->build_time   = (dmTime::GetTime() - start_time) / 1000.0;
+    chunk->is_dirty = false;
 }
 
 void copy_array_to_buffer_stream(dmBuffer::HBuffer buffer, dmhash_t stream_name, const float* source_data, uint32_t vertex_count, uint32_t components_per_vertex) {
@@ -216,7 +235,7 @@ void copy_array_to_buffer_stream(dmBuffer::HBuffer buffer, dmhash_t stream_name,
 }
 
 int Lua_GetMaxVertices(lua_State* L) {
-    uint32_t max_verts = (uint32_t)g_grid_size * g_grid_size * g_grid_size * 3 * 6;
+    uint32_t max_verts = CHUNK_VOLUME * 3 * 6;
     lua_pushinteger(L, max_verts);
     return 1;
 }
@@ -241,5 +260,6 @@ int Lua_GetMeshDebugQuads(lua_State* L) {
         lua_pushinteger(L, dq.dir); lua_rawseti(L, -2, 13);
         lua_rawseti(L, -2, i + 1);
     }
+    g_debug_quads.clear();
     return 1;
 }

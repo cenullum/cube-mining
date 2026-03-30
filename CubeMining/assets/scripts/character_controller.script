@@ -227,6 +227,7 @@ local function perform_shot(self, message)
     msg.post(".", "apply_recoil", { power = 1.0 })
 end
 
+
 function update(self, dt)
     -- Screen shake decay
     local shake_duration = self.shake_duration
@@ -246,6 +247,26 @@ function update(self, dt)
 
     -- Rotation Logic
     -- (Applied in update_camera directly from accumulated pitch/yaw)
+
+    if not self.spawn_initialized and voxel_engine.get_block then
+        local p = go.get_position()
+        voxel_engine.update_world(p) -- Force load center chunk
+        
+        -- Find surface
+        local surface_y = 32
+        for y = 64, 0, -1 do
+            if voxel_engine.get_block(0, y, 0) ~= 0 then
+                surface_y = y + 1
+                break
+            end
+        end
+        -- Clear air above
+        voxel_engine.set_block(0, surface_y, 0, 0)
+        voxel_engine.set_block(0, surface_y+1, 0, 0)
+        
+        go.set_position(vmath.vector3(0.5, surface_y + self.eye_height, 0.5))
+        self.spawn_initialized = true
+    end
 
     if self.state == STATE_FREE_CAM then
         -- Free Camera Logic (Spectator)
@@ -551,7 +572,7 @@ function update(self, dt)
 
     -- Fog color and clear color is now handled by GPU (render script and shaders)
     -- We just calculate the depth factor for clear color here (or move it to render script)
-    local surface_y = grid_size - 1
+    local surface_y = 64
     local player_grid_y = eye_pos.y
     local depth_below_surface = surface_y - player_grid_y
     local depth_factor = math.max(0, math.min(1, depth_below_surface / 5.0))
@@ -564,6 +585,7 @@ function update(self, dt)
     msg.post("@render:", "clear_color", { color = vmath.vector4(fog_r, fog_g, fog_b, 1.0) })
 
     update_camera(self, dt)
+    voxel_engine.update_world(eye_pos)
 end
 
 function on_input(self, action_id, action)

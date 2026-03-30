@@ -56,7 +56,7 @@ components {
   }
   properties {
     id: "game_atlas"
-    value: "/game.atlas"
+    value: "/assets/images/game.atlas"
     type: PROPERTY_TYPE_HASH
   }
 }

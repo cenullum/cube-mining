@@ -5,9 +5,9 @@
 #include <dmsdk/sdk.h>
 #include <map>
 #include <vector>
+#include "chunk_manager.h"
 
 // Constants
-extern const int MAX_GRID_SIZE;
 extern const int MAX_BLOCKS;
 
 // Types
@@ -60,10 +60,6 @@ struct DebugQuad {
 };
 
 // Global State
-extern int g_grid_size;
-extern uint8_t g_blocks[];
-extern uint8_t g_sun_light[];
-extern uint8_t g_source_light[];
 extern BlockDef g_block_defs[256];
 extern int g_seed;
 extern bool g_ao_enabled;
@@ -77,51 +73,19 @@ extern dmVMath::Vector3 g_player_pos;
 void TriggerAsyncMeshUpdate();
 
 // Prototypes - World
-int calculate_block_index(int x, int y, int z, int side_length);
-uint8_t safe_get_block(int x, int y, int z, int s);
 uint8_t GetBlock(int x, int y, int z);
 void SetBlock(int x, int y, int z, uint8_t id);
 bool IsSolid(int x, int y, int z);
 
-// Prototypes - Terrain
-void initialize_world_terrain_data();
-int calculate_ground_height(int x, int z);
-float calculate_perlin_noise_3d(float x, float y, float z);
-
 // Prototypes - Lighting
-void perform_lighting_pass(uint8_t *blocks, uint8_t *sun_light_data,
-                           uint8_t *source_light_data, int side_length);
+void perform_lighting_pass(Chunk* chunk);
 
 // Prototypes - Mesh
-void alloc_mesh_buffers(int grid_size);
-void execute_mesh_generation_pipeline(const uint8_t *world_blocks,
-                                      const uint8_t *sun_light,
-                                      const uint8_t *source_light,
-                                      int side_length, bool ao_enabled,
-                                      int light_mode);
+void execute_mesh_generation_pipeline(Chunk* chunk);
 void copy_array_to_buffer_stream(dmBuffer::HBuffer buffer, dmhash_t stream_name,
                                  const float *source_data,
                                  uint32_t vertex_count,
                                  uint32_t components_per_vertex);
-
-extern float *g_vertex_positions;
-extern float *g_vertex_uvs_base;
-extern float *g_vertex_uvs_local;
-extern float *g_vertex_face_ids;
-
-extern float *g_trans_vertex_positions;
-extern float *g_trans_vertex_uvs_base;
-extern float *g_trans_vertex_uvs_local;
-extern float *g_trans_vertex_face_ids;
-
-extern uint32_t g_result_quad_count;
-extern uint32_t g_result_face_count;
-extern uint32_t g_result_vertex_count;
-
-extern uint32_t g_trans_result_quad_count;
-extern uint32_t g_trans_result_face_count;
-extern uint32_t g_trans_result_vertex_count;
-extern double g_result_build_time;
 
 // Prototypes - NPC
 void UpdateAllNPCs(float dt);
@@ -146,34 +110,18 @@ int Lua_ShootRay(lua_State *L);
 int Lua_MoveAndSlide(lua_State *L);
 int Lua_CheckCollision(lua_State *L);
 
-// Prototypes - Lighting
-void perform_lighting_pass(uint8_t *blocks, uint8_t *sun_light_data,
-                           uint8_t *source_light_data, int side_length);
+// Prototypes - Lua Lighting
 int Lua_GetAmbientLight(lua_State *L);
 int Lua_UpdateLightBuffer(lua_State *L);
 int Lua_PerformLightingPassSync(lua_State *L);
 
-// Prototypes - Mesh
-void alloc_mesh_buffers(int grid_size);
-void execute_mesh_generation_pipeline(const uint8_t *world_blocks,
-                                      const uint8_t *sun_light,
-                                      const uint8_t *source_light,
-                                      int side_length, bool ao_enabled,
-                                      int light_mode);
-void copy_array_to_buffer_stream(dmBuffer::HBuffer buffer, dmhash_t stream_name,
-                                 const float *source_data,
-                                 uint32_t vertex_count,
-                                 uint32_t components_per_vertex);
-int Lua_GetMaxVertices(lua_State *L);
-int Lua_GetMeshDebugQuads(lua_State *L);
-
-// Prototypes - World
-int calculate_block_index(int x, int y, int z, int side_length);
-uint8_t safe_get_block(int x, int y, int z, int s);
-uint8_t GetBlock(int x, int y, int z);
-void SetBlock(int x, int y, int z, uint8_t id);
-bool IsSolid(int x, int y, int z);
+// Prototypes - Lua Block
 int Lua_RegisterBlockType(lua_State *L);
 int Lua_GetBlockInfo(lua_State *L);
 int Lua_SetBlockInWorld(lua_State *L);
 int Lua_GetBlockFromWorld(lua_State *L);
+
+// Prototypes - Lua Mesh
+int Lua_GetMaxVertices(lua_State *L);
+int Lua_GetMeshDebugQuads(lua_State *L);
+
