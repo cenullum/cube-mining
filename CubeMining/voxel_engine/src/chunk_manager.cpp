@@ -79,12 +79,12 @@ void Chunk::AllocateMeshBuffers(uint32_t max_verts) {
     opaque_pos = (float *)malloc(max_verts * 3 * sizeof(float));
     opaque_uvb = (float *)malloc(max_verts * 4 * sizeof(float));
     opaque_uvl = (float *)malloc(max_verts * 4 * sizeof(float));
-    opaque_face = (float *)malloc(max_verts * 2 * sizeof(float));
+    opaque_face = (float *)malloc(max_verts * 1 * sizeof(float));
 
     trans_pos = (float *)malloc(max_verts * 3 * sizeof(float));
     trans_uvb = (float *)malloc(max_verts * 4 * sizeof(float));
     trans_uvl = (float *)malloc(max_verts * 4 * sizeof(float));
-    trans_face = (float *)malloc(max_verts * 2 * sizeof(float));
+    trans_face = (float *)malloc(max_verts * 1 * sizeof(float));
   }
 }
 

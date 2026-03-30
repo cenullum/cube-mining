@@ -122,7 +122,7 @@ int Lua_PollChunkUpdates(lua_State *L) {
               {dmHashString64("position"), dmBuffer::VALUE_TYPE_FLOAT32, 3},
               {dmHashString64("texcoord0"), dmBuffer::VALUE_TYPE_FLOAT32, 4},
               {dmHashString64("texcoord1"), dmBuffer::VALUE_TYPE_FLOAT32, 4},
-              {dmHashString64("texcoord2"), dmBuffer::VALUE_TYPE_FLOAT32, 2}};
+              {dmHashString64("texcoord2"), dmBuffer::VALUE_TYPE_FLOAT32, 1}};
 
           // Opaque
           if (c->opaque_verts > 0) {
@@ -131,7 +131,7 @@ int Lua_PollChunkUpdates(lua_State *L) {
                   copy_array_to_buffer_stream(buf, dmHashString64("position"), c->opaque_pos, c->opaque_verts, 3);
                   copy_array_to_buffer_stream(buf, dmHashString64("texcoord0"), c->opaque_uvb, c->opaque_verts, 4);
                   copy_array_to_buffer_stream(buf, dmHashString64("texcoord1"), c->opaque_uvl, c->opaque_verts, 4);
-                  copy_array_to_buffer_stream(buf, dmHashString64("texcoord2"), c->opaque_face, c->opaque_verts, 2);
+                  copy_array_to_buffer_stream(buf, dmHashString64("texcoord2"), c->opaque_face, c->opaque_verts, 1);
                   
                   // Frustum culling metadata - the renderer handles chunks at local 0,0,0 to 16,16,16
                   float aabb[6] = {-0.5f, -0.5f, -0.5f, (float)CHUNK_SIZE-0.5f, (float)CHUNK_SIZE-0.5f, (float)CHUNK_SIZE-0.5f};
@@ -149,7 +149,7 @@ int Lua_PollChunkUpdates(lua_State *L) {
                   copy_array_to_buffer_stream(buf, dmHashString64("position"), c->trans_pos, c->trans_verts, 3);
                   copy_array_to_buffer_stream(buf, dmHashString64("texcoord0"), c->trans_uvb, c->trans_verts, 4);
                   copy_array_to_buffer_stream(buf, dmHashString64("texcoord1"), c->trans_uvl, c->trans_verts, 4);
-                  copy_array_to_buffer_stream(buf, dmHashString64("texcoord2"), c->trans_face, c->trans_verts, 2);
+                  copy_array_to_buffer_stream(buf, dmHashString64("texcoord2"), c->trans_face, c->trans_verts, 1);
                   
                   float aabb[6] = {-0.5f, -0.5f, -0.5f, (float)CHUNK_SIZE-0.5f, (float)CHUNK_SIZE-0.5f, (float)CHUNK_SIZE-0.5f};
                   dmBuffer::SetMetaData(buf, dmHashString64("AABB"), aabb, 6, dmBuffer::VALUE_TYPE_FLOAT32);

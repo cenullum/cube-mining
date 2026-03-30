@@ -9,9 +9,9 @@ embedded_components {
   ""
 }
 embedded_components {
-  id: "mesh_trans"
+  id: "mesh_water"
   type: "mesh"
-  data: "material: \"/assets/materials/terrain_trans.material\"\n"
+  data: "material: \"/assets/materials/terrain_water.material\"\n"
   "vertices: \"/empty.buffer\"\n"
   "textures: \"/assets/images/tile_texture/unbreakable.png\"\n"
   "position_stream: \"position\"\n"

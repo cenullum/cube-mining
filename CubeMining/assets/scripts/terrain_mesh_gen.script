@@ -22,7 +22,7 @@ go.property("view_distance", 2)
 local TEMP_POS = vmath.vector3()
 
 local H_MESH = hash("mesh")
-local H_MESH_TRANS = hash("mesh_trans")
+local H_MESH_WATER = hash("mesh_water")
 local H_POSITION = hash("position")
 local H_TEXCOORD0 = hash("texcoord0")
 local H_TEXCOORD1 = hash("texcoord1")
@@ -153,7 +153,7 @@ local function spawn_chunk(self, cx, cy, cz)
     local c = {
         go_id = go_id,
         mesh_url = msg.url(nil, go_id, H_MESH),
-        trans_mesh_url = msg.url(nil, go_id, H_MESH_TRANS)
+        trans_mesh_url = msg.url(nil, go_id, H_MESH_WATER)
     }
 
     local atlas = resource.get_atlas(self.game_atlas)

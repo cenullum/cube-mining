@@ -108,6 +108,8 @@ void main()
         0.0, 1.0);
     color.rgb = mix(fog_color.rgb, color.rgb, fog_factor);
     
+    // Optimized: Water is always semi-transparent
+    color.a = 0.6;
 
     out_fragColor = vec4(color.rgb, color.a);
 }

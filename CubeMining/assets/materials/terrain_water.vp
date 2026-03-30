@@ -20,6 +20,7 @@ uniform vs_uniforms
     uniform mediump mat4 mtx_worldview;
     uniform mediump mat4 mtx_proj;
     uniform mediump vec4 light;
+    uniform mediump vec4 time;
 };
 
 // Optimized Normal Lookup
@@ -38,7 +39,12 @@ void main()
     int fid = int(texcoord2.x + 0.5);
     vec3 n  = face_normals[clamp(fid, 0, 6)];
 
-    vec4 p = mtx_worldview * position;
+    // Optimized: Water-specific wave animation
+    vec4 animated_pos = position;
+    float wave = sin(time.x * 2.5 + position.x * 1.5 + position.z * 1.5) * 0.08;
+    animated_pos.y += wave - 0.07;
+    
+    vec4 p = mtx_worldview * animated_pos;
     
     // Calculate diffuse lighting (Axis aligned)
     float diff = max(dot(n, normalize(light.xyz)), 0.0);

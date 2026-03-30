@@ -14,7 +14,7 @@ static void append_quad_to_mesh_buffers(Chunk* chunk, int quad_idx, float p1x, f
 
     int base_v3 = quad_idx * 18;
     int base_v4 = quad_idx * 24;
-    int base_v2 = quad_idx * 12;
+    int base_v1 = quad_idx * 6;
     
     // Offset local coords by chunk pos, so the spawned GameObject represents world pos directly? 
     // Or keep them relative to chunk, and the GO will be positioned at chunk world coordinates.
@@ -46,8 +46,7 @@ static void append_quad_to_mesh_buffers(Chunk* chunk, int quad_idx, float p1x, f
         uvl_ptr[base_v4 + v_off * 4 + 2] = (float)quad_width;
         uvl_ptr[base_v4 + v_off * 4 + 3] = (float)quad_height;
 
-        face_ptr[base_v2 + v_off * 2 + 0] = (float)face_direction;
-        face_ptr[base_v2 + v_off * 2 + 1] = (float)block_id;
+        face_ptr[base_v1 + v_off] = (float)face_direction;
     }
 
     if (g_debug_enabled) {
