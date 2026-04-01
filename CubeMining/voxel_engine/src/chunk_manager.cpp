@@ -290,7 +290,11 @@ void ChunkManager::GenerateTerrain(Chunk *chunk) {
           int world_y = min_world_y + y;
           uint8_t block_id = 1; // Stone
           if (world_y == 0) block_id = 2; // Bedrock
-          else if ((rand() % 100) < 5) block_id = 3; // Gold
+          else {
+            int world_x = chunk->cx * CHUNK_SIZE + x;
+            int world_z = chunk->cz * CHUNK_SIZE + z;
+            if ((abs(Hash3D(world_x, world_y, world_z, g_seed)) % 100) < 5) block_id = 3; // Gold
+          }
           chunk->blocks[x + z * CHUNK_SIZE + y * CHUNK_SIZE * CHUNK_SIZE] = block_id;
         }
       }
@@ -313,7 +317,7 @@ void ChunkManager::GenerateTerrain(Chunk *chunk) {
         if (world_y == 0) {
           block_id = 2; // Bedrock
         } else if (world_y < ground_y - 3) {
-          if ((rand() % 100) < 5) block_id = 3; // Gold
+          if ((abs(Hash3D(world_x, world_y, world_z, g_seed)) % 100) < 5) block_id = 3; // Gold
           else block_id = 1; // Stone
         } else if (world_y < ground_y) {
           if (ground_y <= water_level + 2) block_id = 7; // Sand near water

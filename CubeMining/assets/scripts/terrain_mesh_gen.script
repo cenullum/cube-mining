@@ -200,7 +200,7 @@ function init(self)
     self.light_texture = resource.create_texture("/assets/textures/light_map.texturec", self.light_tex_params)
 
     -- Initialize C++ world wrapper with user-defined distance
-    voxel_engine.init(self.view_distance, os.time())
+    voxel_engine.init(self.view_distance, 12345)
 
     register_blocks(self)
 

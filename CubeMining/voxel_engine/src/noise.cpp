@@ -23,6 +23,12 @@ static inline int hash2(int x, int y, int seed) {
     return h ^ (h >> 16);
 }
 
+int Hash3D(int x, int y, int z, int seed) {
+    int h = seed + x * 374761393 + y * 668265263 + z * 884748317;
+    h = (h ^ (h >> 13)) * 1274126177;
+    return h ^ (h >> 16);
+}
+
 // Extremely fast 2D Perlin Noise using inline hash
 float FastPerlin2D(float x, float y, int seed) {
     int X = (int)floorf(x);

@@ -17,6 +17,7 @@ out mediump vec3 var_normal;        // Reconstructed normal
 // --- Uniforms ---
 uniform vs_uniforms
 {
+    uniform mat4 mtx_world;
     uniform mediump mat4 mtx_worldview;
     uniform mediump mat4 mtx_proj;
     uniform mediump vec4 light;
@@ -41,7 +42,8 @@ void main()
 
     // Optimized: Water-specific wave animation
     vec4 animated_pos = position;
-    float wave = sin(time.x * 2.5 + position.x * 1.5 + position.z * 1.5) * 0.08;
+    vec4 world_pos = mtx_world * position;
+    float wave = sin(time.x * 2.5 + world_pos.x * 1.5 + world_pos.z * 1.5) * 0.08;
     animated_pos.y += wave - 0.07;
     
     vec4 p = mtx_worldview * animated_pos;
