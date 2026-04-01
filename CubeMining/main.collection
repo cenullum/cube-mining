@@ -117,7 +117,7 @@ embedded_instances {
   "embedded_components {\n"
   "  id: \"mesh_prefab\"\n"
   "  type: \"factory\"\n"
-  "  data: \"prototype: \\\"/assets/gameobjects/mesh_prefab.go\\\"\\n"
+  "  data: \"prototype: \\\"/assets/gameobjects/terrain_mesh.go\\\"\\n"
   "\"\n"
   "}\n"
   "embedded_components {\n"

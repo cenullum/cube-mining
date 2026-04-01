@@ -6,6 +6,7 @@ in mediump float var_light;         // Directional Lighting factor
 in mediump vec2 var_local_uv;       // Local UV (0..1)
 in mediump vec2 var_quad_size;      // Quad size in blocks
 in mediump vec3 var_view_pos;       // View-space position
+in mediump vec3 var_world_pos;      // World-space position
 in mediump vec3 var_pos;            // Local position for block breaking
 in mediump vec3 var_normal;         // Reconstructed normal
 
@@ -75,7 +76,7 @@ void main()
     vec4 color = texture(texture0, atlas_uv) * vec4(tint.xyz * tint.w, tint.w);
 
     if (break_info.y > 0.5) {
-        vec3 grid_pos = round(var_pos - var_normal * 0.05);
+        vec3 grid_pos = round(var_world_pos - var_normal * 0.05);
         if (all(lessThan(abs(grid_pos - break_pos.xyz), vec3(0.01)))) {
 
             vec3 an     = abs(var_normal);

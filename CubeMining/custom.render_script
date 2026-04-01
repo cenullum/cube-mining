@@ -26,6 +26,7 @@ local MSG_USE_FIXED_PROJ     = hash("use_fixed_projection")
 local MSG_USE_FIXED_FIT_PROJ = hash("use_fixed_fit_projection")
 local MSG_SET_FOV            = hash("set_fov")
 local MSG_TOGGLE_FRUSTUM_DEBUG = hash("toggle_frustum_debug")
+local MSG_SET_BREAK_INFO     = hash("set_break_info")
 
 --------------------------------------------------------------------------------
 -- Render State & Predicates (Local Scope for Performance)
@@ -62,8 +63,10 @@ local main_height            = 0
 local last_win_w             = 0
 local last_win_h             = 0
 local is_valid               = false
-local debug_frustum_culling = false -- Simplified: Single toggle, fixed FOV
+local debug_frustum_culling = false 
 local camera_world_pos       = vmath.vector3(0, 0, 0)
+local break_info             = vmath.vector4(0, 0, 0, 0)
+local break_pos              = vmath.vector4(0, 0, 0, 0)
 local gpu_constants          = nil -- Initialized in init()
 
 local clear_buffers          = {
@@ -219,6 +222,8 @@ function update(self)
     -- Set GPU Constants
     gpu_constants.fog_color = fog_vec
     gpu_constants.cam_pos = vmath.vector4(camera_world_pos.x, camera_world_pos.y, camera_world_pos.z, grid_size)
+    gpu_constants.break_info = break_info
+    gpu_constants.break_pos = break_pos
 
     -- 1. Preparation & Clear
     render.set_depth_mask(true)
@@ -310,5 +315,8 @@ function on_message(self, message_id, message)
     elseif message_id == MSG_TOGGLE_FRUSTUM_DEBUG then
         debug_frustum_culling = not debug_frustum_culling
         print("Frustum culling debug: " .. tostring(debug_frustum_culling))
+    elseif message_id == MSG_SET_BREAK_INFO then
+        break_info = message.info
+        break_pos = message.pos
     end
 end

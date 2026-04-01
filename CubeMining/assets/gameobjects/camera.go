@@ -73,7 +73,7 @@ embedded_components {
 embedded_components {
   id: "voxel_mesh_factory"
   type: "factory"
-  data: "prototype: \"/assets/gameobjects/voxel_mesh.go\"\n"
+  data: "prototype: \"/assets/gameobjects/item_mesh.go\"\n"
   ""
 }
 embedded_components {

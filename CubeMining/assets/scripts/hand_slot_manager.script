@@ -51,6 +51,7 @@ local H_CANCEL_ADS      = hash("cancel_ads")
 
 -- Voxelizer message hashes
 local H_SET_HAND        = hash("set_hand_state")
+local H_SET_BREAK_INFO  = hash("set_break_info")
 
 -- Component properties for additive animation proxies
 go.property("anim_pos", vmath.vector3())
@@ -101,9 +102,7 @@ end
 local function clear_break_effect(self)
     self.mining_target = nil
     self.mining_progress = 0
-    if _G.world_voxel_mesh_url then
-        go.set(_G.world_voxel_mesh_url, "break_info", vmath.vector4(0, 0, 8, 0))
-    end
+    msg.post("@render:", H_SET_BREAK_INFO, { info = vmath.vector4(0, 0, 8, 0), pos = vmath.vector4(0,0,0,0) })
 end
 
 -- Cache item definition on switch
@@ -257,11 +256,8 @@ local function try_mine(self)
         msg.post("root#main", "destroy_cube", { gx = gx, gy = gy, gz = gz })
         clear_break_effect(self)
     else
-        if _G.world_voxel_mesh_url then
-            local frame = math.floor((self.mining_progress / health) * 8)
-            go.set(_G.world_voxel_mesh_url, "break_pos", vmath.vector4(gx, gy, gz, 0))
-            go.set(_G.world_voxel_mesh_url, "break_info", vmath.vector4(frame, 1, 8, 0))
-        end
+        local frame = math.floor((self.mining_progress / health) * 8)
+        msg.post("@render:", H_SET_BREAK_INFO, { info = vmath.vector4(frame, 1, 8, 0), pos = vmath.vector4(gx, gy, gz, 0) })
         sm.play(b_def.hit_sound or sm.hit, 1.0, go.get_position())
     end
 end

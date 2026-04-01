@@ -210,7 +210,6 @@ end
 function update(self, dt)
     self.time = (self.time or 0) + dt
     for key, c in pairs(self.chunks) do
-        pcall(function() go.set(c.mesh_url, hash("time"), vmath.vector4(self.time, 0, 0, 0)) end)
         pcall(function() go.set(c.trans_mesh_url, hash("time"), vmath.vector4(self.time, 0, 0, 0)) end)
     end
 

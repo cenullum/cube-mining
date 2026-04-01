@@ -11,6 +11,7 @@ out mediump float var_light;        // Directional Lighting factor
 out mediump vec2 var_local_uv;      // Local UV (0..1)
 out mediump vec2 var_quad_size;     // Quad size in blocks
 out mediump vec3 var_view_pos;      // Position in view space
+out mediump vec3 var_world_pos;     // Position in world space
 out mediump vec3 var_pos;           // Position for block breaking
 out mediump vec3 var_normal;        // Reconstructed normal
 
@@ -58,6 +59,7 @@ void main()
     var_quad_size = texcoord1.zw;
     
     var_view_pos = p.xyz;
+    var_world_pos = world_pos.xyz;
     var_pos = position.xyz;
     var_normal = n;
 
