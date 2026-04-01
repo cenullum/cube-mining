@@ -23,7 +23,7 @@ uniform fs_uniforms
 {
     mediump vec4 tint; // Face tint color
     lowp vec4 fog_color;
-    mediump vec4 fog_params;
+    mediump vec4 fog_distance;
     mediump vec4 break_info; // x: frame, y: enabled, z: total_frames
     mediump vec4 break_pos;  // xyz: block grid coordinates
     mediump vec4 cam_pos;
@@ -105,7 +105,7 @@ void main()
 
 
     lowp float fog_factor = clamp(
-        (fog_params.y - (-var_view_pos.z)) / (fog_params.y - fog_params.x),
+        (fog_distance.y - (-var_view_pos.z)) / (fog_distance.y - fog_distance.x),
         0.0, 1.0);
     color.rgb = mix(fog_color.rgb, color.rgb, fog_factor);
     

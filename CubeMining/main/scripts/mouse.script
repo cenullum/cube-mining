@@ -1,5 +1,5 @@
 -- mouse.script
-local base_npc = require "assets.scripts.base_npc"
+local base_npc = require "main.scripts.base_npc"
 
 go.property("gravity", -25.0)
 go.property("jump_force", 8.0)

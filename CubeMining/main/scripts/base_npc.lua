@@ -5,7 +5,7 @@ local vmath = vmath
 local msg = msg
 local math = math
 local hash = hash
-local sm = require "assets.scripts.sound_manager"
+local sm = require "main.scripts.sound_manager"
 
 local H_DRAW_LINE = hash("draw_line")
 local COLOR_DEBUG = vmath.vector4(1, 1, 0, 1)
@@ -81,7 +81,8 @@ function M.init(self)
     end
 
     pcall(function() go.set(self.model_url, "tint", self.ambient_light) end)
-
+    local position = go.get_position(self.id)
+    pcall(function() go.set(self.model_url, "position", position) end)
     sm.play(sm.swing, 1.0, go.get_position())
 end
 

@@ -1,6 +1,10 @@
 components {
   id: "script"
-  component: "/assets/scripts/bomb.script"
+  component: "/main/scripts/bomb.script"
+}
+components {
+  id: "fog_entity"
+  component: "/main/scripts/fog_entity.script"
 }
 embedded_components {
   id: "model"

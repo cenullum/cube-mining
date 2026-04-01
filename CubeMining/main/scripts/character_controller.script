@@ -9,8 +9,8 @@ local window = window
 local factory = factory
 local hash = hash
 local math = math
-local sm = require "assets.scripts.sound_manager"
-local items = require "assets.scripts.items"
+local sm = require "main.scripts.sound_manager"
+local items = require "main.scripts.items"
 
 
 -- Pre-hashed strings for optimization
@@ -119,6 +119,11 @@ function init(self)
 
     -- Walk sound tracking
     self.distance_walked = 0
+
+    -- Render optimization state
+    self.last_view_pos = vmath.vector3(0)
+    self.last_view_rot = vmath.quat()
+    self.last_clear_color = vmath.vector4(0)
 end
 
 local function update_camera(self, dt)
@@ -200,7 +205,11 @@ local function update_camera(self, dt)
     local pos_inv = vmath.matrix4_translation(-eye_pos)
     view = view * pos_inv
 
-    msg.post("@render:", H_SET_VIEW, { view = view, pos = eye_pos })
+    if self.last_view_pos ~= eye_pos or self.last_view_rot ~= rot then
+        msg.post("@render:", H_SET_VIEW, { view = view, pos = eye_pos })
+        self.last_view_pos = vmath.vector3(eye_pos)
+        self.last_view_rot = vmath.quat(rot)
+    end
 end
 
 local function perform_shot(self, message)
@@ -582,7 +591,11 @@ function update(self, dt)
     local fog_g = sky_g * (1.0 - depth_factor)
     local fog_b = sky_b * (1.0 - depth_factor)
 
-    msg.post("@render:", "clear_color", { color = vmath.vector4(fog_r, fog_g, fog_b, 1.0) })
+    local current_clear_color = vmath.vector4(fog_r, fog_g, fog_b, 1.0)
+    if current_clear_color ~= self.last_clear_color then
+        msg.post("@render:", "clear_color", { color = current_clear_color })
+        self.last_clear_color = current_clear_color
+    end
 
     update_camera(self, dt)
     voxel_engine.update_world(eye_pos)

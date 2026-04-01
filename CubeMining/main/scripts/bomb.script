@@ -1,4 +1,4 @@
-local sm = require "assets.scripts.sound_manager"
+local sm = require "main.scripts.sound_manager"
 
 local vmath = vmath
 local msg = msg

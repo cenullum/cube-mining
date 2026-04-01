@@ -7,7 +7,6 @@ in mediump vec3 normal;
 out mediump vec2 var_texcoord0;
 out mediump float var_light;
 out mediump vec3 var_view_pos;
-out lowp float var_fog_factor;
 
 uniform vs_uniforms
 {
@@ -15,7 +14,6 @@ uniform vs_uniforms
     uniform mediump mat4 mtx_proj;
     uniform mediump mat4 mtx_world;
     uniform mediump vec4 light;
-    uniform mediump vec4 fog_params;
 };
 
 void main()
@@ -35,9 +33,5 @@ void main()
     vec4 p = mtx_worldview * position;
     var_view_pos = p.xyz;
     
-    // Per-vertex fog factor
-    mediump float dist = length(p.xyz);
-    var_fog_factor = clamp((fog_params.y - dist) / (fog_params.y - fog_params.x), 0.0, 1.0);
-
     gl_Position = mtx_proj * p;
 }

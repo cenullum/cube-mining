@@ -14,7 +14,6 @@ uniform mediump sampler2D texture0;
 uniform fs_uniforms
 {
     mediump vec4 tint;
-    mediump vec4 cam_pos;
 };
 
 void main()

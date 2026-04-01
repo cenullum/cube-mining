@@ -1,6 +1,6 @@
 components {
   id: "cube_cursor"
-  component: "/assets/scripts/cube_cursor.script"
+  component: "/main/scripts/cube_cursor.script"
 }
 embedded_components {
   id: "mesh"

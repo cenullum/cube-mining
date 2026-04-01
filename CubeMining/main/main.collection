@@ -1,7 +1,7 @@
 name: "main"
 instances {
   id: "camera"
-  prototype: "/assets/gameobjects/camera.go"
+  prototype: "/main/gameobjects/camera.go"
   children: "hand_bomb"
   children: "hand_torch"
   position {
@@ -19,15 +19,15 @@ instances {
 }
 instances {
   id: "cursor"
-  prototype: "/assets/gameobjects/cursor.go"
+  prototype: "/main/gameobjects/cursor.go"
 }
 instances {
   id: "sounds"
-  prototype: "/assets/gameobjects/sounds.go"
+  prototype: "/main/gameobjects/sounds.go"
 }
 instances {
   id: "particle_manager"
-  prototype: "/assets/gameobjects/particle_manager.go"
+  prototype: "/main/gameobjects/particle_manager.go"
   component_properties {
     id: "particle_manager"
     properties {
@@ -83,7 +83,7 @@ embedded_instances {
   id: "root"
   data: "components {\n"
   "  id: \"main\"\n"
-  "  component: \"/assets/scripts/terrain_mesh_gen.script\"\n"
+  "  component: \"/main/scripts/terrain_mesh_gen.script\"\n"
   "  properties {\n"
   "    id: \"mesh_prefab\"\n"
   "    value: \"/root#mesh_prefab\"\n"
@@ -112,18 +112,18 @@ embedded_instances {
   "}\n"
   "components {\n"
   "  id: \"performance_overlay\"\n"
-  "  component: \"/assets/scripts/performance_overlay.script\"\n"
+  "  component: \"/main/scripts/performance_overlay.script\"\n"
   "}\n"
   "embedded_components {\n"
   "  id: \"mesh_prefab\"\n"
   "  type: \"factory\"\n"
-  "  data: \"prototype: \\\"/assets/gameobjects/terrain_mesh.go\\\"\\n"
+  "  data: \"prototype: \\\"/main/gameobjects/terrain_mesh.go\\\"\\n"
   "\"\n"
   "}\n"
   "embedded_components {\n"
   "  id: \"torch_factory\"\n"
   "  type: \"factory\"\n"
-  "  data: \"prototype: \\\"/assets/entity_gameobjects/torch.go\\\"\\n"
+  "  data: \"prototype: \\\"/main/entity_gameobjects/torch.go\\\"\\n"
   "\"\n"
   "}\n"
   ""

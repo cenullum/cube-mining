@@ -1,8 +1,8 @@
 -- terrain_mesh_gen.script
 -- Thin Lua wrapper: chunk streaming, mesh buffer assignment, light texture management.
 
-local items = require "assets.scripts.items"
-local sm = require "assets.scripts.sound_manager"
+local items = require "main.scripts.items"
+local sm = require "main.scripts.sound_manager"
 
 local vmath = vmath
 local resource = resource

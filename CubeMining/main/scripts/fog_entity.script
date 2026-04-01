@@ -1,0 +1,18 @@
+-- main/scripts/fog_entity.script
+-- Lightweight script to register entities for fog updates. No update() loop.
+
+function init(self)
+    _G.fog_entities = _G.fog_entities or {}
+    local model_url = msg.url(nil, nil, "model")
+    _G.fog_entities[go.get_id()] = model_url
+    
+    if _G.update_single_fog then
+        _G.update_single_fog(go.get_id(), model_url)
+    end
+end
+
+function final(self)
+    if _G.fog_entities then
+        _G.fog_entities[go.get_id()] = nil
+    end
+end

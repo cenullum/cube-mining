@@ -30,8 +30,8 @@ local VEC_UP            = v_vec3(0, 1, 0)
 local VEC_ZERO          = v_vec3()
 local QUAT_ID           = v_quat()
 
-local sm                = require "assets.scripts.sound_manager"
-local items_data        = require "assets.scripts.items"
+local sm                = require "main.scripts.sound_manager"
+local items_data        = require "main.scripts.items"
 
 -- ============================================================================
 -- PRE-CACHED HASHES & CONSTANTS

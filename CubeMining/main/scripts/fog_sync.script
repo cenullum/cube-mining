@@ -1,0 +1,43 @@
+-- assets/scripts/fog_sync.script
+-- Calculates fog factor in Lua and updates the material constant.
+-- This ensures the fragment shader can apply fog without per-vertex calculation overhead
+-- and avoids issues with view-space vs world-space coordinate consistency.
+
+local function update_fog(self)
+    local cam_pos = _G.camera_world_pos
+    local fog_dist = _G.fog_distance
+    
+    if not cam_pos or not fog_dist then return end
+    
+    local my_pos = go.get_world_position()
+    
+    -- Using spherical distance for simplicity and consistency with the previous shader logic.
+    -- (If planar distance is required, we would need the camera view matrix here).
+    local dist = vmath.length(my_pos - cam_pos)
+    
+    -- Linear fog factor: 1.0 = no fog, 0.0 = full fog
+    local factor = 1.0
+    if dist > fog_dist.x then
+        factor = 1.0 - math.min(1.0, (dist - fog_dist.x) / (fog_dist.y - fog_dist.x))
+    end
+    
+    -- Use pcall to ignore errors if the go or model doesn't exist
+    pcall(function()
+        model.set_constant("#model", "fog_factor", vmath.vector4(factor, 0, 0, 0))
+    end)
+end
+
+function init(self)
+    self.timer = 0
+    -- Initial update
+    update_fog(self)
+end
+
+function update(self, dt)
+    self.timer = self.timer + dt
+    -- Update roughly every 1.0 second to save CPU cycles
+    if self.timer >= 0.1 then
+        self.timer = 0
+        update_fog(self)
+    end
+end

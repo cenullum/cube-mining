@@ -33,10 +33,6 @@ vertex_constants {
   name: "time"
   type: CONSTANT_TYPE_USER
   value {
-    x: 0.0
-    y: 0.0
-    z: 0.0
-    w: 0.0
   }
 }
 fragment_constants {
@@ -53,60 +49,40 @@ fragment_constants {
   name: "fog_color"
   type: CONSTANT_TYPE_USER
   value {
-    x: 0.67
-    y: 0.79
-    z: 0.98
+    x: 1.0
+    y: 1.0
+    z: 1.0
     w: 1.0
   }
 }
 fragment_constants {
-  name: "fog_params"
+  name: "fog_distance"
   type: CONSTANT_TYPE_USER
   value {
-    x: 16.0
-    y: 32.0
-    z: 0.0
-    w: 0.0
   }
 }
 fragment_constants {
   name: "break_info"
   type: CONSTANT_TYPE_USER
   value {
-    x: 0.0
-    y: 0.0
-    z: 0.0
-    w: 0.0
   }
 }
 fragment_constants {
   name: "break_pos"
   type: CONSTANT_TYPE_USER
   value {
-    x: 0.0
-    y: 0.0
-    z: 0.0
-    w: 0.0
   }
 }
 fragment_constants {
   name: "cam_pos"
   type: CONSTANT_TYPE_USER
   value {
-    x: 0.0
-    y: 0.0
-    z: 0.0
-    w: 0.0
   }
 }
 fragment_constants {
   name: "light_offset"
   type: CONSTANT_TYPE_USER
   value {
-    x: 0.0
-    y: 0.0
-    z: 0.0
-    w: 0.0
   }
 }
 samplers {

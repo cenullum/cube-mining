@@ -1,6 +1,10 @@
 components {
   id: "script"
-  component: "/assets/scripts/mouse.script"
+  component: "/main/scripts/mouse.script"
+}
+components {
+  id: "fog_entity"
+  component: "/main/scripts/fog_entity.script"
 }
 embedded_components {
   id: "model"
