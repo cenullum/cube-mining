@@ -7,6 +7,12 @@ A 3D voxel template built with the **Defold Game Engine**. This project includes
 
 ## PLAY: https://cenullum.itch.io/cubemining
 
+<img width="1919" height="959" alt="Screenshot_20260401_110427" src="https://github.com/user-attachments/assets/1164a986-1956-4fc8-997b-b668a24f4cf9" />
+
+
+![water](https://github.com/user-attachments/assets/a6ae4f53-b2f8-4446-b040-7d00a3cc03d0)
+
+
 ![recording_20260214_014218](https://github.com/user-attachments/assets/577a2205-77c9-462d-b8ac-08a0a5fded29)
 
 ![gggg](https://github.com/user-attachments/assets/4377dab7-8b8c-4126-b5de-5ebf12c138ed)
