@@ -203,7 +203,7 @@ void ChunkManager::RemoveChunk(int cx, int cy, int cz) {
 
     delete chunk;
     active_chunks.erase(it);
-    dmLogInfo("voxel_engine: Removed Chunk(%d, %d, %d)", cx, cy, cz);
+    //dmLogInfo("voxel_engine: Removed Chunk(%d, %d, %d)", cx, cy, cz);
   }
   dmMutex::Unlock(mutex);
 }

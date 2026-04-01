@@ -439,15 +439,17 @@ function update(self, dt)
     end
 
     -- Debug overlay
-    local item = self.cached_item
-    local dbg = string.format(
-        "ID:%d  Type:%s  Mode:%s\nShooting:%s  Reloading:%s\nADS:%s  Bob:%.3f,%.3f",
-        self.current_id or 0, item and item.type or "?", self.active_mode or "?",
-        tostring(is_shooting), tostring(self.reloading), tostring(ads_active),
-        self.bob_offset.x, self.bob_offset.y
-    )
-    msg.post("@render:", "draw_debug_text",
-        { text = dbg, position = v_vec3(10, 120, 0), color = v_vec4(1, 1, 0, 1) })
+    if _G.performance_mode ~= 3 then
+        local item = self.cached_item
+        local dbg = string.format(
+            "ID:%d  Type:%s  Mode:%s\nShooting:%s  Reloading:%s\nADS:%s  Bob:%.3f,%.3f",
+            self.current_id or 0, item and item.type or "?", self.active_mode or "?",
+            tostring(is_shooting), tostring(self.reloading), tostring(ads_active),
+            self.bob_offset.x, self.bob_offset.y
+        )
+        msg.post("@render:", "draw_debug_text",
+            { text = dbg, position = v_vec3(10, 120, 0), color = v_vec4(1, 1, 0, 1) })
+    end
 end
 
 function on_input(self, action_id, action)

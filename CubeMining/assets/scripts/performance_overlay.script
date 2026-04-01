@@ -62,7 +62,7 @@ end
 
 function init(self)
     msg.post(".", H_ACQUIRE_INPUT_FOCUS)
-    self.mode = 0 -- 0: Off, 1: Text, 2: Text + Graph + Edges
+    self.mode = 0 -- 0: Off, 1: Text, 2: Text + Graph + Edges, 3: FPS Only
     _G.performance_mode = 0
 
     -- FPS Metrics (defold-metrics style)
@@ -140,6 +140,38 @@ function init(self)
 end
 
 function update(self, dt)
+    if self.mode == 3 then
+        self.current_time = socket.gettime()
+        self.prev_time = self.current_time
+
+        table.insert(self.fps_frames, self.current_time)
+        if #self.fps_frames > self.fps_samples + 1 then
+            table.remove(self.fps_frames, 1)
+        end
+
+        if #self.fps_frames > 1 then
+            local dt_total = self.fps_frames[#self.fps_frames] - self.fps_frames[1]
+            if dt_total > 0 then
+                self.avg_fps = (#self.fps_frames - 1) / dt_total
+            end
+        end
+
+        self.text_update_timer = self.text_update_timer + dt
+        if self.text_update_timer >= self.text_update_interval or not self.cached_avg_fps then
+            self.text_update_timer = 0
+            self.cached_avg_fps = string.format("Avg. FPS: %.1f", self.avg_fps)
+        end
+
+        self.vec_offset.x = self.width - 150
+        self.vec_offset.y = self.height - 20
+        msg.post("@render:", H_DRAW_DEBUG_TEXT, {
+            text = self.cached_avg_fps,
+            position = self.vec_offset,
+            color = self.color_green
+        })
+        return
+    end
+
     -- 0. Always display controls (Persistent & Optimized)
     for i, line in ipairs(self.controls) do
         self.vec_offset.x = 20
@@ -430,9 +462,9 @@ end
 
 function on_input(self, action_id, action)
     if action_id == H_TOGGLE_PERFORMANCE and action.pressed then
-        self.mode = (self.mode + 1) % 3
+        self.mode = (self.mode + 1) % 4
         _G.performance_mode = self.mode
-        local modes = { "Off", "Text", "Text + Graph + Edges" }
+        local modes = { "Off", "Text", "Text + Graph + Edges", "FPS Only" }
         print("Performance overlay mode: " .. modes[self.mode + 1])
     elseif action_id == H_TOGGLE_FRUSTUM and action.pressed then
         _G.frustum_debug_active = not _G.frustum_debug_active
