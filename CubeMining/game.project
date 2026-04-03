@@ -10,6 +10,7 @@ width = 960
 height = 640
 high_dpi = 1
 vsync = 0
+fullscreen = 0
 
 [android]
 input_method = HiddenInputField

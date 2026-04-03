@@ -438,8 +438,8 @@ function update(self, dt)
         go.set_rotation(final_rot, held_id)
     end
 
-    -- Debug overlay
-    if _G.performance_mode ~= 3 then
+    -- Debug overlay (Yellow text in bottom left)
+    if _G.performance_mode == 1 or _G.performance_mode == 2 then
         local item = self.cached_item
         local dbg = string.format(
             "ID:%d  Type:%s  Mode:%s\nShooting:%s  Reloading:%s\nADS:%s  Bob:%.3f,%.3f",

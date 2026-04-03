@@ -78,8 +78,11 @@ function update(self, dt)
 
     local reach = _G.is_freecam and 100 or 4.5
     local target, gx, gy, gz, normal = get_targeted_cube(cam_pos, cam_dir, reach)
-    if target then
-        _G.targeted_cube = { target = target, gx = gx, gy = gy, gz = gz, normal = normal }
+
+    -- Always update global state for game interaction
+    _G.targeted_cube = target and { target = target, gx = gx, gy = gy, gz = gz, normal = normal } or nil
+
+    if target and _G.performance_mode ~= 4 then
         if not self.visible then
             msg.post("#mesh", H_ENABLE)
             self.visible = true
@@ -103,12 +106,11 @@ function update(self, dt)
         self.target_grid = { gx = gx, gy = gy, gz = gz }
         self.target_normal = normal
     else
-        _G.targeted_cube = nil
         if self.visible then
             msg.post("#mesh", H_DISABLE)
             self.visible = false
         end
-        self.target_grid = nil
-        self.target_normal = nil
+        self.target_grid = target and { gx = gx, gy = gy, gz = gz } or nil
+        self.target_normal = normal
     end
 end

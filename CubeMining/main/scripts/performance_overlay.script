@@ -60,139 +60,30 @@ local function DrawAxes(self, center_pos, axis_len)
     })
 end
 
-function init(self)
-    msg.post(".", H_ACQUIRE_INPUT_FOCUS)
-    self.mode = 0 -- 0: Off, 1: Text, 2: Text + Graph + Edges, 3: FPS Only
-    _G.performance_mode = 0
+-- ============================================================================
+-- RENDER HELPER FUNCTIONS
+-- ============================================================================
 
-    -- FPS Metrics (defold-metrics style)
-    self.fps_samples = 5000
-    self.fps_frames = {}
-
-    -- Graph & 1% Lows
-    self.frame_times = {}
-    self.max_graph_samples = 120
-
-    self.current_time = socket.gettime()
-    self.prev_time = self.current_time
-
-    self.avg_fps = 0
-    self.low_1_fps = 0
-
-    -- Throttling for UI text (to make it readable)
-    self.text_update_timer = 0
-    self.text_update_interval = 0.05 -- 100ms
-    self.cached_lines = {}
-
-    -- RAM Metrics
-    self.ram_samples = {}
-    self.max_ram_samples = 5000
-    self.ram_sum = 0
-    self.avg_ram = 0
-
-    -- Pre-allocated objects
-    self.color_green = vmath.vector4(0, 1, 0, 1)
-    self.color_target = vmath.vector4(0, 1, 0, 0.2)
-    self.color_red = vmath.vector4(1, 0, 0, 1)
-    self.color_blue = vmath.vector4(0, 0.5, 1, 1)
-
-
-    self.color_tan = vmath.vector4(0.7, 0.5, 0.4, 1.0)
-    self.color_light_green = vmath.vector4(0.5, 0.8, 0.5, 1.0)
-    self.color_teal = vmath.vector4(0.0, 0.6, 0.5, 1.0)
-    self.color_red_orange = vmath.vector4(1.0, 0.3, 0.1, 1.0)
-
-    self.vec_offset = vmath.vector3(0, 0, 0)
-
-    -- Logical size (fallback)
-    self.logical_width = 960
-    self.logical_height = 640
-
-    -- Pre-allocated control text to avoid GC overhead
-    self.controls = {
-        "WASD: Move",
-        "Shift: Sprint",
-        "Space: Jump/Up",
-        "CTRL: Sneaking/Down",
-        "P: Fly/Walk Mode",
-        "1 / 2: Next/Prev Item",
-        "LClick: Break/Shoot",
-        "RClick: Place/ADS",
-        "R: Reload Weapon",
-        "T: Spawn Mouse",
-        "Y: Spawn Mouse (Hold)",
-        "M: Switch Metrics",
-        "O: Toggle Ambient Occlusion",
-        "L: Toggle Lighting",
-        "F: Toggle Frustum Debug"
-    }
-
-    -- Cache window size for optimization
-    self.width, self.height = window.get_size()
-
-    -- Efficiently listen for window resize events instead of polling
-    window.set_listener(function(self, event, data)
-        if event == window.WINDOW_EVENT_RESIZED then
-            self.width = data.width
-            self.height = data.height
-        end
-    end)
-end
-
-function update(self, dt)
-    if self.mode == 3 then
-        self.current_time = socket.gettime()
-        self.prev_time = self.current_time
-
-        table.insert(self.fps_frames, self.current_time)
-        if #self.fps_frames > self.fps_samples + 1 then
-            table.remove(self.fps_frames, 1)
-        end
-
-        if #self.fps_frames > 1 then
-            local dt_total = self.fps_frames[#self.fps_frames] - self.fps_frames[1]
-            if dt_total > 0 then
-                self.avg_fps = (#self.fps_frames - 1) / dt_total
-            end
-        end
-
-        self.text_update_timer = self.text_update_timer + dt
-        if self.text_update_timer >= self.text_update_interval or not self.cached_avg_fps then
-            self.text_update_timer = 0
-            self.cached_avg_fps = string.format("Avg. FPS: %.1f", self.avg_fps)
-        end
-
-        self.vec_offset.x = self.width - 150
-        self.vec_offset.y = self.height - 20
-        msg.post("@render:", H_DRAW_DEBUG_TEXT, {
-            text = self.cached_avg_fps,
-            position = self.vec_offset,
-            color = self.color_green
-        })
-        return
-    end
-
-    -- 0. Always display controls (Persistent & Optimized)
+local function draw_controls(self)
     for i, line in ipairs(self.controls) do
         self.vec_offset.x = 20
         self.vec_offset.y = self.height - 20 - (i * 20)
-
         msg.post("@render:", H_DRAW_DEBUG_TEXT, {
             text = line,
             position = self.vec_offset,
             color = self.color_tan
         })
     end
+end
 
-    -- Always show AO and Lighting status at the top center
+local function draw_status(self)
     local ao_str = (_G.ao_enabled ~= false) and "ON" or "OFF"
     local light_modes = { [0] = "FLAT", [1] = "SMOOTH", [2] = "OFF" }
     local light_str = light_modes[_G.light_mode or 0] or "FLAT"
     local frustum_str = (_G.frustum_debug_active) and "ON (35 FOV)" or "OFF"
     local item_name = _G.held_item_name or "pickaxe"
     local ammo_text = _G.held_item_ammo or ""
-    local status_text = "Held Item: " ..
-        item_name .. " " .. ammo_text .. "   AO: " .. ao_str .. "   Lighting: " .. light_str .. "   Frustum: " .. frustum_str
+    local status_text = "Held Item: " .. item_name .. " " .. ammo_text .. "   AO: " .. ao_str .. "   Lighting: " .. light_str .. "   Frustum: " .. frustum_str
 
     self.vec_offset.x = self.width / 2 - 150
     self.vec_offset.y = self.height - 20
@@ -201,16 +92,26 @@ function update(self, dt)
         position = self.vec_offset,
         color = self.color_light_green
     })
+end
 
-    if self.mode == 0 then return end
+local function draw_camera_axes(self)
+    local cam_pos = _G.cam_pos
+    local cam_rot = _G.cam_rot
+    if cam_pos and cam_rot then
+        local aspect = self.width / self.height
+        local d = 0.5 -- Distance in front of camera
+        local center_x = self.width / 2
+        local center_y = self.height / 2
+        local center_pos = ScreenToWorld(center_x, center_y, d, cam_pos, cam_rot, self.width, self.height, aspect)
+        DrawAxes(self, center_pos, 0.02)
+    end
+end
 
-    -- 1. Wall-Clock Time Measurements
+local function update_metrics(self, dt)
     self.current_time = socket.gettime()
     local real_dt = self.current_time - self.prev_time
     self.prev_time = self.current_time
 
-    -- 2. FPS Calculation (Strict defold-metrics logic)
-    -- 2. FPS Calculation (Sliding/Growing Window)
     table.insert(self.fps_frames, self.current_time)
     if #self.fps_frames > self.fps_samples + 1 then
         table.remove(self.fps_frames, 1)
@@ -223,19 +124,16 @@ function update(self, dt)
         end
     end
 
-    -- 3. Delta Time for Graph & 1% Lows
     local dt_display = math.max(real_dt, 0.0001)
     self.instant_fps = 1 / dt_display
 
-    -- 4. Sample Management for Graph & 1% Lows
     table.insert(self.frame_times, dt_display)
     if #self.frame_times > self.max_graph_samples then
         table.remove(self.frame_times, 1)
     end
 
-    -- 5. Heavy Logic (Standard 1% Lows: Average of slowest 1% of frames)
     local samples = #self.frame_times
-    if samples >= 100 then -- Need enough samples for 1% to be meaningful
+    if samples >= 100 then
         local sorted_times = {}
         for i, v in ipairs(self.frame_times) do sorted_times[i] = v end
         table.sort(sorted_times)
@@ -247,7 +145,6 @@ function update(self, dt)
         end
         self.low_1_fps = 1 / (sum_slowest / count_1_percent)
     elseif samples >= 20 then
-        -- Fallback for small sample sets: 99th percentile point
         local sorted_times = {}
         for i, v in ipairs(self.frame_times) do sorted_times[i] = v end
         table.sort(sorted_times)
@@ -255,7 +152,6 @@ function update(self, dt)
         self.low_1_fps = 1 / sorted_times[math.max(1, index)]
     end
 
-    -- 6. Collect RAM samples
     local current_ram = collectgarbage("count")
     table.insert(self.ram_samples, current_ram)
     self.ram_sum = self.ram_sum + current_ram
@@ -264,11 +160,8 @@ function update(self, dt)
         local removed = table.remove(self.ram_samples, 1)
         self.ram_sum = self.ram_sum - removed
     end
-
-    -- Calculate Average RAM (Optimized O(1))
     self.avg_ram = self.ram_sum / #self.ram_samples
 
-    -- 7. Update Throttled Text
     self.text_update_timer = self.text_update_timer + dt
     if self.text_update_timer >= self.text_update_interval or #self.cached_lines == 0 then
         self.text_update_timer = 0
@@ -299,8 +192,9 @@ function update(self, dt)
             string.format("Mouse: %d", _G.mouse_count or 0)
         }
     end
+end
 
-    -- 8. Draw Metrics (Always drawn, but text content only changes every 100ms)
+local function draw_text_metrics(self)
     local x_start = self.width - 250
     local y_start = 270
 
@@ -314,14 +208,8 @@ function update(self, dt)
         })
     end
 
-    -- 7. Camera & Overlay Common Data (Optimized: cached shared values)
     local cam_pos = _G.cam_pos or vmath.vector3()
     local cam_rot = _G.cam_rot or vmath.quat()
-    local aspect = self.width / self.height
-    local d = 0.5 -- Distance in front of camera
-
-    -- 8. Camera Stats (Top-Right)
-    -- Convert quat to euler for readability
     local ce = vmath.vector3(math.deg(math.asin(2 * (cam_rot.w * cam_rot.x - cam_rot.y * cam_rot.z))),
         math.deg(math.atan2(2 * (cam_rot.w * cam_rot.y + cam_rot.z * cam_rot.x),
             1 - 2 * (cam_rot.x * cam_rot.x + cam_rot.y * cam_rot.y))),
@@ -330,21 +218,12 @@ function update(self, dt)
 
     local state_str = "Airborne"
     if _G.player_grounded then
-        if _G.player_sneaking then
-            state_str = "Sneaking"
-        elseif _G.player_sprinting then
-            state_str = "Sprinting"
-        else
-            state_str = "Walking"
-        end
+        if _G.player_sneaking then state_str = "Sneaking"
+        elseif _G.player_sprinting then state_str = "Sprinting"
+        else state_str = "Walking" end
     end
-
-    if _G.is_freecam then
-        state_str = "Freecam"
-    end
-
+    if _G.is_freecam then state_str = "Freecam" end
     local grounded_str = _G.player_grounded and "true" or "false"
-
     local vel = _G.player_velocity or vmath.vector3()
     local cam_lines = {
         string.format("STATE: %s", state_str),
@@ -363,108 +242,196 @@ function update(self, dt)
             color = self.color_blue
         })
     end
+end
 
-    -- 9. Camera-Oriented Axes
-    if _G.cam_pos then
-        local center_x = self.width / 2
-        local center_y = self.height / 2
-        local center_pos = ScreenToWorld(center_x, center_y, d, cam_pos, cam_rot, self.width, self.height, aspect)
-        DrawAxes(self, center_pos, 0.02)
+local function draw_graph_and_edges(self)
+    if #self.frame_times <= 1 then return end
+
+    local cam_pos = _G.cam_pos or vmath.vector3()
+    local cam_rot = _G.cam_rot or vmath.quat()
+    local aspect = self.width / self.height
+    local d = 0.5
+
+    local scale_x = self.width / self.logical_width
+    local scale_y = self.height / self.logical_height
+    local graph_width_scaled = 240 * scale_x
+    local graph_height_scaled = 80 * scale_y
+    local graph_x_scaled = 20
+    local graph_y_scaled = 10
+    local max_graph_fps = 144
+    local step_x = graph_width_scaled / (self.max_graph_samples - 1)
+
+    local prev_h = math.min(1, (1 / (self.frame_times[1] or 0.016)) / max_graph_fps) * graph_height_scaled
+    local prev_pos = ScreenToWorld(graph_x_scaled, graph_y_scaled + prev_h, d, cam_pos, cam_rot, self.width, self.height, aspect)
+
+    for i = 2, #self.frame_times do
+        local fps = 1 / self.frame_times[i]
+        local h = math.min(1, fps / max_graph_fps) * graph_height_scaled
+        local curr_x = graph_x_scaled + (i - 1) * step_x
+        local curr_pos = ScreenToWorld(curr_x, graph_y_scaled + h, d, cam_pos, cam_rot, self.width, self.height, aspect)
+        msg.post("@render:", H_DRAW_LINE, { start_point = prev_pos, end_point = curr_pos, color = self.color_green })
+        prev_pos = curr_pos
     end
 
-    -- 10. Display Graph (Mode 2)
-    if self.mode == 2 and #self.frame_times > 1 then
-        -- Scale logical coordinates to actual screen coordinates
-        local scale_x = self.width / self.logical_width
-        local scale_y = self.height / self.logical_height
+    local h60 = (60 / max_graph_fps) * graph_height_scaled
+    msg.post("@render:", H_DRAW_LINE, {
+        start_point = ScreenToWorld(graph_x_scaled, graph_y_scaled + h60, d, cam_pos, cam_rot, self.width, self.height, aspect),
+        end_point = ScreenToWorld(graph_x_scaled + graph_width_scaled, graph_y_scaled + h60, d, cam_pos, cam_rot, self.width, self.height, aspect),
+        color = self.color_target
+    })
 
-        local graph_width_scaled = 240 * scale_x
-        local graph_height_scaled = 80 * scale_y
-        local graph_x_scaled = 20 -- Sol alt
-        local graph_y_scaled = 10 -- 10 pixel yukarıda
-
-        local max_graph_fps = 144
-        local step_x = graph_width_scaled / (self.max_graph_samples - 1)
-
-        -- Optimized Graph Loop
-        local prev_h = math.min(1, (1 / (self.frame_times[1] or 0.016)) / max_graph_fps) * graph_height_scaled
-        local prev_pos = ScreenToWorld(graph_x_scaled, graph_y_scaled + prev_h, d, cam_pos, cam_rot, self.width,
-            self.height, aspect)
-
-        for i = 2, #self.frame_times do
-            local fps = 1 / self.frame_times[i]
-            local h = math.min(1, fps / max_graph_fps) * graph_height_scaled
-            local curr_x = graph_x_scaled + (i - 1) * step_x
-            local curr_pos = ScreenToWorld(curr_x, graph_y_scaled + h, d, cam_pos, cam_rot, self.width,
-                self.height, aspect)
-
-            msg.post("@render:", H_DRAW_LINE, {
-                start_point = prev_pos,
-                end_point = curr_pos,
-                color = self.color_green
-            })
-            prev_pos = curr_pos
-        end
-
-        -- 60 FPS Target Line
-        local h60 = (60 / max_graph_fps) * graph_height_scaled
-        msg.post("@render:", H_DRAW_LINE, {
-            start_point = ScreenToWorld(graph_x_scaled, graph_y_scaled + h60, d, cam_pos, cam_rot, self.width,
-                self.height, aspect),
-            end_point = ScreenToWorld(graph_x_scaled + graph_width_scaled, graph_y_scaled + h60, d, cam_pos, cam_rot,
-                self.width,
-                self.height, aspect),
-            color = self.color_target
-        })
-
-        -- 11. Debug Visualization (Guaranteed test line + Edges)
-        local edges = _G.cached_mesh_edges
+    -- Edges
+    local edges = _G.cached_mesh_edges
+    msg.post("@render:", H_DRAW_LINE, { start_point = cam_pos, end_point = cam_pos + vmath.vector3(0, 10, 0), color = vmath.vector4(1, 1, 1, 1) })
+    if edges then
+        local dir_colors = { vmath.vector4(0, 1, 1, 1), vmath.vector4(0.3, 0.3, 1, 1), vmath.vector4(0, 1, 0, 1), vmath.vector4(1, 1, 0, 1), vmath.vector4(1, 0.2, 0.2, 1), vmath.vector4(1, 0, 1, 1) }
         local drawn_count = 0
-
-        -- Test line to verify renderer (White line 10m up from camera)
-        msg.post("@render:", H_DRAW_LINE, {
-            start_point = cam_pos,
-            end_point = cam_pos + vmath.vector3(0, 10, 0),
-            color = vmath.vector4(1, 1, 1, 1)
-        })
-
-        if edges then
-            local dir_colors = {
-                vmath.vector4(0, 1, 1, 1),     -- +Z cyan
-                vmath.vector4(0.3, 0.3, 1, 1), -- -Z blue
-                vmath.vector4(0, 1, 0, 1),     -- +Y green
-                vmath.vector4(1, 1, 0, 1),     -- -Y yellow
-                vmath.vector4(1, 0.2, 0.2, 1), -- +X red
-                vmath.vector4(1, 0, 1, 1)      -- -X magenta
-            }
-
-            for i = 1, #edges do
-                local e = edges[i]
-                msg.post("@render:", H_DRAW_LINE, {
-                    start_point = e.start_point,
-                    end_point = e.end_point,
-                    color = e.color or dir_colors[e.d] or self.color_green
-                })
-                drawn_count = drawn_count + 1
-                if drawn_count > 5000 then break end
-            end
+        for i = 1, #edges do
+            local e = edges[i]
+            msg.post("@render:", H_DRAW_LINE, { start_point = e.start_point, end_point = e.end_point, color = e.color or dir_colors[e.d] or self.color_green })
+            drawn_count = drawn_count + 1
+            if drawn_count > 5000 then break end
         end
-
-        self.vec_offset.x = x_start
-        self.vec_offset.y = y_start - 240
-        msg.post("@render:", H_DRAW_DEBUG_TEXT, {
-            text = string.format("DEBUG EDGES: %d / %d", drawn_count, edges and #edges or 0),
-            position = self.vec_offset,
-            color = self.color_red_orange
-        })
+        self.vec_offset.x = self.width - 250
+        self.vec_offset.y = 270 - 240
+        msg.post("@render:", H_DRAW_DEBUG_TEXT, { text = string.format("DEBUG EDGES: %d / %d", drawn_count, #edges), position = self.vec_offset, color = self.color_red_orange })
     end
+end
+
+-- ============================================================================
+-- MODE UPDATE FUNCTIONS
+-- ============================================================================
+
+local function update_off(self, dt)
+    draw_controls(self)
+    draw_status(self)
+    draw_camera_axes(self)
+end
+
+local function update_text(self, dt)
+    draw_controls(self)
+    draw_status(self)
+    update_metrics(self, dt)
+    draw_text_metrics(self)
+    draw_camera_axes(self)
+end
+
+local function update_graph(self, dt)
+    draw_controls(self)
+    draw_status(self)
+    update_metrics(self, dt)
+    draw_text_metrics(self)
+    draw_camera_axes(self)
+    draw_graph_and_edges(self)
+end
+
+local function update_fps_only(self, dt)
+    self.current_time = socket.gettime()
+    table.insert(self.fps_frames, self.current_time)
+    if #self.fps_frames > self.fps_samples + 1 then table.remove(self.fps_frames, 1) end
+    if #self.fps_frames > 1 then
+        local dt_total = self.fps_frames[#self.fps_frames] - self.fps_frames[1]
+        if dt_total > 0 then self.avg_fps = (#self.fps_frames - 1) / dt_total end
+    end
+    self.text_update_timer = self.text_update_timer + dt
+    if self.text_update_timer >= self.text_update_interval or not self.cached_avg_fps then
+        self.text_update_timer = 0
+        self.cached_avg_fps = string.format("Avg. FPS: %.1f", self.avg_fps)
+    end
+    self.vec_offset.x = self.width - 150
+    self.vec_offset.y = self.height - 20
+    msg.post("@render:", H_DRAW_DEBUG_TEXT, { text = self.cached_avg_fps, position = self.vec_offset, color = self.color_green })
+end
+
+local function update_nothing(self, dt)
+    -- True nothing mode
+end
+
+-- ============================================================================
+-- SCRIPT LIFECYCLE
+-- ============================================================================
+
+function init(self)
+    msg.post(".", H_ACQUIRE_INPUT_FOCUS)
+    self.mode = 0 -- 0: Off, 1: Text, 2: Text + Graph + Edges, 3: FPS Only, 4: Nothing
+    _G.performance_mode = 0
+
+    -- FPS Metrics
+    self.fps_samples = 5000
+    self.fps_frames = {}
+
+    -- Graph & 1% Lows
+    self.frame_times = {}
+    self.max_graph_samples = 120
+
+    self.current_time = socket.gettime()
+    self.prev_time = self.current_time
+
+    self.avg_fps = 0
+    self.low_1_fps = 0
+
+    self.text_update_timer = 0
+    self.text_update_interval = 0.05
+    self.cached_lines = {}
+
+    -- RAM Metrics
+    self.ram_samples = {}
+    self.max_ram_samples = 5000
+    self.ram_sum = 0
+    self.avg_ram = 0
+
+    -- Pre-allocated colors/vectors
+    self.color_green = vmath.vector4(0, 1, 0, 1)
+    self.color_target = vmath.vector4(0, 1, 0, 0.2)
+    self.color_red = vmath.vector4(1, 0, 0, 1)
+    self.color_blue = vmath.vector4(0, 0.5, 1, 1)
+    self.color_tan = vmath.vector4(0.7, 0.5, 0.4, 1.0)
+    self.color_light_green = vmath.vector4(0.5, 0.8, 0.5, 1.0)
+    self.color_teal = vmath.vector4(0.0, 0.6, 0.5, 1.0)
+    self.color_red_orange = vmath.vector4(1.0, 0.3, 0.1, 1.0)
+
+    self.vec_offset = vmath.vector3(0, 0, 0)
+    self.logical_width = 960
+    self.logical_height = 640
+
+    self.controls = {
+        "WASD: Move", "Shift: Sprint", "Space: Jump/Up", "CTRL: Sneaking/Down",
+        "P: Fly/Walk Mode", "1 / 2: Next/Prev Item", "LClick: Break/Shoot",
+        "RClick: Place/ADS", "R: Reload Weapon", "T: Spawn Mouse",
+        "Y: Spawn Mouse (Hold)", "M: Switch Metrics", "O: Toggle Ambient Occlusion",
+        "L: Toggle Lighting", "F: Toggle Frustum Debug"
+    }
+
+    self.width, self.height = window.get_size()
+    window.set_listener(function(self, event, data)
+        if event == window.WINDOW_EVENT_RESIZED then
+            self.width = data.width
+            self.height = data.height
+        end
+    end)
+
+    -- Dispatch Table for Optimized Updates
+    self.mode_updates = {
+        [0] = update_off,
+        [1] = update_text,
+        [2] = update_graph,
+        [3] = update_fps_only,
+        [4] = update_nothing
+    }
+    self.active_update = self.mode_updates[self.mode]
+end
+
+function update(self, dt)
+    self.active_update(self, dt)
 end
 
 function on_input(self, action_id, action)
     if action_id == H_TOGGLE_PERFORMANCE and action.pressed then
-        self.mode = (self.mode + 1) % 4
+        self.mode = (self.mode + 1) % 5
         _G.performance_mode = self.mode
-        local modes = { "Off", "Text", "Text + Graph + Edges", "FPS Only" }
+        self.active_update = self.mode_updates[self.mode]
+        
+        local modes = { "Off", "Text", "Text + Graph + Edges", "FPS Only", "Nothing" }
         print("Performance overlay mode: " .. modes[self.mode + 1])
     elseif action_id == H_TOGGLE_FRUSTUM and action.pressed then
         _G.frustum_debug_active = not _G.frustum_debug_active
